@@ -1,0 +1,153 @@
+# Aether Compiler — Implementation Status
+
+## Phase 0 — Bootstrap Toolchain 🔴 NOT STARTED
+- [x] Language specification (REQUIREMENTS.md) — **DONE**
+- [ ] Set up project structure (src/, tools/, tests/)
+- [ ] Write tokenizer in C (bootstrap)
+- [ ] Write parser in C (bootstrap)
+- [ ] Write AST/semantic analyzer in C (bootstrap)
+- [ ] Write simple code generator producing NASM text
+- [ ] Write NASM assembler integration (compile .ae → .asm → nasm → .elf)
+- [ ] `aether build` CLI prototype in C
+- [ ] Compiles `hello.ae` → valid ELF64
+
+## Phase 1 — Core Language (Minimum Viable Compiler) 🔴 NOT STARTED
+- [ ] Variables (`let`, `let mut`), immutability by default
+- [ ] Functions (`func`), parameters, return values, multiple returns
+- [ ] Control flow: `if`/`elif`/`else`, `while`, `for` loops, ranges
+- [ ] Primitive types: `u8`–`u64`, `i8`–`i64`, `f32`, `f64`, `bool`, `byte`
+- [ ] Structs and tuples
+- [ ] Basic inline NASM assembly (`asm { ... }`)
+- [ ] ELF64 output writer: `.text`, `.rodata`, `.data`, `.bss` sections
+- [ ] Fixed-address loading (no relocations, no dynamic sections)
+- [ ] `aether build --target x86_64-freestanding --output kernel.elf`
+- [ ] Compile and run `hello.ae` on Aether OS or QEMU
+
+## Phase 2 — Memory Management 🔴 NOT STARTED
+- [ ] Stack allocation for all local variables (default)
+- [ ] Automatic destructor insertion at scope exit
+- [ ] Escape analysis: detect when stack vars outlive scope, promote to heap
+- [ ] Reference types: `ref T` (borrowed), `owned T` (unique), `rc T` (shared)
+- [ ] Region-based allocation: `region("name") { ... }` blocks
+- [ ] Arena/region teardown (compile-time generated batch free)
+- [ ] `heap` keyword for explicit heap allocation
+- [ ] Optional types `T?` with `none` — no null pointers
+- [ ] Non-nullable by default
+
+## Phase 3 — OOP and Type System 🔴 NOT STARTED
+- [ ] Classes with `init` (constructor) and `drop` (destructor)
+- [ ] Automatic destructor calls at scope exits (normal, early return, exception unwind, break/continue)
+- [ ] Method syntax: `self ref T`, `func method(self, ...)`
+- [ ] Static methods: `static func name(...)`
+- [ ] Access modifiers: `pub`, `internal`, `private`
+- [ ] Traits (interfaces): `trait Name { ... }` / `impl Name for Type { ... }`
+- [ ] Static dispatch (default, zero-cost)
+- [ ] Dynamic dispatch via `dyn Trait` (vtable)
+- [ ] Generics: monomorphized, `func(T)(...)`, `class(T)`
+- [ ] Algebraic data types: `enum` with payloads
+- [ ] Pattern matching: `match expr { case ... => ... }`
+- [ ] `if let` pattern binding for optionals
+
+## Phase 4 — Advanced Language Features 🔴 NOT STARTED
+- [ ] Exception handling: `try`/`throw`/`catch`
+- [ ] Custom error types
+- [ ] Deterministic exceptions (tagged union return, no unwinding tables)
+- [ ] Zero-cost happy path for exceptions
+- [ ] Compile-time execution: `#run { ... }` blocks
+- [ ] Compile-time constant evaluation
+- [ ] Contract programming: `pre(expr)` and `post(expr)` on functions
+- [ ] Debug-build runtime contract checking
+- [ ] Release-build contract elimination (optimizer hints)
+- [ ] Closures and lambdas: `|args| expr`
+- [ ] Properties: `get`/`set` syntactic sugar
+- [ ] Operator overloading
+
+## Phase 5 — Aether OS Integration 🔴 NOT STARTED
+- [ ] `sys func` keyword — direct syscall page calls (0x5000 table)
+- [ ] `module` keyword — generates kernel module `.ko` ELF
+- [ ] `@export` attribute — marks symbols for module loader
+- [ ] `@entry(addr)` attribute — sets binary/userland entry point
+- [ ] `@layout(start, max, file)` — boot-stage layout directives
+- [ ] `@kernel_layout` — compiler-aware memory map verification
+- [ ] `@module_abi(version)` — ABI compliance checking
+- [ ] Declarative resources: `pool`, `protocol` keywords
+- [ ] Target-specific code generation (kernel vs binary vs module)
+- [ ] Freestanding standard library (StdAether):
+  - [ ] `std.io` — `print`, `println`, `format`
+  - [ ] `std.mem` — `Pool`, `Arena`, `copy`, `zero`
+  - [ ] `std.str` — `String`, `concat`, `split`
+  - [ ] `std.math` — basic math
+  - [ ] `std.collections` — `Array`, `HashMap`, `List`
+  - [ ] `std.serial` — COM1 serial I/O (kernel mode)
+  - [ ] `std.fs` — AetherFS syscall wrappers
+  - [ ] `std.elf` — ELF64 reader/writer
+  - [ ] `std.test` — `assert`, test runner
+  - [ ] `std.asm` — NASM helper macros
+- [ ] Linker script integration
+- [ ] Project manifest: `aether.toml` support
+
+## Phase 6 — Self-Hosting 🔴 NOT STARTED
+- [ ] Compiler can compile its own tokenizer/lexer
+- [ ] Compiler can compile its own parser
+- [ ] Compiler can compile its own AST/semantic analysis
+- [ ] Compiler can compile its own IR generation
+- [ ] Compiler can compile its own code generation
+- [ ] Compiler can compile its own ELF64 writer
+- [ ] Full bootstrap: Aether compiler runs on Aether OS
+- [ ] Compiler can compile itself with no C bootstrap
+- [ ] C bootstrap source archived as historical reference only
+
+## Phase 7 — Optimization & Polish 🔴 NOT STARTED
+- [ ] Constant folding and propagation
+- [ ] Dead code elimination
+- [ ] Aggressive inlining (especially generics)
+- [ ] Escape analysis-based heap/stack promotion
+- [ ] Region inference → arena elision optimization
+- [ ] Devirtualization (static dispatch where possible)
+- [ ] Loop unrolling and optimization
+- [ ] Memory operation fusion
+- [ ] MIR-to-LIR code generation
+- [ ] Register allocation (linear scan or graph coloring)
+- [ ] Instruction selection (x86_64 NASM emission)
+- [ ] `aether fmt` — source code formatter
+- [ ] `aether doc` — documentation generator
+- [ ] `aether asm` — show generated assembly listing
+- [ ] `aether inspect` — ELF binary inspection tool
+- [ ] LSP server for editor support
+- [ ] Syntax highlighting (VS Code, Vim, Helix)
+- [ ] Actionable, empathetic error messages with suggested fixes
+- [ ] Performance benchmarking suite
+
+---
+
+## Legend
+
+| Status | Meaning |
+|--------|---------|
+| 🟢 DONE | Completed and verified |
+| 🔵 IN PROGRESS | Currently being worked on |
+| 🟡 HOLD | Blocked, waiting on something else |
+| 🔴 NOT STARTED | Planned but not started |
+| ⚪ CANCELLED | No longer planned |
+
+---
+
+## Priority Queue (Next to Build)
+
+1. **Phase 0**: Tokenizer in C → Parser in C → AST
+2. **Phase 1**: Core language features, ELF64 output, hello.ae on QEMU
+3. **Phase 2**: Memory management — stack, escape analysis, references
+4. ... sequential through phases
+
+---
+
+## Known Technical Decisions
+
+- **Bootstrap language**: C11 freestanding (matches Aether OS kernel)
+- **Output**: ELF64 flat binary, no interpreters, no dynamic linking
+- **Assembly**: NASM syntax only, integrated assembler in compiler
+- **Memory model**: Stack-first with escape analysis; explicit `heap` keyword
+- **Exceptions**: Tagged union return encoding, no personality/unwind tables
+- **Generics**: Monomorphization (zero-cost, like Rust/C++)
+- **Compile-time**: `#run` blocks, not a separate macro system
+- **Indentation**: Significant (Python-style), 4 spaces
