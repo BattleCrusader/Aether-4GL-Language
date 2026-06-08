@@ -1,0 +1,414 @@
+#ifndef AETHER_AST_H
+#define AETHER_AST_H
+
+#include "defs.h"
+#include "lexer.h"
+#include "arena.h"
+#include "vector.h"
+
+/*
+ * AST node types for the Aether language.
+ * All nodes are arena-allocated. No individual frees.
+ */
+
+/* Forward declaration */
+typedef struct AstNode AstNode;
+
+/* ================================================================
+ * Node types
+ * ================================================================ */
+
+typedef enum {
+    /* Top-level declarations */
+    NODE_PROGRAM,
+    NODE_FUNC_DECL,
+    NODE_PARAM,
+    NODE_STRUCT_DECL,
+    NODE_FIELD,
+    NODE_ENUM_DECL,
+    NODE_ENUM_VARIANT,
+    NODE_CONST_DECL,
+    NODE_IMPORT,
+    NODE_MODULE_DECL,
+    NODE_TYPE_ALIAS,
+    NODE_TRAIT_DECL,
+    NODE_IMPL_BLOCK,
+    NODE_CLASS_DECL,
+
+    /* Statements */
+    NODE_BLOCK,
+    NODE_LET,
+    NODE_ASSIGN,
+    NODE_IF,
+    NODE_WHILE,
+    NODE_FOR,
+    NODE_RETURN,
+    NODE_BREAK,
+    NODE_CONTINUE,
+    NODE_DEFER,
+    NODE_EXPR_STMT,
+    NODE_MATCH,
+    NODE_MATCH_ARM,
+
+    /* Expressions */
+    NODE_LITERAL_INT,
+    NODE_LITERAL_FLOAT,
+    NODE_LITERAL_STRING,
+    NODE_LITERAL_CHAR,
+    NODE_LITERAL_BOOL,
+    NODE_LITERAL_NONE,
+    NODE_IDENT,
+    NODE_BINARY_OP,
+    NODE_UNARY_OP,
+    NODE_CALL,
+    NODE_INDEX,
+    NODE_SLICE,
+    NODE_FIELD_ACCESS,
+    NODE_CAST,
+    NODE_TERNARY,
+    NODE_LAMBDA,
+    NODE_ARRAY_LIT,
+
+    /* Types */
+    NODE_TYPE_PRIMITIVE,
+    NODE_TYPE_NAMED,
+    NODE_TYPE_ARRAY,
+    NODE_TYPE_SLICE,
+    NODE_TYPE_TUPLE,
+    NODE_TYPE_OPTIONAL,
+    NODE_TYPE_REF,
+    NODE_TYPE_PTR,
+    NODE_TYPE_FN,
+    NODE_TYPE_INFER,
+
+    /* Special */
+    NODE_ASM_BLOCK,
+    NODE_ATTR,
+} NodeType;
+
+/* ================================================================
+ * Binary operator types
+ * ================================================================ */
+
+typedef enum {
+    BIN_ADD, BIN_SUB, BIN_MUL, BIN_DIV, BIN_MOD,
+    BIN_EQ, BIN_NEQ, BIN_LT, BIN_GT, BIN_LE, BIN_GE,
+    BIN_AND, BIN_OR,
+    BIN_BIT_AND, BIN_BIT_OR, BIN_BIT_XOR,
+    BIN_SHL, BIN_SHR,
+    BIN_ASSIGN, BIN_ADD_ASSIGN, BIN_SUB_ASSIGN,
+    BIN_MUL_ASSIGN, BIN_DIV_ASSIGN,
+    BIN_RANGE, BIN_RANGE_INCLUSIVE,
+} BinOp;
+
+/* ================================================================
+ * Unary operator types
+ * ================================================================ */
+
+typedef enum {
+    UNARY_NEG, UNARY_NOT, UNARY_BIT_NOT,
+    UNARY_REF, UNARY_DEREF, UNARY_ADDR,
+    UNARY_OWNED, UNARY_MUT,
+} UnaryOp;
+
+/* ================================================================
+ * Primitive types
+ * ================================================================ */
+
+typedef enum {
+    PRIM_VOID, PRIM_BOOL, PRIM_BYTE,
+    PRIM_U8, PRIM_U16, PRIM_U32, PRIM_U64,
+    PRIM_I8, PRIM_I16, PRIM_I32, PRIM_I64,
+    PRIM_F32, PRIM_F64,
+    PRIM_STRING,
+} PrimType;
+
+/* ================================================================
+ * Node data (tagged union)
+ * ================================================================ */
+
+typedef struct {
+    AstNode **items;
+    int count;
+    int cap;
+} AstNodeList;
+
+/* Function declaration */
+typedef struct {
+    AstNode *name;          /* ident node */
+    AstNodeList params;     /* list of PARAM nodes */
+    AstNode *return_type;   /* type node (NULL for void) */
+    AstNode *body;          /* BLOCK node (NULL for extern) */
+    bool is_asm;            /* asm func */
+    bool is_sys;            /* sys func */
+    bool is_pub;            /* public */
+    bool is_static;         /* static */
+    bool is_test;           /* @Test */
+    int sys_index;          /* syscall table index (-1 if not sys) */
+} FuncDecl;
+
+/* Parameter */
+typedef struct {
+    AstNode *name;
+    AstNode *type;
+    bool is_mut;
+    bool is_varargs;
+    AstNode *default_value; /* NULL if no default */
+} Param;
+
+/* Return statement */
+typedef struct {
+    AstNode *value;         /* NULL if no value (bare return) */
+} ReturnNode;
+
+/* Let declaration */
+typedef struct {
+    AstNode *name;
+    AstNode *type;          /* NULL for inferred */
+    AstNode *value;
+    bool is_mut;
+} LetDecl;
+
+/* If/elif/else */
+typedef struct {
+    AstNode *condition;
+    AstNode *then_block;
+    AstNode *elif_chain;    /* linked list: elif->elif->else */
+    AstNode *else_block;    /* NULL if no else */
+} IfNode;
+
+/* While loop */
+typedef struct {
+    AstNode *condition;
+    AstNode *body;
+} WhileNode;
+
+/* For loop */
+typedef struct {
+    AstNode *var;           /* loop variable */
+    AstNode *iterable;      /* range or collection */
+    AstNode *body;
+} ForNode;
+
+/* Match */
+typedef struct {
+    AstNode *value;         /* matched expression */
+    AstNodeList arms;       /* list of MATCH_ARM */
+} MatchNode;
+
+/* Match arm */
+typedef struct {
+    AstNode *pattern;       /* pattern expression */
+    AstNodeList guards;     /* guard conditions (empty if none) */
+    AstNode *body;          /* result expression */
+} MatchArm;
+
+/* Binary operation */
+typedef struct {
+    BinOp op;
+    AstNode *left;
+    AstNode *right;
+} BinaryOpNode;
+
+/* Unary operation */
+typedef struct {
+    UnaryOp op;
+    AstNode *operand;
+} UnaryOpNode;
+
+/* Function call */
+typedef struct {
+    AstNode *callee;
+    AstNodeList args;
+} CallNode;
+
+/* Identifier */
+typedef struct {
+    StringView name;
+    AstNode *resolved;      /* points to declaration (set by semantic analysis) */
+} IdentNode;
+
+/* Literal */
+typedef struct {
+    union {
+        uint64_t int_val;
+        double float_val;
+        StringView string_val;
+        uint32_t char_val;
+        bool bool_val;
+    };
+    bool is_negative;       /* for negative int literals */
+} LiteralNode;
+
+/* Index expression: a[i] */
+typedef struct {
+    AstNode *target;
+    AstNode *index;
+} IndexNode;
+
+/* Slice expression: a[i..j] */
+typedef struct {
+    AstNode *target;
+    AstNode *start;         /* NULL means 'from beginning' */
+    AstNode *end;           /* NULL means 'to end' */
+} SliceNode;
+
+/* Field access: a.b */
+typedef struct {
+    AstNode *target;
+    AstNode *field;         /* ident node */
+} FieldAccess;
+
+/* Type node */
+typedef struct {
+    PrimType prim;          /* for PRIMITIVE types */
+    AstNode *elem_type;     /* for ARRAY/SLICE/PTR/OPTIONAL */
+    AstNodeList tuple_types; /* for TUPLE types */
+    AstNode *return_type;   /* for FN types */
+    AstNodeList param_types; /* for FN types */
+    StringView name;        /* for NAMED types */
+    bool is_ref;            /* ref T */
+    bool is_owned;          /* owned T */
+    bool is_rc;             /* rc T */
+    bool is_mut;            /* mut T */
+    int array_size;         /* for fixed-size arrays (-1 if unknown) */
+} TypeNode;
+
+/* Lambda/closure */
+typedef struct {
+    AstNodeList params;
+    AstNode *return_type;
+    AstNode *body;
+    AstNode *captures;      /* captured variables (set by semantic analysis) */
+} LambdaNode;
+
+/* Array literal: [1, 2, 3] */
+typedef struct {
+    AstNodeList elements;
+} ArrayLit;
+
+/* Struct declaration */
+typedef struct {
+    AstNode *name;
+    AstNodeList fields;
+    AstNodeList methods;    /* method function decls */
+    bool is_pub;
+} StructDecl;
+
+/* Enum declaration */
+typedef struct {
+    AstNode *name;
+    AstNodeList variants;
+    bool is_pub;
+} EnumDecl;
+
+/* Enum variant (can carry data) */
+typedef struct {
+    AstNode *name;
+    AstNodeList payload_types;  /* types of data carried */
+} EnumVariant;
+
+/* Inline assembly */
+typedef struct {
+    AstNode *text;          /* STRING_LITERAL containing the asm text */
+    AstNodeList outputs;    /* output bindings */
+    AstNodeList inputs;     /* input bindings */
+    AstNodeList clobbers;   /* clobbered registers */
+} AsmBlock;
+
+/* ================================================================
+ * AST Node structure (tagged union of all the above)
+ * ================================================================ */
+
+struct AstNode {
+    NodeType type;
+    Location loc;
+    union {
+        FuncDecl func;
+        Param param;
+        LetDecl let_decl;
+        IfNode if_node;
+        WhileNode while_node;
+        ForNode for_node;
+        MatchNode match_node;
+        MatchArm match_arm;
+        ReturnNode return_node;
+        BinaryOpNode binary;
+        UnaryOpNode unary;
+        CallNode call;
+        IdentNode ident;
+        LiteralNode literal;
+        IndexNode index;
+        SliceNode slice;
+        FieldAccess field;
+        TypeNode type_node;
+        LambdaNode lambda;
+        ArrayLit array_lit;
+        StructDecl struct_decl;
+        EnumDecl enum_decl;
+        EnumVariant enum_variant;
+        AsmBlock asm_block;
+        AstNodeList list;   /* generic list for blocks */
+    } data;
+};
+
+/* ================================================================
+ * AST creation functions
+ * All return arena-allocated nodes.
+ * ================================================================ */
+
+AstNode *node_create(Arena *a, NodeType type, Location loc);
+
+/* Convenience constructors */
+AstNode *node_program(Arena *a);
+AstNode *node_func_decl(Arena *a, Location loc, AstNode *name, bool is_pub, bool is_static);
+AstNode *node_param(Arena *a, Location loc, AstNode *name, AstNode *type, bool is_mut, bool is_varargs);
+AstNode *node_let(Arena *a, Location loc, AstNode *name, AstNode *type, AstNode *value, bool is_mut);
+AstNode *node_if(Arena *a, Location loc, AstNode *cond, AstNode *then_block, AstNode *elif_chain, AstNode *else_block);
+AstNode *node_while(Arena *a, Location loc, AstNode *cond, AstNode *body);
+AstNode *node_for(Arena *a, Location loc, AstNode *var, AstNode *iterable, AstNode *body);
+AstNode *node_return(Arena *a, Location loc, AstNode *value);
+AstNode *node_break(Arena *a, Location loc);
+AstNode *node_continue(Arena *a, Location loc);
+AstNode *node_block(Arena *a, Location loc);
+AstNode *node_ident(Arena *a, Location loc, StringView name);
+AstNode *node_int_literal(Arena *a, Location loc, uint64_t val);
+AstNode *node_float_literal(Arena *a, Location loc, double val);
+AstNode *node_string_literal(Arena *a, Location loc, StringView val);
+AstNode *node_char_literal(Arena *a, Location loc, uint32_t val);
+AstNode *node_bool_literal(Arena *a, Location loc, bool val);
+AstNode *node_none_literal(Arena *a, Location loc);
+AstNode *node_binary(Arena *a, Location loc, BinOp op, AstNode *left, AstNode *right);
+AstNode *node_unary(Arena *a, Location loc, UnaryOp op, AstNode *operand);
+AstNode *node_call(Arena *a, Location loc, AstNode *callee);
+AstNode *node_index(Arena *a, Location loc, AstNode *target, AstNode *index);
+AstNode *node_field_access(Arena *a, Location loc, AstNode *target, AstNode *field);
+AstNode *node_type_prim(Arena *a, Location loc, PrimType prim);
+AstNode *node_type_named(Arena *a, Location loc, StringView name);
+AstNode *node_match(Arena *a, Location loc, AstNode *value);
+AstNode *node_match_arm(Arena *a, Location loc, AstNode *pattern, AstNode *body);
+AstNode *node_asm_block(Arena *a, Location loc, AstNode *text);
+AstNode *node_struct_decl(Arena *a, Location loc, AstNode *name, bool is_pub);
+AstNode *node_enum_decl(Arena *a, Location loc, AstNode *name, bool is_pub);
+AstNode *node_defer(Arena *a, Location loc, AstNode *body);
+AstNode *node_expr_stmt(Arena *a, Location loc, AstNode *expr);
+
+/* List helpers */
+void node_list_append(AstNodeList *list, AstNode *node);
+void node_list_append_sorted(AstNodeList *list, AstNode *node);
+
+/* ================================================================
+ * AST utilities
+ * ================================================================ */
+
+/* Pretty-print an AST node (for debugging) */
+void ast_dump(AstNode *node, int depth);
+void ast_dump_indent(int depth);
+
+/* Get a human-readable name for a node type */
+const char *node_type_name(NodeType type);
+const char *binop_name(BinOp op);
+const char *unaryop_name(UnaryOp op);
+const char *primtype_name(PrimType pt);
+
+#endif /* AETHER_AST_H */

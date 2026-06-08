@@ -1,15 +1,20 @@
 # Aether Compiler — Implementation Status
 
-## Phase 0 — Bootstrap Toolchain 🔴 NOT STARTED
+## Phase 0 — Bootstrap Toolchain 🟢 COMPLETE
 - [x] Language specification (REQUIREMENTS.md) — **DONE**
-- [ ] Set up project structure (src/, tools/, tests/)
-- [ ] Write tokenizer in C (bootstrap)
-- [ ] Write parser in C (bootstrap)
-- [ ] Write AST/semantic analyzer in C (bootstrap)
-- [ ] Write simple code generator producing NASM text
-- [ ] Write NASM assembler integration (compile .ae → .asm → nasm → .elf)
-- [ ] `aether build` CLI prototype in C
-- [ ] Compiles `hello.ae` → valid ELF64
+- [x] P00.01 — Project Structure 🟢
+- [x] P00.02 — Build System (Makefile) 🟢
+- [x] P00.03 — Tokenizer / Lexer 🟢
+- [x] P00.04 — Lexer Stream 🟢
+- [x] P00.05 — AST Definitions 🟢
+- [x] P00.06 — Parser 🟢
+- [x] P00.07 — Semantic Analysis 🟢
+- [x] P00.08 — NASM Code Generation 🟢
+- [x] P00.09 — ELF64 Output 🟢
+- [x] P00.10 — NASM Assembler Integration 🟢
+- [x] P00.11 — `aether build` CLI 🟢
+- [x] P00.12 — `hello.ae` End-to-End 🟢
+- [x] P00.13 — Phase 0 Verification & Cleanup 🟢
 
 ## Phase 1 — Core Language (Minimum Viable Compiler) 🔴 NOT STARTED
 - [ ] Variables (`let`, `let mut`), immutability by default

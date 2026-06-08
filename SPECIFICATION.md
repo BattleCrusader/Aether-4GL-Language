@@ -1781,11 +1781,35 @@ let dma_buf = memory(256, alignment=16, type=dma)
 
 ## 20. Build System
 
-### 20.1 Project Structure
+### 20.1 Semicolons Are Not Required
+
+Aether uses **newlines and indentation** as statement terminators, not semicolons. Semicolons (`;`) are optional and may be used between statements on the same line for readability but are never required.
+
+```aether
+func main() {
+    let x = 42          # newline ends the statement — no semicolon needed
+    let y = 10; let z = 20  # semicolon separates two statements on one line
+    return x + y + z    # no semicolon
+}
+```
+
+Inside braces `{ }`, indentation tokens are ignored — the braces themselves delimit the block. This means you can write:
+
+```aether
+# Braces override indentation — all of these are equivalent:
+func a() {
+    return 1
+}
+
+func b() { return 1 }           # single statement in one line
+
+func c() { let x = 1; let y = 2; return x + y }  # semicolons separate inline stmts
+```
+
+### 20.2 Project Structure
 
 ```
 my-project/
-  aether.toml              # project manifest
   src/
     main.ae                # entry point
     lib/
@@ -1801,7 +1825,7 @@ my-project/
       kernel.elf
 ```
 
-### 20.2 `aether.toml`
+### 20.3 `aether.toml`
 
 ```toml
 [package]
@@ -1834,7 +1858,7 @@ layout-start = "0x7E00"
 source = "src/asm/stage2.ae"
 ```
 
-### 20.3 CLI Commands
+### 20.4 CLI Commands
 
 ```aether
 aether new my-kernel       # Create new project
