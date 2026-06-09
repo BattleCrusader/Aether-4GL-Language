@@ -191,6 +191,7 @@ const char *token_type_name(TokenType type) {
         case TOKEN_QUESTION: return "?";
         case TOKEN_BACKSLASH: return "\\";
         case TOKEN_SEMICOLON: return ";";
+        case TOKEN_COLON_COLON: return "::";
     }
     return "UNKNOWN";
 }
@@ -786,6 +787,8 @@ Token tokenizer_next(Tokenizer *t) {
                         return make_token(t, TOKEN_DOT_DOT);
                     }
                     return make_token(t, TOKEN_DOT);
+                case ':': if (next == ':') { t->pos++; t->col++; return make_token(t, TOKEN_COLON_COLON); }
+                          return make_token(t, TOKEN_COLON);
             }
         }
 

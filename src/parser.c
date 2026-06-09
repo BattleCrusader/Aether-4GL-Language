@@ -788,7 +788,7 @@ typedef AstNode *(*InfixParselet)(Parser *p, AstNode *left);
 /* Precedence of a token (returns PREC_MIN if not an operator) */
 static Precedence token_precedence(TokenType type) {
     switch (type) {
-        case TOKEN_LPAREN: case TOKEN_LBRACKET: case TOKEN_DOT:
+        case TOKEN_LPAREN: case TOKEN_LBRACKET: case TOKEN_DOT: case TOKEN_COLON_COLON:
             return PREC_CALL;
         case TOKEN_EQ: case TOKEN_PLUS_EQ: case TOKEN_MINUS_EQ:
         case TOKEN_STAR_EQ: case TOKEN_SLASH_EQ:
@@ -949,6 +949,18 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         }
         Token field = p->current; parser_advance(p);
         return node_field_access(p->arena, loc, left, node_ident(p->arena, field.loc, field.text));
+    }
+
+    /* Qualified name: EnumName::Variant */
+    if (token.type == TOKEN_COLON_COLON) {
+        parser_advance(p);
+        if (!parser_check(p, TOKEN_IDENT)) {
+            parser_error(p, p->current, "expected variant name after ::");
+            return left;
+        }
+        Token variant = p->current; parser_advance(p);
+        /* Build field access as left.field for now — codegen handles it */
+        return node_field_access(p->arena, loc, left, node_ident(p->arena, variant.loc, variant.text));
     }
 
     /* Lambda pipe: left |params| body — only valid in certain contexts */

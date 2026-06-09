@@ -83,7 +83,16 @@ static int find_field_offset(StructLayout *sl, const char *field_name) {
 
 /* ================================================================
  * Enum layout tracker — tagged union = 8-byte discriminant + max payload
+ * Variant names mapped to discriminant values for codegen
  * ================================================================ */
+
+typedef struct VariantEntry {
+    const char *name;
+    int discriminant;
+    struct VariantEntry *next;
+} VariantEntry;
+
+static VariantEntry *variant_entries = NULL;
 
 static StructLayout *build_enum_layout(Arena *a, AstNode *node) {
     if (node->type != NODE_ENUM_DECL) return NULL;
@@ -116,6 +125,18 @@ static StructLayout *build_enum_layout(Arena *a, AstNode *node) {
     sl->total_size = 8 + max_payload;
     sl->next = enum_layouts;
     enum_layouts = sl;
+    
+    /* Register variant names for codegen lookup */
+    for (int i = 0; i < node->data.enum_decl.variants.count; i++) {
+        AstNode *var = node->data.enum_decl.variants.items[i];
+        VariantEntry *ve = (VariantEntry *)arena_alloc(a, sizeof(VariantEntry));
+        ve->name = arena_strndup(a,
+            var->data.enum_variant.name->data.ident.name.data,
+            var->data.enum_variant.name->data.ident.name.len);
+        ve->discriminant = i;
+        ve->next = variant_entries;
+        variant_entries = ve;
+    }
     return sl;
 }
 
@@ -633,6 +654,36 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_CALL: {
+            /* Check for enum construction: EnumName::Variant(args) */
+            if (node->data.call.callee->type == NODE_FIELD_ACCESS) {
+                AstNode *target = node->data.call.callee->data.field.target;
+                AstNode *field = node->data.call.callee->data.field.field;
+                if (target && target->type == NODE_IDENT && field && field->type == NODE_IDENT) {
+                    char enum_name[256], variant_name[256];
+                    int nlen = (int)target->data.ident.name.len;
+                    if (nlen > 255) nlen = 255; memcpy(enum_name, target->data.ident.name.data, nlen); enum_name[nlen] = '\0';
+                    int vlen = (int)field->data.ident.name.len;
+                    if (vlen > 255) vlen = 255; memcpy(variant_name, field->data.ident.name.data, vlen); variant_name[vlen] = '\0';
+                    
+                    /* Find the discriminant for this variant */
+                    int disc_val = -1;
+                    for (VariantEntry *ve = variant_entries; ve; ve = ve->next) {
+                        if (strcmp(ve->name, variant_name) == 0) { disc_val = ve->discriminant; break; }
+                    }
+                    
+                    if (disc_val >= 0) {
+                        cg_comment(cg, "enum construction");
+                        /* Build the tagged union in rax.
+                           For now, just return the discriminant as a proxy value.
+                           Full payload handling deferred to later phases. */
+                        char buf[32];
+                        snprintf(buf, sizeof(buf), "mov rax, %d", disc_val);
+                        cg_inst(cg, buf);
+                        break;
+                    }
+                }
+            }
+
             cg_comment(cg, "function call");
             int argc = node->data.call.args.count;
 

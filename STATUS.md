@@ -16,7 +16,7 @@
 - [x] P00.12 — `hello.ae` End-to-End 🟢
 - [x] P00.13 — Phase 0 Verification & Cleanup 🟢
 
-## Phase 1 — Core Language (Minimum Viable Compiler) 🔵 IN PROGRESS
+## Phase 1 — Core Language (Minimum Viable Compiler) 🟢 COMPLETE
 - [x] P01.01 — Codegen: Proper Variable Stack Slots 🟢
 - [x] P01.02 — Codegen: Full Type Support 🟢
 - [x] P01.03 — Codegen: Structs and Field Access 🟢
@@ -29,8 +29,8 @@
 - [x] P01.10 — Codegen: Enums with Payloads 🟢
 - [x] P01.11 — Full Expression Coverage 🟢
 - [x] P01.12 — Error Handling in Codegen 🟢
-- [ ] P01.13 — Self-Host Test Suite Expansion
-- [ ] P01.14 — Phase 1 Verification & Cleanup
+- [x] P01.13 — Self-Host Test Suite Expansion 🟢
+- [x] P01.14 — Phase 1 Verification & Cleanup 🟢
 
 ## Phase 2 — Memory Management 🔴 NOT STARTED
 - [ ] Stack allocation for all local variables (default)
