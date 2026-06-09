@@ -25,9 +25,9 @@
 - [x] P01.06 — Codegen: Inline NASM 🟢
 - [x] P01.07 — Codegen: Function Calls with SysV ABI 🟢
 - [x] P01.08 — Codegen: For Loops and Ranges 🟢
-- [ ] P01.09 — Codegen: Match Statements
-- [ ] P01.10 — Codegen: Enums with Payloads
-- [ ] P01.11 — Full Expression Coverage
+- [x] P01.09 — Codegen: Match Statements 🟢
+- [x] P01.10 — Codegen: Enums with Payloads 🟢
+- [x] P01.11 — Full Expression Coverage 🟢
 - [ ] P01.12 — Error Handling in Codegen
 - [ ] P01.13 — Self-Host Test Suite Expansion
 - [ ] P01.14 — Phase 1 Verification & Cleanup
