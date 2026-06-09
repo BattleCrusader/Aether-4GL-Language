@@ -1,0 +1,10 @@
+# test_enum.ae — test enum layout and variable
+enum Option {
+    Some(int)
+    None
+}
+
+func main(): int {
+    let x: Option
+    return 0
+}

@@ -28,7 +28,8 @@ typedef struct StructLayout {
     struct StructLayout *next;
 } StructLayout;
 
-static StructLayout *struct_layouts = NULL; /* global list of known structs */
+static StructLayout *struct_layouts = NULL;
+static StructLayout *enum_layouts = NULL;  /* enums are tracked as layouts too */
 
 /* Build struct layout from a STRUCT_DECL node */
 static StructLayout *build_struct_layout(Arena *a, AstNode *node) {
@@ -80,6 +81,44 @@ static int find_field_offset(StructLayout *sl, const char *field_name) {
     return 0;
 }
 
+/* ================================================================
+ * Enum layout tracker — tagged union = 8-byte discriminant + max payload
+ * ================================================================ */
+
+static StructLayout *build_enum_layout(Arena *a, AstNode *node) {
+    if (node->type != NODE_ENUM_DECL) return NULL;
+    
+    StructLayout *sl = (StructLayout *)arena_alloc(a, sizeof(StructLayout));
+    sl->name = arena_strndup(a,
+        node->data.enum_decl.name->data.ident.name.data,
+        node->data.enum_decl.name->data.ident.name.len);
+    
+    /* Enum layout: [discriminant: u64] [payload: max_variant_size]
+       Discriminant is always 8 bytes, payload is the max of all variant sizes */
+    int max_payload = 0;
+    for (int i = 0; i < node->data.enum_decl.variants.count; i++) {
+        AstNode *var = node->data.enum_decl.variants.items[i];
+        int var_size = 0;
+        for (int j = 0; j < var->data.enum_variant.payload_types.count; j++) {
+            var_size += type_size(var->data.enum_variant.payload_types.items[j]);
+        }
+        if (var_size > max_payload) max_payload = var_size;
+    }
+    
+    /* Build field-like entries for the compiler */
+    FieldLayout *disc = (FieldLayout *)arena_alloc(a, sizeof(FieldLayout));
+    disc->name = "__disc";
+    disc->offset = 0;
+    disc->size = 8;
+    disc->next = NULL;
+    sl->fields = disc;
+    
+    sl->total_size = 8 + max_payload;
+    sl->next = enum_layouts;
+    enum_layouts = sl;
+    return sl;
+}
+
 typedef struct VarSlot {
     AstNode *node;           /* the LET or PARAM node this slot belongs to */
     const char *name;        /* debug: variable name */
@@ -117,6 +156,10 @@ static int type_size(AstNode *type) {
         tn[nlen] = '\0';
         StructLayout *sl = find_struct_layout(tn);
         if (sl) return sl->total_size;
+        /* Check enum layouts too */
+        for (StructLayout *el = enum_layouts; el; el = el->next) {
+            if (strcmp(el->name, tn) == 0) return el->total_size;
+        }
     }
     return 8; /* default pointer-sized */
 }
@@ -849,6 +892,8 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         AstNode *node = program->data.list.items[i];
         if (node->type == NODE_STRUCT_DECL) {
             build_struct_layout(cg->arena, node);
+        } else if (node->type == NODE_ENUM_DECL) {
+            build_enum_layout(cg->arena, node);
         }
     }
 
