@@ -571,6 +571,33 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case BIN_GT:  cg_inst1(cg, "cmp",  "rax, rcx"); cg_inst(cg, "setg al");  cg_inst(cg, "movzx rax, al"); break;
                 case BIN_LE:  cg_inst1(cg, "cmp",  "rax, rcx"); cg_inst(cg, "setle al"); cg_inst(cg, "movzx rax, al"); break;
                 case BIN_GE:  cg_inst1(cg, "cmp",  "rax, rcx"); cg_inst(cg, "setge al"); cg_inst(cg, "movzx rax, al"); break;
+                /* Bitwise */
+                case BIN_BIT_AND: cg_inst1(cg, "and", "rax, rcx"); break;
+                case BIN_BIT_OR:  cg_inst1(cg, "or",  "rax, rcx"); break;
+                case BIN_BIT_XOR: cg_inst1(cg, "xor", "rax, rcx"); break;
+                case BIN_SHL:     cg_inst1(cg, "xchg", "rax, rcx"); cg_inst1(cg, "shl", "rax, cl"); break;
+                case BIN_SHR:     cg_inst1(cg, "xchg", "rax, rcx"); cg_inst1(cg, "shr", "rax, cl"); break;
+                /* Assignment: x = expr — store result to variable's stack slot */
+                case BIN_ASSIGN: {
+                    cg_comment(cg, "assign");
+                    /* Right side already in rax, left side is the target ident */
+                    if (node->data.binary.left && node->data.binary.left->type == NODE_IDENT) {
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                node->data.binary.left->data.ident.name.data,
+                                node->data.binary.left->data.ident.name.len));
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rax", off);
+                        cg_inst(cg, buf);
+                    }
+                    break;
+                }
+                /* Compound assignment: x += expr etc */
+                case BIN_ADD_ASSIGN: cg_comment(cg, "+="); cg_expr(cg, node->data.binary.left, slots); cg_inst1(cg, "add", "rax, [rsp]"); break;
+                case BIN_SUB_ASSIGN: cg_comment(cg, "-="); cg_expr(cg, node->data.binary.left, slots); cg_inst1(cg, "sub", "rax, [rsp]"); break;
+                case BIN_MUL_ASSIGN: cg_comment(cg, "*="); cg_expr(cg, node->data.binary.left, slots); cg_inst1(cg, "mul", "qword [rsp]"); break;
+                case BIN_DIV_ASSIGN: cg_comment(cg, "/="); cg_expr(cg, node->data.binary.left, slots); cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "qword [rsp]"); break;
+                /* Logical (short-circuit emulated) */
                 case BIN_AND: cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jz .Lfalse"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
                 case BIN_OR:  cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jnz .Ltrue"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
                 case BIN_RANGE: cg_comment(cg, "range"); cg_inst1(cg, "mov", "rax, rcx"); break;
