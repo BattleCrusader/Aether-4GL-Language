@@ -17,11 +17,11 @@
 - [x] P00.13 — Phase 0 Verification & Cleanup 🟢
 
 ## Phase 1 — Core Language (Minimum Viable Compiler) 🔵 IN PROGRESS
-- [ ] P01.01 — Codegen: Proper Variable Stack Slots
-- [ ] P01.02 — Codegen: Full Type Support
-- [ ] P01.03 — Codegen: Structs and Field Access
+- [x] P01.01 — Codegen: Proper Variable Stack Slots 🟢
+- [x] P01.02 — Codegen: Full Type Support 🟢
+- [x] P01.03 — Codegen: Structs and Field Access 🟢
 - [ ] P01.04 — Codegen: Arrays and Indexing
-- [ ] P01.05 — Codegen: String Literals
+- [x] P01.05 — Codegen: String Literals 🟢
 - [ ] P01.06 — Codegen: Inline NASM
 - [ ] P01.07 — Codegen: Function Calls with Arguments
 - [ ] P01.08 — Codegen: For Loops and Ranges

@@ -146,21 +146,16 @@ int main(int argc, char **argv) {
     /* Determine output filenames */
     char asm_file[1024];
     char obj_file[1024];
-    char out_ext[32];
 
     if (stop_after_asm) {
         snprintf(asm_file, sizeof(asm_file), "%s", output_file);
     } else {
-        /* Build .asm name from output name */
-        const char *base = input_file;
-        const char *dot = strrchr(base, '.');
-        if (dot) {
-            int n = (int)(dot - base);
-            snprintf(asm_file, sizeof(asm_file), "%.*s.asm", n, base);
-        } else {
-            snprintf(asm_file, sizeof(asm_file), "%s.asm", base);
-        }
-        snprintf(obj_file, sizeof(obj_file), "%.*s.o", (int)(strlen(asm_file) - 4), asm_file);
+        /* Use /tmp/ for intermediate files */
+        unsigned long hash = 5381;
+        for (const char *p = input_file; *p; p++)
+            hash = ((hash << 5) + hash) + (unsigned char)*p;
+        snprintf(asm_file, sizeof(asm_file), "/tmp/aether_%lx.asm", hash);
+        snprintf(obj_file, sizeof(obj_file), "/tmp/aether_%lx.o", hash);
     }
 
     /* Write .asm file */
@@ -208,7 +203,7 @@ int main(int argc, char **argv) {
     /* Phase 7: Link with ld */
     {
         /* Write linker script inline to avoid path issues */
-        FILE *ldf = fopen("build/.aether.ld", "w");
+        FILE *ldf = fopen("/tmp/aether_ld.ld", "w");
         if (ldf) {
             fprintf(ldf, "OUTPUT_FORMAT(elf64-x86-64)\nENTRY(_start)\nSECTIONS {\n");
             fprintf(ldf, "  . = 0x400000;\n");
@@ -218,7 +213,7 @@ int main(int argc, char **argv) {
             fprintf(ldf, "  .bss : { *(.bss) *(.bss.*) *(COMMON) }\n}\n");
             fclose(ldf);
         }
-        snprintf(cmd, sizeof(cmd), LD " -T build/.aether.ld -o %s %s", output_file, obj_file);
+        snprintf(cmd, sizeof(cmd), LD " -T /tmp/aether_ld.ld -o %s %s", output_file, obj_file);
         if (verbose) printf("Running: %s\n", cmd);
         ret = system(cmd);
     }
@@ -236,6 +231,7 @@ int main(int argc, char **argv) {
     /* Cleanup temp files */
     remove(asm_file);
     remove(obj_file);
+    remove("/tmp/aether_ld.ld");
 
     parser_destroy(parser);
     free(source);

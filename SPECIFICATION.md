@@ -363,45 +363,56 @@ func greet() {
     print("Hello!\n")
 }
 
-# With parameters
-func greet_name(name string) {
+# With parameters (name: type)
+func greet_name(name: string) {
     print("Hello, {name}!\n")
 }
 
-# With return value
-func add(a int, b int) int {
+# With return value (: type)
+func add(a: int, b: int): int {
     return a + b
 }
 
 # Implicit return (last expression)
-func multiply(a int, b int) int -> a * b
+func multiply(a: int, b: int): int -> a * b
 ```
 
-### 5.2 Multiple Return Values
+> **Syntax note:** Parameters use `name: type` notation (required). Return types use `: type` after the parameter list (required when a return type is present).
+
+### 5.2 Syntax Summary
 
 ```aether
-func divmod(a int, b int) (int, int) {
+# Function declaration syntax:
+#   func name(param: type, ...): return_type { body }
+# Parameters use colon syntax: name: type
+# Return type uses colon syntax: : type (after the closing paren)
+```
+
+### 5.3 Multiple Return Values
+
+```aether
+func divmod(a: int, b: int): (int, int) {
     return (a / b, a % b)
 }
 
-let (q, r) = divmod(17, 5)    # q=3, r=2
-let result = divmod(17, 5)    # result is tuple (3, 2)
+let (q, r) = divmod(17, 5)
+let result = divmod(17, 5)
 ```
 
-### 5.3 Named Returns
+### 5.4 Named Returns
 
 ```aether
-func divide(a int, b int) (quotient int, remainder int) {
+func divide(a: int, b: int): (quotient: int, remainder: int) {
     quotient = a / b
     remainder = a % b
     return
 }
 ```
 
-### 5.4 Default Parameters
+### 5.5 Default Parameters
 
 ```aether
-func create_buffer(size int = 4096) [byte] {
+func create_buffer(size: int = 4096): [byte] {
     return heap [byte; size]
 }
 
@@ -409,10 +420,10 @@ let default_buf = create_buffer()      # 4096
 let custom_buf = create_buffer(1024)   # 1024
 ```
 
-### 5.5 Varargs
+### 5.6 Varargs
 
 ```aether
-func sum(args ...int) int {
+func sum(args: ...int): int {
     let mut total = 0
     for arg in args {
         total += arg
@@ -423,22 +434,22 @@ func sum(args ...int) int {
 let result = sum(1, 2, 3, 4, 5)  # 15
 ```
 
-### 5.6 Recursion
+### 5.7 Recursion
 
 ```aether
-func factorial(n u64) u64 {
+func factorial(n: u64): u64 {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
 }
 
 # Tail-recursive version (compiler may optimize to loop)
-func factorial_tr(n u64, acc u64 = 1) u64 {
+func factorial_tr(n: u64, acc: u64 = 1): u64 {
     if n <= 1 { return acc }
     return factorial_tr(n - 1, acc * n)
 }
 ```
 
-### 5.7 Closures / Lambdas
+### 5.8 Closures / Lambdas
 
 ```aether
 let increment = |x| x + 1
@@ -447,19 +458,19 @@ let result = increment(41)  # 42
 let add = |a, b| a + b
 
 # Multi-line closures use { }
-let process = |items [int]| {
+let process = |items: [int]| {
     let mut sum = 0
     for i in items { sum += i }
     return sum
 }
 ```
 
-### 5.8 Higher-Order Functions
+### 5.9 Higher-Order Functions
 
 ```aether
-func apply(T)(value T, f func(T) T) T -> f(value)
+func apply(T)(value: T, f: func(T) T): T -> f(value)
 
-let double = |x| x * 2
+let double = |x: int| x * 2
 let result = apply(21, double)  # 42
 ```
 

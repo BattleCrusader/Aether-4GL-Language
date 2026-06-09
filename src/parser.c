@@ -233,8 +233,8 @@ AstNode *parse_func_decl(Parser *p) {
         parser_expect(p, TOKEN_RPAREN, "function parameter list");
     }
 
-    /* Optional return type: `: type` or `-> type` */
-    if (parser_match(p, TOKEN_COLON) || parser_match(p, TOKEN_ARROW)) {
+    /* Optional return type: `: type` */
+    if (parser_match(p, TOKEN_COLON)) {
         func->data.func.return_type = parse_type(p);
     }
 
@@ -302,7 +302,8 @@ AstNode *parse_struct_decl(Parser *p) {
     if (parser_match(p, TOKEN_LBRACE)) {
         /* Parse fields */
         while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
-            if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON)) continue;
+            if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
+                parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
 
             bool is_pub = parser_match(p, TOKEN_KW_PUB);
 

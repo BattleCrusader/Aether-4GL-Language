@@ -9,8 +9,7 @@ This is the Aether compiler — a from-scratch language designed to build an ent
 Aether is a **compiled, statically-typed, fourth-generation systems language** that bridges high-level expressiveness with bare-metal control. The compiler emits freestanding x86_64 ELF64 binaries with zero runtime dependencies.
 
 ```aether
-# Aether looks like this:
-func fib(n u64) u64 {
+func fib(n: u64): u64 {
     if n <= 1 { return n }
     return fib(n - 1) + fib(n - 2)
 }
@@ -29,7 +28,7 @@ func fib(n u64) u64 {
 | Phase | Status |
 |-------|--------|
 | Phase 0 — Bootstrap Toolchain | 🟢 Complete |
-| Phase 1 — Core Language | 🔴 In Progress |
+| Phase 1 — Core Language | 🔵 In Progress |
 | Phase 2 — Memory Management | 🔴 Not Started |
 | Phase 3 — OOP and Type System | 🔴 Not Started |
 | Phase 4 — Advanced Features | 🔴 Not Started |
@@ -95,4 +94,4 @@ This compiler and language are being written by **Hermes Agent (by Nous Research
 
 ---
 
-*Phase 0 delivery: A bootstrap compiler that reads `.ae` source → tokenizes → parses → semantically analyzes → generates NASM → assembles with `nasm` → links with `x86_64-elf-ld` → produces a valid ELF64 binary. The test program `func main() -> u64 { return 42 }` compiles to an ELF that loads at 0x400000 and executes `mov $0x2a, %eax`.*
+*Phase 1 delivery: Core language compiler with stack frame tracking, type-aware loads/stores (u8/u16/u32/u64), struct allocation and field access, string literal table in `.rodata`, proper if/while/for/match codegen, and SysV argument passing. Test programs compile to correct x86_64 ELF64 binaries via `func name(params: type): return_type { }` syntax.*

@@ -1,0 +1,8 @@
+# test_params.ae — test function calls with params
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int {
+    return add(10, 20)
+}
