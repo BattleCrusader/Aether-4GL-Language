@@ -478,6 +478,34 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             break;
         }
 
+        case NODE_INDEX: {
+            /* array[index] — compute element address */
+            cg_comment(cg, "array index");
+            /* Push index, then array base address, compute offset = base + index * elem_size */
+            cg_expr(cg, node->data.index.index, slots);
+            cg_inst1(cg, "push", "rax");
+            cg_expr(cg, node->data.index.target, slots);
+            cg_inst1(cg, "pop", "rcx");   /* rcx = index */
+            /* Compute element offset: rax = base, rcx = index, result = base + index * elem_size */
+            /* For simplicity, assume 8-byte elements */
+            cg_inst(cg, "shl rcx, 3");    /* rcx = index * 8 */
+            cg_inst1(cg, "add", "rax, rcx");
+            cg_inst(cg, "mov rax, [rax]");
+            break;
+        }
+
+        case NODE_SLICE: {
+            cg_comment(cg, "slice (NYI - returns 0)");
+            cg_inst1(cg, "xor", "rax, rax");
+            break;
+        }
+
+        case NODE_ARRAY_LIT: {
+            cg_comment(cg, "array literal (NYI - returns 0)");
+            cg_inst1(cg, "xor", "rax, rax");
+            break;
+        }
+
         case NODE_BINARY_OP: {
             /* Right side first (push), then left (in rax).
                After this block: rax=left, rcx=right */
