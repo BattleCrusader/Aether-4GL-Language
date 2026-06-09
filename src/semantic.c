@@ -162,9 +162,20 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
 
         case NODE_CONST_DECL:
         case NODE_STRUCT_DECL:
-        case NODE_ENUM_DECL:
-            /* Register in scope by name */
+        case NODE_ENUM_DECL: {
+            /* Register type name in scope */
+            AstNode *name_node = NULL;
+            if (node->type == NODE_STRUCT_DECL) name_node = node->data.struct_decl.name;
+            else if (node->type == NODE_ENUM_DECL) name_node = node->data.enum_decl.name;
+            else if (node->type == NODE_CONST_DECL) name_node = node->data.let_decl.name;
+            if (name_node) {
+                const char *tname = arena_strndup(sa->arena,
+                    name_node->data.ident.name.data,
+                    name_node->data.ident.name.len);
+                scope_declare(sa, tname, node);
+            }
             break;
+        }
 
         case NODE_RETURN:
             if (node->data.return_node.value) {

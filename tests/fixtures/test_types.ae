@@ -1,4 +1,4 @@
-# test_types.ae — test typed variables with unified syntax
+# test_types.ae — typed variables
 func main(): u64 {
     let a: u8 = 200
     let b: u16 = 40000

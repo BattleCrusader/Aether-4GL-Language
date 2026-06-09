@@ -145,6 +145,9 @@ typedef enum {
     
     /* Semicolon */
     TOKEN_SEMICOLON,    /* ; */
+
+    /* Scope resolution */
+    TOKEN_COLON_COLON,  /* :: */
 } TokenType;
 
 /* Keyword lookup entry */

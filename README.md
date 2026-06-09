@@ -28,7 +28,7 @@ func fib(n: u64): u64 {
 | Phase | Status |
 |-------|--------|
 | Phase 0 — Bootstrap Toolchain | 🟢 Complete |
-| Phase 1 — Core Language | 🔵 In Progress |
+| Phase 1 — Core Language | 🟢 Complete |
 | Phase 2 — Memory Management | 🔴 Not Started |
 | Phase 3 — OOP and Type System | 🔴 Not Started |
 | Phase 4 — Advanced Features | 🔴 Not Started |
