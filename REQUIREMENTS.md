@@ -516,6 +516,7 @@ aether build hello.ae --output ./hello
 - Host-native output uses the host's syscall ABI directly (e.g. macOS `syscall` instruction via inline asm or an ABI shim)
 - The host-native `print()`/`puts()` calls the host OS write syscall (macOS = 0x2000004, Linux = 1) rather than the Aether OS 0x5000 table
 - A `aether.toml` setting controls the target: `target = "host"` (auto-detect) or `target = "x86_64-freestanding"`
+- **Phase 2 outputs x86_64 Mach-O** (runs on Apple Silicon via Rosetta). Native aarch64 output will require a dedicated backend that emits arm64 Mach-O directly or uses `as` with GAS syntax, planned for a later phase since NASM has no ARM64 backend.
 
 ### 7.3 Syscall Page (0x5000)
 
