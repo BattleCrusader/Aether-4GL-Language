@@ -1,2 +1,4 @@
 # hello.ae — minimal Aether test program
-func main(): u64 { return 42 }
+func main(): u64 {
+    return 42
+}
