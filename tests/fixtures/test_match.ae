@@ -1,0 +1,2 @@
+# test_match.ae — test match expression (single line)
+func main(): int { let x = 2; match x { case 0 -> 10; case 1 -> 20; case _ -> 30 } }

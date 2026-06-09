@@ -20,11 +20,11 @@
 - [x] P01.01 — Codegen: Proper Variable Stack Slots 🟢
 - [x] P01.02 — Codegen: Full Type Support 🟢
 - [x] P01.03 — Codegen: Structs and Field Access 🟢
-- [ ] P01.04 — Codegen: Arrays and Indexing
+- [x] P01.04 — Codegen: Arrays and Indexing 🟢
 - [x] P01.05 — Codegen: String Literals 🟢
 - [x] P01.06 — Codegen: Inline NASM 🟢
 - [x] P01.07 — Codegen: Function Calls with SysV ABI 🟢
-- [ ] P01.08 — Codegen: For Loops and Ranges
+- [x] P01.08 — Codegen: For Loops and Ranges 🟢
 - [ ] P01.09 — Codegen: Match Statements
 - [ ] P01.10 — Codegen: Enums with Payloads
 - [ ] P01.11 — Full Expression Coverage

@@ -1,4 +1,5 @@
 #include "aether/codegen.h"
+#include "aether/str.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -722,6 +723,53 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     cg_write_fmt(cg, ".L%x:\n", end_label);
                 }
             }
+            break;
+        }
+
+        case NODE_MATCH: {
+            int end_label = cg_new_label(cg);
+            cg_comment(cg, "match");
+            cg_expr(cg, node->data.match_node.value, slots);
+            cg_inst1(cg, "push", "rax");  /* save matched value on stack */
+
+            for (int i = 0; i < node->data.match_node.arms.count; i++) {
+                AstNode *arm = node->data.match_node.arms.items[i];
+                int next_label = cg_new_label(cg);
+
+                /* Reload matched value */
+                cg_inst1(cg, "mov", "rax, [rsp]");
+
+                /* Check pattern against rax */
+                AstNode *pat = arm->data.match_arm.pattern;
+                bool is_wildcard = false;
+                if (pat->type == NODE_IDENT && sv_eq_cstr(pat->data.ident.name, "_")) {
+                    is_wildcard = true;
+                } else if (pat->type == NODE_LITERAL_INT) {
+                    char val_buf[32];
+                    snprintf(val_buf, sizeof(val_buf), "%llu", (unsigned long long)pat->data.literal.int_val);
+                    char tmp[64];
+                    snprintf(tmp, sizeof(tmp), "cmp rax, %s", val_buf);
+                    cg_inst(cg, tmp);
+                    cg_write_fmt(cg, "    jne .L%x\n", next_label);
+                }
+
+                if (!is_wildcard) {
+                    /* Emit arm body */
+                    if (arm->data.match_arm.body)
+                        cg_expr(cg, arm->data.match_arm.body, slots);
+                    cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+                }
+
+                cg_write_fmt(cg, ".L%x:\n", next_label);
+                if (i == node->data.match_node.arms.count - 1) {
+                    /* Last arm (wildcard or default) */
+                    if (arm->data.match_arm.body)
+                        cg_expr(cg, arm->data.match_arm.body, slots);
+                }
+            }
+
+            cg_write_fmt(cg, ".L%x:\n", end_label);
+            cg_inst1(cg, "add", "rsp, 8");  /* pop matched value */
             break;
         }
 

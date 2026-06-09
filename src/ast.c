@@ -513,6 +513,12 @@ void ast_dump(AstNode *node, int depth) {
             ast_dump_indent(depth + 1); printf("value: "); ast_dump(node->data.match_node.value, 0);
             dump_list(&node->data.match_node.arms, depth + 1, "arms");
             break;
+        case NODE_MATCH_ARM:
+            ast_dump_indent(depth + 1); printf("pattern: "); ast_dump(node->data.match_arm.pattern, 0);
+            if (node->data.match_arm.body) {
+                ast_dump_indent(depth + 1); printf("body: "); ast_dump(node->data.match_arm.body, 0);
+            }
+            break;
         case NODE_ASM_BLOCK:
             if (node->data.asm_block.text) {
                 ast_dump_indent(depth + 1);
