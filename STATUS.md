@@ -32,7 +32,18 @@
 - [x] P01.13 — Self-Host Test Suite Expansion 🟢
 - [x] P01.14 — Phase 1 Verification & Cleanup 🟢
 
-## Phase 2 — Memory Management 🔴 NOT STARTED
+## Phase 2 — Host-Native Output (PRIORITY) 🔴 NOT STARTED
+- [ ] Mach-O 64 codegen backend (macOS native executables)
+- [ ] Host syscall ABI: macOS `syscall` instruction table (write, exit, mmap, etc.)
+- [ ] `_main` entry point generation (macOS) / `_start` (Linux)
+- [ ] Host-native `print()`/`puts()` using host OS write syscall
+- [ ] Multi-backend architecture: freestanding (ELF64 NASM) vs host-native (Mach-O/ELF syscall)
+- [ ] `aether run` — compile and execute in one step on host
+- [ ] `--target host` / `--target x86_64-freestanding` CLI flag
+- [ ] Host-native test runner: `.ae` test suite runs natively on dev machine
+- [ ] `aether.toml` target configuration
+
+## Phase 3 — Memory Management 🔴 NOT STARTED
 - [ ] Stack allocation for all local variables (default)
 - [ ] Automatic destructor insertion at scope exit
 - [ ] Escape analysis: detect when stack vars outlive scope, promote to heap
@@ -145,18 +156,20 @@
 
 1. **Phase 0**: Tokenizer in C → Parser in C → AST
 2. **Phase 1**: Core language features, ELF64 output, hello.ae on QEMU
-3. **Phase 2**: Memory management — stack, escape analysis, references
-4. ... sequential through phases
+3. **Phase 2 (PRIORITY)**: Host-native output — compile and run `.ae` on macOS/Linux natively
+4. **Phase 3**: Memory management — stack, escape analysis, references
+5. ... sequential through phases
 
 ---
 
 ## Known Technical Decisions
 
 - **Bootstrap language**: C11 freestanding (matches Aether OS kernel)
-- **Output**: ELF64 flat binary, no interpreters, no dynamic linking
+- **Output**: ELF64 flat binary for freestanding; Mach-O 64 (macOS) or native ELF64 (Linux) for host-native — **Phase 2 priority**
 - **Assembly**: NASM syntax only, integrated assembler in compiler
 - **Memory model**: Stack-first with escape analysis; explicit `heap` keyword
 - **Exceptions**: Tagged union return encoding, no personality/unwind tables
 - **Generics**: Monomorphization (zero-cost, like Rust/C++)
 - **Compile-time**: `#run` blocks, not a separate macro system
 - **Indentation**: Significant (Python-style), 4 spaces
+- **Host native**: Multi-backend codegen; host syscall ABI instead of 0x5000 table; `aether run` for one-step compile+execute

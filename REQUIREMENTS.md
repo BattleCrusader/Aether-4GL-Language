@@ -14,7 +14,8 @@ Every design decision serves four goals:
 ### Principles
 
 - **Memory management is a compile-time solved problem.** The compiler performs escape analysis, region inference, and liveness analysis. No runtime garbage collector. No reference-counting overhead at runtime. The compiled binary contains exactly the `free()` calls — or pool/arena teardowns — that the program actually needs.
-- **No runtime required.** Output is a standalone freestanding ELF64 for x86_64. No libc, no CRT, no loader, no interpreter. The binary runs from the first byte.
+- **No runtime required.** Output is a standalone freestanding ELF64 for x86_64 (or Mach-O 64 for macOS, PE32+ for Windows). No libc, no CRT, no loader, no interpreter. The binary runs from the first byte.
+- **Host-native binaries are a priority.** When compiling on macOS, the compiler outputs Mach-O 64 executables that run directly on the host. On Linux, ELF64. On Windows, PE32+. This lets you build, test, and iterate `.ae` programs on your dev machine without a VM or cross-linker. The kernel/freestanding target (ELF64) is a separate output mode.
 - **Classes are optional, automatic, and cheap.** You can write flat procedural code or use full OOP. When you use classes, construction and destruction are inferred by the compiler and baked into the binary. No virtual dispatch unless you explicitly request it.
 - **References over pointers.** The language nudges you toward references (borrowed, owned, region-scoped). Raw pointers exist for low-level work but are an explicit opt-in.
 - **NASM is a first-class citizen.** Inline assembly blocks use full NASM syntax with variable binding to and from the surrounding Aether code. No AT&T syntax. No intrinsics layer obscuring the machine.
@@ -475,13 +476,48 @@ func cpuid(leaf u32) (u32, u32, u32, u32) {
 
 ### 7.1 Freestanding Target
 
-The compiler's default target is **x86_64-freestanding**. No libc, no CRT, no OS assumptions.
+The compiler's primary target is **x86_64-freestanding**. No libc, no CRT, no OS assumptions.
 
 ```
 aether build --target x86_64-freestanding --output kernel.elf
 ```
 
-### 7.2 Syscall Page (0x5000)
+### 7.2 Host-Native Target (Priority)
+
+The compiler also outputs **host-native formats** so you can compile and run `.ae` programs directly on your development machine without a VM, emulator, or cross-linker.
+
+| Host OS | Format | Linker | Notes |
+|---------|--------|--------|-------|
+| macOS   | Mach-O 64 (x86_64) | `ld` (system) or direct syscall emission | Uses `syscall` instruction; emits `_main` entry point |
+| Linux   | ELF64 | `ld` (system) or direct syscall emission | Uses `syscall` instruction; emits `_start` entry point |
+| Windows | PE32+ | `link.exe` or direct | Future target |
+
+```
+# On macOS — produces a native Mac executable
+aether build hello.ae --output ./hello
+./hello
+# Hello, Aether!
+
+# On Linux — ELF64 native binary
+aether build hello.ae --output ./hello
+./hello
+# Hello, Aether!
+```
+
+**What this enables:**
+- Rapid iteration on `.ae` programs from your dev machine
+- Test suite runs natively instead of in QEMU
+- `aether run` compiles and executes in one step
+- Debugging with native tools (lldb, gdb, Instruments, perf)
+- Gradual migration from C bootstrap to self-hosted: write compiler components in Aether, test them on macOS, then deploy to the OS target
+
+**Technical approach:**
+- The compiler uses a **multi-backend codegen architecture**: one NASM backend for the freestanding ELF64 target, one for host-native output
+- Host-native output uses the host's syscall ABI directly (e.g. macOS `syscall` instruction via inline asm or an ABI shim)
+- The host-native `print()`/`puts()` calls the host OS write syscall (macOS = 0x2000004, Linux = 1) rather than the Aether OS 0x5000 table
+- A `aether.toml` setting controls the target: `target = "host"` (auto-detect) or `target = "x86_64-freestanding"`
+
+### 7.3 Syscall Page (0x5000)
 
 The compiler knows the Aether syscall table and generates optimal call sequences:
 
@@ -496,7 +532,7 @@ sys func exit()
 
 `sys func` is a language keyword that tells the compiler to emit a direct indirect call through the syscall page at offset `index * 8`.
 
-### 7.3 Module Interface (0x4000)
+### 7.4 Module Interface (0x4000)
 
 For kernel module development:
 
@@ -517,7 +553,7 @@ module serial {
 
 The `@export` attribute makes the symbol visible in the ELF symbol table for the module loader. The `module` keyword generates the correct entry points and ELF section layout for a `.ko` file.
 
-### 7.4 Binary Target
+### 7.5 Binary Target
 
 Standalone `/bin/` executables:
 
@@ -530,7 +566,7 @@ func main(args [][]byte) int {
 }
 ```
 
-### 7.5 Memory Layout Directives
+### 7.6 Memory Layout Directives
 
 ```aether
 @layout(start=0x7C00, max=512, file="stage1.bin")
