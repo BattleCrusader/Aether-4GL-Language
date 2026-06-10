@@ -36,11 +36,13 @@
 - [x] String table labels work for both targets
 - [x] **MILESTONE**: Both targets produce correct assembly from the same codegen
 
-### P02.05 — Host-native print() / putchar() (`P02.05`)
-- [ ] Add a `__aether_host_putchar` or `__aether_print` function emitted inline for host target
-- [ ] Uses macOS write syscall (0x2000004) to stdout
-- [ ] Aether `print("...")` calls this
-- [ ] **MILESTONE**: `print("Hello\n")` works in native binary
+### P02.05 — Host-native print() / putchar() (`P02.05`) 🟢
+- [x] Built-in `print()` handler in codegen that emits macOS write syscall inline
+- [x] String processing: strip quotes, decode escape sequences (`\n`, `\t`, `\xNN`)
+- [x] `.rodata` emitter handles non-printable chars as numeric byte values
+- [x] Works on both Mach-O (macOS) and native ELF64 (Linux)
+- [x] `xor rax, rax` after syscall so `main()` returns 0
+- [x] **MILESTONE**: `print("Hello\n")` works in native binary — verified output
 
 ### P02.06 — `aether run` command (`P02.06`)
 - [ ] `aether run hello.ae` → compiles + executes in one step

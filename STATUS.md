@@ -32,7 +32,7 @@
 - [x] P01.13 — Self-Host Test Suite Expansion 🟢
 - [x] P01.14 — Phase 1 Verification & Cleanup 🟢
 
-## Phase 2 — Host-Native Output (PRIORITY) 🟢 P02.01-P02.03 COMPLETE
+## Phase 2 — Host-Native Output (PRIORITY) 🟢 P02.01-P02.05 COMPLETE
 - [x] Target enum + codegen.h types 🟢
 - [x] `--target` CLI flag (host, x86_64-freestanding, macho64, elf64-host) 🟢
 - [x] `codegen_set_target()` / `codegen_detect_host()` 🟢
@@ -40,7 +40,8 @@
 - [x] NASM `-f macho64` + `clang -arch x86_64 -nostdlib -static -e _aether_entry` linkage 🟢
 - [x] Freestanding ELF64 path preserved (linker script, `x86_64-elf-ld`) 🟢
 - [x] `codegen_assemble()` — multi-target assemble/link pipeline 🟢
-- [ ] Host-native `print()`/`puts()` using macOS write syscall
+- [x] Host-native `print()` built-in with macOS write syscall 🟢
+- [x] String literal processing (strip quotes, decode escapes) 🟢
 - [ ] `aether run` — compile and execute in one step on host
 - [ ] Host-native test runner: `.ae` test suite runs natively on dev machine
 - [ ] `aether.toml` target configuration
