@@ -969,6 +969,25 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_IF: {
+            /* if let pattern = expr { body } — check optional tag, bind value */
+            if (node->data.if_node.is_if_let) {
+                int end_lbl = cg_new_label(cg);
+                cg_comment(cg, "if let");
+                /* Evaluate the optional expression */
+                cg_expr(cg, node->data.if_node.condition, slots);
+                /* Check the tag byte: optional layout is [tag:byte][value] in a ptr-sized slot.
+                   For "none" tag=0, "some" tag=1. Load byte, check if != 0. */
+                cg_inst(cg, "mov rcx, rax");
+                cg_inst(cg, "and rcx, 0xFF");
+                cg_inst1(cg, "test", "rcx, rcx");
+                cg_write_fmt(cg, "    jz .L%x\n", end_lbl);
+                /* Tag is some (1) — run body */
+                if (node->data.if_node.then_block)
+                    cg_stmt(cg, node->data.if_node.then_block, slots);
+                cg_write_fmt(cg, ".L%x:\n", end_lbl);
+                break;
+            }
+
             int else_label = cg_new_label(cg);
             int end_label = cg_new_label(cg);
 

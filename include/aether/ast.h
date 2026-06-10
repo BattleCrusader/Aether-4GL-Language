@@ -185,6 +185,8 @@ typedef struct {
     AstNode *then_block;
     AstNode *elif_chain;    /* linked list: elif->elif->else */
     AstNode *else_block;    /* NULL if no else */
+    bool is_if_let;         /* true if this is an if-let pattern binding */
+    AstNode *if_let_pattern; /* the pattern in if-let (stored in elif_chain hack for compat) */
 } IfNode;
 
 /* While loop */

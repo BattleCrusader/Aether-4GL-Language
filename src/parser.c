@@ -490,6 +490,23 @@ AstNode *parse_statement(Parser *p) {
 
     /* if statement */
     if (parser_match(p, TOKEN_KW_IF)) {
+        /* if let pattern = expr { body } — pattern binding */
+        if (parser_match(p, TOKEN_KW_LET)) {
+            AstNode *pattern = parse_pattern(p);
+            parser_expect(p, TOKEN_EQ, "if let");
+            AstNode *value = parse_expr(p);
+            AstNode *body = NULL;
+            if (parser_match(p, TOKEN_LBRACE)) {
+                body = parse_block_braced(p);
+            } else {
+                body = parse_block(p);
+            }
+            AstNode *ifnode = node_if(p->arena, p->previous.loc, value, body, NULL, NULL);
+            ifnode->data.if_node.is_if_let = true;
+            ifnode->data.if_node.if_let_pattern = pattern;
+            return ifnode;
+        }
+
         AstNode *cond = parse_expr(p);
         AstNode *then_block = NULL;
 

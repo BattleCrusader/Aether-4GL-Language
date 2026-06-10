@@ -187,6 +187,19 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             break;
 
         case NODE_IF:
+            if (node->data.if_node.is_if_let) {
+                semantic_visit_expr(sa, node->data.if_node.condition);
+                /* Register the pattern variable in the body scope */
+                if (node->data.if_node.if_let_pattern &&
+                    node->data.if_node.if_let_pattern->type == NODE_IDENT) {
+                    const char *pname = arena_strndup(sa->arena,
+                        node->data.if_node.if_let_pattern->data.ident.name.data,
+                        node->data.if_node.if_let_pattern->data.ident.name.len);
+                    scope_declare(sa, pname, node->data.if_node.if_let_pattern);
+                }
+                if (node->data.if_node.then_block) semantic_visit_node(sa, node->data.if_node.then_block);
+                break;
+            }
             semantic_visit_expr(sa, node->data.if_node.condition);
             if (node->data.if_node.then_block) semantic_visit_node(sa, node->data.if_node.then_block);
             if (node->data.if_node.elif_chain) semantic_visit_node(sa, node->data.if_node.elif_chain);

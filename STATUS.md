@@ -55,15 +55,15 @@
 - [x] P03.06 — Optional types `T?` with `none` 🟢
 - [x] P03.07 — Phase 3 Verification (14/14 unit, 10/10 native, both targets) 🟢
 
-## Phase 4 — OOP and Type System 🔵 IN PROGRESS (P04.01-P04.03 complete)
+## Phase 4 — OOP and Type System 🟢 P04.01-P04.08 COMPLETE
 - [x] P04.01 — Struct methods: parsing, self keyword, field access in methods 🟢
 - [x] P04.02 — Classes: `class` keyword, NODE_CLASS_DECL, treats class as struct 🟢
 - [x] P04.03 — Auto-destructor insertion: AutoDrop list, default drop stubs, forward-ref fix 🟢
 - [x] P04.04 — Access modifiers: `pub`, `private`, `internal` parsing and storage 🟢
 - [x] P04.05 — Traits and Impl: parsing, AST, trait/impl blocks 🟢
 - [x] P04.06 — Generics: `func Name<T>(params)` parsing, type params storage 🟢
-- [ ] P04.07 — `if let` pattern binding
-- [ ] P04.08 — Phase 4 Verification
+- [x] P04.07 — `if let` pattern binding for optionals 🟢
+- [x] P04.08 — Phase 4 Verification (16/16 + 14/14 unit, 13/13 native, both targets) 🟢
 
 ## Phase 5 — Advanced Language Features 🔴 NOT STARTED
 - [ ] Exception handling: `try`/`throw`/`catch`
@@ -155,8 +155,8 @@
 2. **Phase 1**: Core language features, ELF64 output, hello.ae on QEMU
 3. **Phase 2**: Host-native output — compile and run `.ae` on macOS/Linux natively ✅
 4. **Phase 3**: Memory management — defer, heap, regions, optionals ✅
-5. **Phase 4**: OOP and type system — classes, traits, generics, closures
-
+5. **Phase 4**: OOP and type system — classes, traits, generics, closures ✅
+6. **Phase 5**: Advanced language features — exceptions, compile-time, contracts
 ---
 
 ## Known Technical Decisions

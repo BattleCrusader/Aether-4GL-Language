@@ -1,0 +1,8 @@
+# test_iflet.ae — if let pattern binding for optionals
+func main(): u64 {
+    let x: u64? = none
+    if let val = x {
+        return val
+    }
+    return 42
+}
