@@ -59,5 +59,47 @@ test: tokenizer parser-test
 	@echo "=== Parser Tests ==="
 	@$(BUILD_DIR)/test_parser
 
+# Host-native test runner — compiles .ae fixtures and runs them natively
+TEST_FIXTURES = \
+	tests/fixtures/hello.ae \
+	tests/fixtures/test_math.ae \
+	tests/fixtures/test_params.ae \
+	tests/fixtures/test_types.ae \
+	tests/fixtures/test_struct.ae \
+	tests/fixtures/test_enum.ae \
+	tests/fixtures/test_match.ae
+
+# Expected exit codes for each fixture
+TEST_EXPECTED = 42 30 30 200 0 0 30
+
+test-host: aether-cli
+	@echo "=== Host-Native Test Runner ==="
+	@echo ""
+	@total=0; pass=0; \
+	set -- $(TEST_EXPECTED); \
+	for fixture in $(TEST_FIXTURES); do \
+		total=$$((total + 1)); \
+		expected=$$1; shift; \
+		name=$$(basename $$fixture .ae); \
+		dir=$$(dirname $$fixture); \
+		printf "  TEST: %s ... " $$name; \
+		./$(BUILD_DIR)/aether --target host $$fixture 2>/dev/null >/dev/null; \
+		if [ $$? -ne 0 ]; then \
+			printf "FAIL (compile)\\n"; \
+			continue; \
+		fi; \
+		$$dir/$$name 2>/dev/null >/dev/null; \
+		got=$$?; \
+		if [ "$$got" = "$$expected" ]; then \
+			printf "PASS (exit %d)\\n" $$got; \
+			pass=$$((pass + 1)); \
+		else \
+			printf "FAIL (expected %d, got %d)\\n" $$expected $$got; \
+		fi; \
+	done; \
+	echo ""; \
+	echo "=== Results: $$pass/$$total passed, $$((total - pass)) failed ==="; \
+	[ $$pass -eq $$total ]
+
 clean:
 	rm -rf $(BUILD_DIR)
