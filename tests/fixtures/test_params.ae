@@ -1,8 +1,15 @@
-# test_params.ae — test function calls with params
-func add(a: int, b: int): int {
+# test_params.ae — function calls: multiple params, recursion
+func add(a: u64, b: u64): u64 {
     return a + b
 }
 
-func main(): int {
-    return add(10, 20)
+func factorial(n: u64): u64 {
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
+}
+
+func main(): u64 {
+    let r1 = add(10, 20)        # 30
+    let r2 = factorial(5)       # 120
+    return r1 + r2              # 150
 }

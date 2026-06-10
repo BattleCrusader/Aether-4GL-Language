@@ -1,8 +1,10 @@
-# test_types.ae — typed variables
+# test_types.ae — typed variables: u8, u16, u32, u64, bool, byte
 func main(): u64 {
     let a: u8 = 200
     let b: u16 = 40000
     let c: u32 = 3000000
     let d: u64 = 50000000000
+    let flag: bool = true
+    let raw: byte = 128
     return a + b + c + d
 }

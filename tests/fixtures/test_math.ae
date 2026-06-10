@@ -1,6 +1,24 @@
-# test_math.ae — test variables and arithmetic
+# test_math.ae — arithmetic operations: add, sub, mul, div, mod, cmp
 func main(): u64 {
-    let x = 10
-    let y = 20
-    return x + y
+    # addition
+    let a = 10 + 20    # 30
+    # subtraction
+    let b = 50 - 15    # 35
+    # multiplication
+    let c = 7 * 8      # 56
+    # division
+    let d = 100 / 3    # 33
+    # modulo
+    let e = 17 % 5     # 2
+    # comparisons: each returns 0 or 1
+    let f = (42 == 42)  # 1
+    let g = (42 != 99)  # 1
+    let h = (10 < 20)   # 1
+    let i = (30 > 10)   # 1
+    let j = (5 <= 5)    # 1
+    let k = (5 >= 5)    # 1
+    # negation
+    let l = -(-3)       # 3
+    # return sum: 30+35+56+33+2+1+1+1+1+1+1+3
+    return a + b + c + d + e + f + g + h + i + j + k + l
 }
