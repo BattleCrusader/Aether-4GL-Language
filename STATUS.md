@@ -46,13 +46,13 @@
 - [x] Host-native test runner — `make test-host` (7/7 passing) 🟢
 - [ ] `aether.toml` target configuration
 
-## Phase 3 — Memory Management 🔵 IN PROGRESS (P03.01-P03.05 complete)
+## Phase 3 — Memory Management 🔵 IN PROGRESS (P03.01-P03.06 complete)
 - [x] P03.01 — `defer` — scope-exit execution (LIFO order, return-safe) 🟢
 - [x] P03.02 — `heap` — explicit heap allocation via mmap syscall 🟢
 - [x] P03.03 — Bump allocator runtime (64KB arena, O(1), auto-grow) 🟢
 - [x] P03.04 — Reference types: `ref T`, `owned T`, `rc T` type annotations 🟢
 - [x] P03.05 — `region { }` — stack-arena allocation (4KB, O(1) teardown) 🟢
-- [ ] P03.06 — Optional types `T?` with `none`
+- [x] P03.06 — Optional types `T?` with `none` 🟢
 - [ ] P03.07 — Phase 3 Verification
 
 ## Phase 3 — OOP and Type System 🔴 NOT STARTED

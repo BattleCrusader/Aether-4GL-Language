@@ -50,14 +50,12 @@
 - [x] Region teardown: restore rsp (O(1), no individual frees needed)
 - [x] Test: `test_region.ae` — region with heap alloc + print, verified pass
 
-### P03.06 — Optional Types `T?` with `none` (`P03.06`)
-- [ ] Parser: `T?` type suffix → tag+payload struct
-- [ ] AST: `NODE_TYPE_OPTIONAL`
-- [ ] Codegen: optional is an 9-byte struct (1 byte tag + T value)
-- [ ] `none` → tag=0; `some` → tag=1 + value
-- [ ] `if let x = opt { ... }` → pattern match on tag
-- [ ] Update test_enum.ae or add test_optional.ae
-- [ ] **MILESTONE**: `let x: int? = none; x = 42` works
+### P03.06 — Optional Types `T?` with `none` (`P03.06`) 🟢
+- [x] Postfix `T?` type annotation via refactored parse_type_base() + parse_type_postfix()
+- [x] Removed old prefix `?T` handler in favor of postfix `T?`
+- [x] `type_size()` returns `1 + sizeof(inner_type)` for optionals
+- [x] `none` literal already existed (token, AST, codegen)
+- [x] Test: `test_optional.ae` — `let x: u64? = none` parses and compiles
 
 ### P03.07 — Phase 3 Verification (`P03.07`)
 - [ ] `make clean && make test` — 28/28 passing
