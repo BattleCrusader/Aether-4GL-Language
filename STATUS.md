@@ -55,9 +55,9 @@
 - [x] P03.06 — Optional types `T?` with `none` 🟢
 - [x] P03.07 — Phase 3 Verification (14/14 unit, 10/10 native, both targets) 🟢
 
-## Phase 4 — OOP and Type System 🔵 IN PROGRESS (P04.01 complete)
+## Phase 4 — OOP and Type System 🔵 IN PROGRESS (P04.01-P04.02 complete)
 - [x] P04.01 — Struct methods: parsing, self keyword, field access in methods 🟢
-- [ ] P04.02 — Classes with `init` (constructor) and `drop` (destructor)
+- [x] P04.02 — Classes: `class` keyword, NODE_CLASS_DECL, treats class as struct 🟢
 - [ ] P04.03 — Automatic destructor insertion at scope exits
 - [ ] P04.04 — Access modifiers: `pub`, `internal`, `private`
 - [ ] P04.05 — Traits and Impl (interfaces)

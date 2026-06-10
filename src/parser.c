@@ -159,6 +159,13 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             s->data.struct_decl.is_pub = is_pub;
             node_list_append(decls, s);
         }
+    } else if (parser_match(p, TOKEN_KW_CLASS)) {
+        AstNode *s = parse_struct_decl(p);
+        if (s) {
+            s->type = NODE_CLASS_DECL;
+            s->data.struct_decl.is_pub = is_pub;
+            node_list_append(decls, s);
+        }
     } else if (parser_match(p, TOKEN_KW_ENUM)) {
         AstNode *e = parse_enum_decl(p);
         if (e) {

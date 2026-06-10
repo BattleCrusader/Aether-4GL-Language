@@ -305,6 +305,7 @@ const char *node_type_name(NodeType type) {
         case NODE_FUNC_DECL: return "FUNC_DECL";
         case NODE_PARAM: return "PARAM";
         case NODE_STRUCT_DECL: return "STRUCT_DECL";
+        case NODE_CLASS_DECL: return "CLASS_DECL";
         case NODE_FIELD: return "FIELD";
         case NODE_ENUM_DECL: return "ENUM_DECL";
         case NODE_ENUM_VARIANT: return "ENUM_VARIANT";
@@ -314,7 +315,6 @@ const char *node_type_name(NodeType type) {
         case NODE_TYPE_ALIAS: return "TYPE_ALIAS";
         case NODE_TRAIT_DECL: return "TRAIT_DECL";
         case NODE_IMPL_BLOCK: return "IMPL_BLOCK";
-        case NODE_CLASS_DECL: return "CLASS_DECL";
         case NODE_BLOCK: return "BLOCK";
         case NODE_LET: return "LET";
         case NODE_ASSIGN: return "ASSIGN";
@@ -536,6 +536,7 @@ void ast_dump(AstNode *node, int depth) {
             }
             break;
         case NODE_STRUCT_DECL:
+        case NODE_CLASS_DECL:
             ast_dump_indent(depth + 1); printf("name: "); ast_dump(node->data.struct_decl.name, 0);
             dump_list(&node->data.struct_decl.fields, depth + 1, "fields");
             break;

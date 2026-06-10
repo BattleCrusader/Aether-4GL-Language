@@ -1,0 +1,9 @@
+class Buffer {
+    ptr: u64
+    size: u64
+}
+
+func main(): int {
+    let b: Buffer
+    return 0
+}

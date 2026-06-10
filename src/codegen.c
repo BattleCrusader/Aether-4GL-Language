@@ -95,7 +95,7 @@ static StructLayout *enum_layouts = NULL;  /* enums are tracked as layouts too *
 
 /* Build struct layout from a STRUCT_DECL node */
 static StructLayout *build_struct_layout(Arena *a, AstNode *node) {
-    if (node->type != NODE_STRUCT_DECL) return NULL;
+    if (node->type != NODE_STRUCT_DECL && node->type != NODE_CLASS_DECL) return NULL;
     
     StructLayout *sl = (StructLayout *)arena_alloc(a, sizeof(StructLayout));
     sl->name = arena_strndup(a,
@@ -1185,7 +1185,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     /* Build struct layouts from top-level declarations */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *node = program->data.list.items[i];
-        if (node->type == NODE_STRUCT_DECL) {
+        if (node->type == NODE_STRUCT_DECL || node->type == NODE_CLASS_DECL) {
             build_struct_layout(cg->arena, node);
         } else if (node->type == NODE_ENUM_DECL) {
             build_enum_layout(cg->arena, node);

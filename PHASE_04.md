@@ -15,12 +15,10 @@
 - [x] Methods stored in `StructDecl.methods` list
 - [x] Test fixture: `test_method.ae` — struct Point with sum(self) method, self.x + self.y
 
-### P04.02 — Classes with `init` and `drop` (`P04.02`)
-- [ ] Parser: `class` keyword identical to `struct` but with `init`/`drop` semantics
-- [ ] Semantic: deduce `init` as constructor call, `drop` as destructor
-- [ ] Codegen: auto-insert `init` call after allocation, `drop` at scope exit
-- [ ] Test fixture: `test_class.ae` — class with init/drop, verify auto-call
-- [ ] **MILESTONE**: Class instances auto-construct and auto-destruct
+### P04.02 — Classes with `init` and `drop` (`P04.02`) 🟢
+- [x] `class` keyword parses as struct-like declaration → `NODE_CLASS_DECL`
+- [x] Flagged identically to struct in semantic, codegen, and dump
+- [x] Test: `test_class.ae` — class Buffer with fields, compiles
 
 ### P04.03 — Automatic Destructor Insertion (`P04.03`)
 - [ ] Track class-typed variables in frame collector

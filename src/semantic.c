@@ -164,10 +164,11 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
 
         case NODE_CONST_DECL:
         case NODE_STRUCT_DECL:
+        case NODE_CLASS_DECL:
         case NODE_ENUM_DECL: {
             /* Register type name in scope */
             AstNode *name_node = NULL;
-            if (node->type == NODE_STRUCT_DECL) name_node = node->data.struct_decl.name;
+            if (node->type == NODE_STRUCT_DECL || node->type == NODE_CLASS_DECL) name_node = node->data.struct_decl.name;
             else if (node->type == NODE_ENUM_DECL) name_node = node->data.enum_decl.name;
             else if (node->type == NODE_CONST_DECL) name_node = node->data.let_decl.name;
             if (name_node) {
