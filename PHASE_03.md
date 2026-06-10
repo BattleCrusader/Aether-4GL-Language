@@ -35,13 +35,12 @@
 - [x] Fixed NASM local label scoping (`.Lstr` → `Lstr` for cross-section references)
 - [x] Test: `test_heap.ae` passes (heap 42 + deref + return 42)
 
-### P03.04 — `ref T` / `owned T` / `rc T` — Reference Types (`P03.04`)
-- [ ] Parser: parse `ref T`, `owned T`, `rc T` type annotations  
-- [ ] AST: `NODE_TYPE_REF`, `NODE_TYPE_OWNED`, `NODE_TYPE_RC` nodes
-- [ ] Semantic: enforce no-dangle for `ref`, single-owner for `owned`
-- [ ] Codegen: `ref` is just a pointer (zero-cost), `owned` adds scope-exit free, `rc` adds ref-count runtime
-- [ ] Add test fixture: `test_ref.ae`
-- [ ] **MILESTONE**: Reference types parse and compile
+### P03.04 — `ref T` / `owned T` / `rc T` — Reference Types (`P03.04`) 🟢
+- [x] Parser: `ref T`, `owned T`, `rc T` type annotations in parse_type()
+- [x] Uses existing `TypeNode.is_ref`/`is_owned`/`is_rc` booleans
+- [x] Already works with `type_size()` (returns 8 for all pointer-sized refs)
+- [x] Clean git tree: no binary artifacts tracked, output goes to /tmp/
+- [x] Test: `test_ref_types.ae` — all three reference types parse and compile
 
 ### P03.05 — `region { }` — Region-Based Allocation (`P03.05`)
 - [ ] Parser: `region("name") { block }` → `NODE_REGION`

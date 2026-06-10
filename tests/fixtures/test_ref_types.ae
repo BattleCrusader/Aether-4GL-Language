@@ -1,0 +1,5 @@
+func main() {
+    let p: ref u64
+    let q: owned u64
+    let r: rc u64
+}
