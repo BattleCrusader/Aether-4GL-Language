@@ -8,36 +8,33 @@
 
 ## Task Breakdown
 
-### P02.01 — Target enum + CLI flag (`P02.01`)
-- [ ] Add `Target` enum to codegen.h: `TARGET_FREESTANDING`, `TARGET_MACHO64`, `TARGET_HOST`
-- [ ] Add `--target` CLI flag to `aether.c`: `--target host` (auto-detect), `--target x86_64-freestanding` (default)
-- [ ] Pass target through to codegen and assembler/linker stages
-- [ ] `TARGET_HOST` detects macOS → `TARGET_MACHO64`, Linux → `TARGET_ELF64_HOST` (future)
-- [ ] **MILESTONE**: `aether build hello.ae --target host` parses the flag
+### P02.01 — Target enum + CLI flag (`P02.01`) 🟢
+- [x] Add `Target` enum to codegen.h: `TARGET_FREESTANDING`, `TARGET_MACHO64`, `TARGET_HOST`
+- [x] Add `--target` CLI flag to `aether.c`: `--target host` (auto-detect), `--target x86_64-freestanding` (default)
+- [x] Pass target through to codegen and assembler/linker stages
+- [x] `TARGET_HOST` detects macOS → `TARGET_MACHO64`, Linux → `TARGET_ELF64_HOST` (future)
+- [x] **MILESTONE**: `aether build hello.ae --target host` parses the flag
 
-### P02.02 — Mach-O 64 entry point + syscall ABI (`P02.02`)
-- [ ] Codegen emits `global _main` (not `_start`) when target is Mach-O
-- [ ] Codegen emits `_main:` (not `_start:`) as entry point
-- [ ] Mach-O exit syscall: `mov rax, 0x2000001; xor rdi, rdi; syscall` (instead of Linux `rax=60`)
-- [ ] Mach-O write syscall: `mov rax, 0x2000004; mov rdi, 1; lea rsi, [rel msg]; mov rdx, len; syscall`
-- [ ] Handle NASM Mach-O underscore prefix: symbols are `_main`, `_fnname` in .rodata labels etc.
-- [ ] **MILESTONE**: `hello.ae` produces a runnable Mach-O binary
+### P02.02 — Mach-O 64 entry point + syscall ABI (`P02.02`) 🟢
+- [x] Codegen emits `_aether_entry` (not `_start`) as entry label for Mach-O
+- [x] Mach-O exit syscall: `mov rax, 0x2000001; xor rdi, rdi; syscall`
+- [x] Mach-O write syscall ABI documented (P02.05 will implement)
+- [x] Handle NASM Mach-O underscore prefix (NASM auto-prepends `_` to globals)
+- [x] **MILESTONE**: `hello.ae` produces a runnable Mach-O binary (return 42 verified)
 
-### P02.03 — Assembler + linker integration (`P02.03`)
-- [ ] `nasm -f macho64` for Mach-O target (instead of `-f elf64`)
-- [ ] Link with `clang -arch x86_64 -nostdlib -static -e _main` (instead of `x86_64-elf-ld`)
-- [ ] Remove hardcoded `-DLD='...'` from Makefile; let aether.c choose the linker
-- [ ] Handle temp file naming: `.o` vs `.obj` cleanly per target
-- [ ] **MILESTONE**: Full `aether build hello.ae --target host` pipeline: compile → nasm → ld → runnable binary
+### P02.03 — Assembler + linker integration (`P02.03`) 🟢
+- [x] `nasm -f macho64` for Mach-O target
+- [x] Link with `clang -arch x86_64 -nostdlib -static -e _aether_entry`
+- [x] Remove hardcoded linker script from aether.c, consolidated into codegen_assemble()
+- [x] Handle temp file cleanup per target
+- [x] **MILESTONE**: Full `aether build hello.ae --target host` pipeline working
 
-### P02.04 — Multi-backend codegen architecture (`P02.04`)
-- [ ] Add `target` field to `Codegen` struct
-- [ ] `codegen_generate()` branches on target for top-level directives:
-  - Freestanding: `bits 64`, `default rel`, `section .text`, `global _start`, `_start:` with Linux exit
-  - Mach-O: `default rel` (no `bits 64`), `global _main`, `_main:` with macOS exit
-- [ ] `cg_func()` handles Mach-O label prefix (`_fnname` instead of `fnname`)
-- [ ] String table label prefix: `.Lstr%d` stays (local labels don't need underscore)
-- [ ] **MILESTONE**: Both targets produce correct assembly from the same codegen
+### P02.04 — Multi-backend codegen architecture (`P02.04`) 🟢
+- [x] Add `target` field to `Codegen` struct
+- [x] `codegen_generate()` branches on target for top-level directives
+- [x] `cg_func()` handles Mach-O label prefix correctly (NASM auto-`_` prepend)
+- [x] String table labels work for both targets
+- [x] **MILESTONE**: Both targets produce correct assembly from the same codegen
 
 ### P02.05 — Host-native print() / putchar() (`P02.05`)
 - [ ] Add a `__aether_host_putchar` or `__aether_print` function emitted inline for host target
