@@ -428,6 +428,8 @@ int main() {
     test_chars();
     test_operators();
     test_indent_balance();
+    test_indent_in_func_body();
+    test_indent_mixed_brace_and_indent();
     test_keywords();
     test_asm_block();
 
