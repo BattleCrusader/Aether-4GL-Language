@@ -345,7 +345,7 @@ static const char *cg_emit_string(Codegen *cg, StringView sv) {
 
     int n = string_label_counter++;
     char *label = (char *)arena_alloc(cg->arena, 64);
-    snprintf(label, 64, ".Lstr%d", n);
+    snprintf(label, 64, "Lstr%d", n);
 
     /* Allocate and copy processed data */
     char *data = (char *)arena_alloc(cg->arena, (size_t)(plen + 1));
@@ -1213,39 +1213,98 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         }
     }
 
-    /* Emit runtime helpers — __aether_alloc */
+    /* Emit runtime helpers — __aether_alloc and __aether_free */
     bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
     if (is_host) {
+        /* Bump allocator state lives in .bss */
+        cg_write(cg, "section .bss\n");
+        cg_write(cg, "__aether_heap_start: resq 1\n");
+        cg_write(cg, "__aether_heap_cur:   resq 1\n");
+        cg_write(cg, "__aether_heap_end:   resq 1\n");
+        cg_write(cg, "\n");
+
+        cg_write(cg, "section .text\n");
         cg_write(cg, "; __aether_alloc(rdi: size) -> rax: ptr\n");
+        cg_write(cg, "; Bump allocator — calls mmap once, hands out from a bounded arena.\n");
         cg_write(cg, "__aether_alloc:\n");
         cg_inst1(cg, "push", "rbp");
         cg_inst1(cg, "mov", "rbp, rsp");
-        cg_inst1(cg, "push", "rdi");        /* save size */
-        /* Round up to page size (4096) */
-        cg_inst(cg, "add rdi, 4095");
-        cg_inst(cg, "and rdi, ~4095");
+        /* Align size to 16 bytes */
+        cg_inst(cg, "add rdi, 15");
+        cg_inst(cg, "and rdi, ~15");
+        /* Load current bump pointer */
+        cg_inst(cg, "mov rax, [rel __aether_heap_cur]");
+        cg_inst1(cg, "test", "rax, rax");
+        cg_inst(cg, "jnz .Lalloc_try");
+        /* First allocation: mmap a 64KB arena */
+        cg_write(cg, ".Lalloc_init:\n");
         if (cg->target == TARGET_MACHO64) {
-            /* mmap(NULL, size, PROT_RW, MAP_PRIVATE|MAP_ANON, -1, 0) */
-            cg_inst1(cg, "mov", "rsi, rdi");   /* size */
-            cg_inst1(cg, "xor", "rdi, rdi");   /* addr = NULL */
-            cg_inst1(cg, "mov", "rdx, 3");     /* PROT_READ|PROT_WRITE */
-            cg_inst1(cg, "mov", "r10, 0x1002"); /* MAP_PRIVATE|MAP_ANONYMOUS */
-            cg_inst1(cg, "mov", "r8, -1");     /* fd = -1 */
-            cg_inst1(cg, "xor", "r9, r9");     /* offset = 0 */
-            cg_inst1(cg, "mov", "rax, 0x20000C5"); /* mmap */
+            cg_inst1(cg, "mov", "rdi, 0");        /* addr=NULL */
+            cg_inst1(cg, "mov", "rsi, 65536");    /* size=64KB */
+            cg_inst1(cg, "mov", "rdx, 3");        /* PROT_READ|PROT_WRITE */
+            cg_inst1(cg, "mov", "r10, 0x1002");   /* MAP_PRIVATE|MAP_ANONYMOUS */
+            cg_inst1(cg, "mov", "r8, -1");        /* fd=-1 */
+            cg_inst1(cg, "xor", "r9, r9");
+            cg_inst1(cg, "mov", "rax, 0x20000C5");
         } else {
-            /* Linux mmap(NULL, size, PROT_RW, MAP_PRIVATE|MAP_ANON, -1, 0) */
-            cg_inst1(cg, "mov", "rsi, rdi");   /* size */
-            cg_inst1(cg, "xor", "rdi, rdi");   /* addr = NULL */
-            cg_inst1(cg, "mov", "rdx, 3");     /* PROT_READ|PROT_WRITE */
-            cg_inst1(cg, "mov", "r10, 0x22");  /* MAP_PRIVATE|MAP_ANONYMOUS */
-            cg_inst1(cg, "mov", "r8, -1");     /* fd = -1 */
-            cg_inst1(cg, "xor", "r9, r9");     /* offset = 0 */
-            cg_inst1(cg, "mov", "rax, 9");     /* mmap */
+            cg_inst1(cg, "mov", "rdi, 0");
+            cg_inst1(cg, "mov", "rsi, 65536");
+            cg_inst1(cg, "mov", "rdx, 3");
+            cg_inst1(cg, "mov", "r10, 0x22");
+            cg_inst1(cg, "mov", "r8, -1");
+            cg_inst1(cg, "xor", "r9, r9");
+            cg_inst1(cg, "mov", "rax, 9");
         }
         cg_inst(cg, "syscall");
+        /* Store start, cur = start + 8 (skip header), end = start + 64KB */
+        cg_inst(cg, "mov [rel __aether_heap_start], rax");
+        cg_inst(cg, "lea rcx, [rax + 8]");
+        cg_inst(cg, "mov [rel __aether_heap_cur], rcx");
+        cg_inst(cg, "lea rcx, [rax + 65536]");
+        cg_inst(cg, "mov [rel __aether_heap_end], rcx");
+        /* Fall through to allocate from bumped cur */
+        cg_write(cg, ".Lalloc_try:\n");
+        /* rax = __aether_heap_cur, check if cur + size > end */
+        cg_inst(cg, "mov rax, [rel __aether_heap_cur]");
+        cg_inst(cg, "lea rcx, [rax + rdi]");
+        cg_inst(cg, "cmp rcx, [rel __aether_heap_end]");
+        cg_inst(cg, "jbe .Lalloc_ok");
+        /* Out of space: mmap another 64KB, chain it */
+        if (cg->target == TARGET_MACHO64) {
+            cg_inst1(cg, "mov", "rdi, 0");
+            cg_inst1(cg, "mov", "rsi, 65536");
+            cg_inst1(cg, "mov", "rdx, 3");
+            cg_inst1(cg, "mov", "r10, 0x1002");
+            cg_inst1(cg, "mov", "r8, -1");
+            cg_inst1(cg, "xor", "r9, r9");
+            cg_inst1(cg, "mov", "rax, 0x20000C5");
+        } else {
+            cg_inst1(cg, "mov", "rdi, 0");
+            cg_inst1(cg, "mov", "rsi, 65536");
+            cg_inst1(cg, "mov", "rdx, 3");
+            cg_inst1(cg, "mov", "r10, 0x22");
+            cg_inst1(cg, "mov", "r8, -1");
+            cg_inst1(cg, "xor", "r9, r9");
+            cg_inst1(cg, "mov", "rax, 9");
+        }
+        cg_inst(cg, "syscall");
+        /* rax = new page; store cur = rax + 8 (skip chain header) */
+        cg_inst(cg, "lea rcx, [rax + 8]");
+        cg_inst(cg, "mov [rel __aether_heap_cur], rcx");
+        cg_inst(cg, "lea rcx, [rax + 65536]");
+        cg_inst(cg, "mov [rel __aether_heap_end], rcx");
+        cg_write(cg, ".Lalloc_ok:\n");
+        /* rax = old cur, new cur = old cur + size */
+        cg_inst(cg, "mov rax, [rel __aether_heap_cur]");
+        cg_inst(cg, "add [rel __aether_heap_cur], rdi");
         cg_inst1(cg, "mov", "rsp, rbp");
         cg_inst1(cg, "pop", "rbp");
+        cg_inst(cg, "ret");
+        cg_write(cg, "\n");
+
+        /* __aether_free(rdi: ptr) — no-op for bump allocator */
+        cg_write(cg, "; __aether_free(rdi: ptr) — no-op (bump allocator)\n");
+        cg_write(cg, "__aether_free:\n");
         cg_inst(cg, "ret");
         cg_write(cg, "\n");
     }
@@ -1253,7 +1312,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     /* Emit string table — uses the label stored in each StringEntry */
     cg_write(cg, "section .rodata\n");
     for (StringEntry *e = string_entries; e; e = e->next) {
-        cg_write_fmt(cg, ".Lstr%d: db ", e->label_num);
+        cg_write_fmt(cg, "Lstr%d: db ", e->label_num);
         /* Emit printable chars between quotes, non-printable as numeric */
         cg_write(cg, "\"");
         for (size_t i = 0; i < e->sv.len; i++) {

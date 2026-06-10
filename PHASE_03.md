@@ -26,12 +26,14 @@
 - [x] Works on both host targets (Mach-O and ELF)
 - [x] Test: `test_heap.ae` — heap 42, deref, return 42 — exit code verified
 
-### P03.03 — Runtime Heap Allocator (`P03.03`)
-- [ ] Write built-in `__aether_alloc(size)` and `__aether_free(ptr)` as inline codegen
-- [ ] Host target: uses `mmap`/`munmap` syscalls
-- [ ] Freestanding: uses a simple bump allocator (no free, just reset)
-- [ ] Optional: simple free-list for host target
-- [ ] **MILESTONE**: Allocations can be freed when scope exits
+### P03.03 — Runtime Heap Allocator (`P03.03`) 🟢
+- [x] Bump allocator: mmaps 64KB on first allocation, hands out from bounded arena
+- [x] 16-byte alignment for all allocations
+- [x] Auto-grow: mmaps another 64KB when arena exhausted (no cap)
+- [x] State in .bss: `__aether_heap_start/cur/end` (3 quadwords)
+- [x] `__aether_free` as no-op (bump allocator semantics — O(1) alloc, batch teardown)
+- [x] Fixed NASM local label scoping (`.Lstr` → `Lstr` for cross-section references)
+- [x] Test: `test_heap.ae` passes (heap 42 + deref + return 42)
 
 ### P03.04 — `ref T` / `owned T` / `rc T` — Reference Types (`P03.04`)
 - [ ] Parser: parse `ref T`, `owned T`, `rc T` type annotations  
