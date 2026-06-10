@@ -262,19 +262,37 @@ let s2 = "hello"             # string literal
 
 ### 3.3 Optional Types
 
-```aether
-let x: int? = none           # optional integer, starts as none
-x = 42                       # now holds a value
+Aether has no null pointer. Instead, any type can be wrapped in an optional with the `?` suffix. An `int?` is either `some` (holding an int) or `none`. The compiler stores optionals as a tag byte + value, so `u64?` costs 9 bytes at runtime.
 
-if let val = x {
-    print(val)               # val is int, not int?
+```aether
+# Declaring an optional — starts as none by default
+let age: int? = none
+
+# Assigning a value wraps it automatically
+age = 30                      # now holds 30, tag is 'some'
+
+# The type system prevents you from using the value without checking
+# let years = age + 1         # ERROR: can't add int? + int
+
+# if-let pattern binding: unwraps safely, only runs the block if some
+if let actual = age {
+    print("age is {actual}")   # actual is int, not int?
+    # actual only exists inside this block
 }
 
-# Unwrap with default
-let y = x or 0               # 42 if x has value, 0 if none
+# Unwrap with a default value
+let display = age or 0        # 30 if some, 0 if none
 
-# Unwrap or crash (use sparingly)
-let z = x!                   # crashes at runtime if x is none
+# Force-unwrap (crashes if none — use sparingly, like a safety valve)
+let risky = age!              # runtime panic if age is none
+
+# Optionals compose with control flow
+for i in 0..100 {
+    let maybe: int? = lookup(i)
+    if let val = maybe {
+        process(val)
+    }
+}
 ```
 
 ### 3.4 Type Aliases
@@ -282,9 +300,9 @@ let z = x!                   # crashes at runtime if x is none
 ```aether
 type PageNumber = u64
 type Buffer = [u8; 4096]
-type Result(T) = Ok(T) | Err(string)  # anonymous enum
+type Result<T> = Ok(T) | Err(string)  # anonymous enum
 
-type GenericList(T) = struct {
+type GenericList<T> = struct {
     data ptr T
     count u64
     capacity u64
@@ -296,17 +314,19 @@ type GenericList(T) = struct {
 The compiler infers types from context. Explicit annotations are optional except for function signatures and struct fields.
 
 ```aether
-let x = 42                    # inferred: int (defaults to i32 on its own)
+let x = 42                    # inferred: int
 let y: u64 = 42               # explicit: u64
 let z = compute()             # inferred from return type of compute()
 
 # In function signatures, all parameters and return types must be annotated
-func add(a int, b int) int -> a + b
+func add(a: int, b: int): int {
+    return a + b
+}
 
 # But local variables inside the body are inferred
 func example() {
     let count = get_count()   # inferred
-    let doubled = count * 2   # inferred
+    let doubled = count * 2   # inferred (u64 from context)
 }
 ```
 
@@ -557,25 +577,32 @@ for i in 0..100 {
 
 ### 6.5 Match
 
-Powerful pattern matching:
+Match is Aether's primary branching construct for algebraic types. Unlike if/elif chains, match **exhaustively checks all possibilities** at compile time. The compiler can warn when you miss a case.
 
 ```aether
+# Basic integer matching — each case is checked in order
 match value {
     case 0 => print("zero")
     case 1 => print("one")
     case 2..9 => print("small")
     case 10..=100 => print("medium")
     case > 100 => print("large")
-    case _ => print("default")
+    case _ => print("default")      # wildcard catches everything
 }
 
-# Match on types (with algebraic data types)
+# Match on enum variants (algebraic data types)
+enum Result {
+    Ok(int)
+    Err(string)
+}
+
 match result {
     case Ok(val) => print("success: {val}")
     case Err(msg) => print("error: {msg}")
 }
+# Compiler checks: Ok and Err both handled — no wildcard needed
 
-# Match on structs
+# Match on struct content — destructuring with field patterns
 match point {
     case Point(0, 0) => print("origin")
     case Point(x, 0) => print("on x-axis at {x}")
@@ -583,39 +610,58 @@ match point {
     case Point(x, y) => print("at ({x}, {y})")
 }
 
-# Guard clauses
+# Guard clauses — additional conditions on a pattern
 match x {
     case n if n > 0 => "positive"
     case n if n < 0 => "negative"
     case _ => "zero"
 }
+
+# Match as an expression — all arms must return the same type
+let description = match x {
+    case 0 => "none"
+    case 1 => "one"
+    case _ => "many"
+}
 ```
 
 ### 6.6 Defer
 
-Deferred actions run when the current scope exits:
+`defer` schedules code to run when the current scope exits — whether by normal completion, early return, or error. Think of it as a guaranteed cleanup hook, like Python's `contextlib` or Golang's `defer`. Defers execute in last-in-first-out order (stack discipline).
 
 ```aether
-func read_file(path string) string {
-    let fd = open(path)
-    defer { close(fd) }    # runs when scope exits
-    # ... use fd ...
+# Basic defer — runs when the function returns
+func read_config(): string {
+    let fd = open("/etc/aether.cfg")
+    defer { close(fd) }        # guaranteed to run when scope exits
+    let content = read_all(fd)
     return content
-    # close(fd) called automatically here
+    # close(fd) called automatically right here, before the actual return
 }
-```
 
-Multiple defers run in reverse order (stack discipline):
+# Multiple defers run in reverse order (LIFO — stack discipline)
+func transfer_data() {
+    let source = open_source()
+    defer { close_source(source) }    # runs second
 
-```aether
-func example() {
-    let a = acquire_a()
-    defer { release_a(a) }
-    let b = acquire_b()
-    defer { release_b(b) }
-    # ... use a and b ...
-    # release_b(b) called first, then release_a(a)
+    let dest = open_dest()
+    defer { close_dest(dest) }        # runs first (LIFO)
+
+    copy(source, dest)
+    # close_dest called, then close_source
 }
+
+# Defers work in any scope, not just functions
+func process_chunk() {
+    {
+        let buf = allocate(1024)
+        defer { free(buf) }
+        fill(buf)
+    }  # buf freed here
+    print("buffer was already freed")
+}
+
+# Defers with class instances are automatic — see §11.3
 ```
 
 ---
@@ -892,13 +938,13 @@ enum Optional(T) {
     None
 }
 
-enum Result(T, E) {
+enum Result<T, E> {
     Ok(T)
     Err(E)
 }
 
 # Usage
-let r: Result(int, string) = Result::Ok(42)
+let r: Result<int, string> = Result::Ok(42)
 match r {
     case Ok(val) => print("got {val}")
     case Err(msg) => print("error: {msg}")
@@ -908,9 +954,9 @@ match r {
 ### 10.3 Recursive Enums
 
 ```aether
-enum Tree(T) {
+enum Tree<T> {
     Leaf(T)
-    Node(ref Tree(T), ref Tree(T))
+    Node(ref Tree<T>, ref Tree<T>)
 }
 ```
 
@@ -949,7 +995,7 @@ match data {
 
 ### 11.1 Class Definition
 
-Classes are like structs with automatic constructor/destructor management, private fields, and inheritance.
+Classes are like structs with automatic constructor/destructor management, private fields, and inheritance. The key difference from structs: when a class-typed variable goes out of scope, the compiler **automatically calls `drop()`** — you never need to manually free a class instance. The `init()` constructor is called when the variable is declared.
 
 ```aether
 class File {
@@ -957,7 +1003,7 @@ class File {
     fd int
     path string
     
-    # Constructor
+    # Constructor — called automatically when a File is created
     func init(self ref File, path string) throws {
         self.fd = sys_open(path)
         if self.fd < 0 {
@@ -966,7 +1012,7 @@ class File {
         self.path = path
     }
     
-    # Destructor (auto-called)
+    # Destructor — called automatically when the File goes out of scope
     func drop(self ref File) {
         sys_close(self.fd)
     }
@@ -1011,7 +1057,33 @@ func read_config_autoclose() {
 
 ### 11.3 Automatic Destructor Insertion
 
-The compiler inserts destructor calls automatically at:
+This is the key feature that separates classes from structs at runtime. When you declare a class-typed variable, the compiler automatically:
+
+```aether
+# When you write this:
+class File {
+    fd int
+    path string
+    func init(self, path: string) { ... }
+    func drop(self) { sys_close(self.fd) }
+}
+
+func process_files() throws {
+    let a = File("a.txt")       # init() called here
+    let b = File("b.txt")       # init() called here
+
+    if some_condition {
+        return  # compiler inserts: b.drop(), then a.drop()
+    }
+
+    throw Error()  # compiler inserts: b.drop(), then a.drop()
+
+    # normal exit: compiler inserts: b.drop(), then a.drop()
+    # destructors run in REVERSE declaration order
+}
+```
+
+The compiler inserts destructor calls at every scope exit path:
 
 1. **Normal scope exit**: End of block or function
 2. **Early return**: Any `return` statement
@@ -1019,21 +1091,6 @@ The compiler inserts destructor calls automatically at:
 4. **Loop exit**: `break` or `continue` leaving a block containing class instances
 5. **Move**: When ownership transfers, the source is invalidated but not destructed
 6. **Field**: When a struct/class is destructed, all fields are destructed in reverse order
-
-```aether
-func process_files() throws {
-    let a = File("a.txt")
-    let b = File("b.txt")
-    
-    if some_condition {
-        return  # compiler drops b, then a
-    }
-    
-    throw Error()  # compiler drops b, then a
-    
-    # normal exit: compiler drops b, then a
-}
-```
 
 ### 11.4 Inheritance
 
@@ -1056,7 +1113,11 @@ virtual class Renderer {
 
 ## 12. Traits
 
+Traits define shared behavior across types. They're similar to Rust traits or Go interfaces — a contract that types can implement. The compiler uses **static dispatch by default** (zero-cost — no vtable lookups) unless you explicitly opt into dynamic dispatch with `dyn`.
+
 ### 12.1 Defining Traits
+
+A trait declares method signatures without implementations. The `Self` type refers to whichever type implements the trait.
 
 ```aether
 trait Hashable {
@@ -1092,7 +1153,7 @@ impl Hashable for Point {
 
 ```aether
 # Static dispatch — compiler knows the concrete type
-func print_hash(T where T: Hashable)(value T) {
+func print_hash<T where T: Hashable>(value T) {
     print(value.hash())
 }
 
@@ -1136,25 +1197,30 @@ func sorted(T where T: Hashable + Eq)(items [T]) [T] {
 
 ## 13. Generics
 
+Generics let you write functions, structs, and classes that work with any type. All generics are **monomorphized** — the compiler generates a separate copy of the code for each concrete type used. This means zero runtime overhead, at the cost of larger binaries.
+
 ### 13.1 Generic Functions
 
+Type parameters are declared with angle brackets `T, U` after the function name and before the regular parameter list:
+
 ```aether
-func identity(T)(value T) T -> value
-
-func array_of(T)(count int, value T) [T] {
-    return [T; count] { fill with value }
+# identity works for any type T
+func identity<T>(value: T): T {
+    return value
 }
 
-func min(T where T: Comparable)(a T, b T) T {
-    if a < b { return a }
-    return b
-}
+# Usage — type is inferred from the argument:
+let x = identity(42)   # T = int
+let s = identity("hi") # T = string
+
+# Generic function with multiple type params
+func min<T, U>(a: T, b: U) { ... }
 ```
 
 ### 13.2 Generic Structs and Classes
 
 ```aether
-class Stack(T) {
+class Stack<T> {
     data [T]
     count int
     capacity int
@@ -1164,7 +1230,7 @@ class Stack(T) {
         self.data = heap [T; capacity]
     }
     
-    pub func push(self ref Stack(T), item T) {
+    pub func push(self ref Stack<T>, item T) {
         if self.count >= self.capacity {
             self.grow()
         }
@@ -1172,14 +1238,14 @@ class Stack(T) {
         self.count += 1
     }
     
-    pub func pop(self ref Stack(T)) T? {
+    pub func pop(self ref Stack<T>) T? {
         if self.count == 0 { return none }
         self.count -= 1
         return self.data[self.count]
     }
 }
 
-let stack = Stack(int)(16)
+let stack = Stack<int>(16)
 stack.push(42)
 let val = stack.pop()  # Optional::Some(42)
 ```
@@ -1197,7 +1263,7 @@ let max_f = max(3.14, 2.71)   # max(float, float) — generated
 ### 13.4 Where Clauses
 
 ```aether
-func serialize_all(T where T: Serializable)(items [T]) [byte] {
+func serialize_all<T where T: Serializable>(items [T]) [byte] {
     let mut result = [byte]()
     for item in items {
         result.append(item.serialize())
