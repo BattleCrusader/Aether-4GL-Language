@@ -36,10 +36,16 @@ int main(int argc, char **argv) {
     int dump_ast = 0;
     int dump_tokens = 0;
     int verbose = 0;
+    int run_mode = 0;
     Target target = TARGET_HOST; /* default: auto-detect */
 
     /* Parse args */
-    for (int i = 1; i < argc; i++) {
+    int argi = 1;
+    if (argc > 1 && strcmp(argv[1], "run") == 0) {
+        run_mode = 1;
+        argi = 2;
+    }
+    for (int i = argi; i < argc; i++) {
         if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
             if (i + 1 < argc) output_file = argv[++i];
         } else if (strcmp(argv[i], "--target") == 0) {
@@ -247,5 +253,17 @@ int main(int argc, char **argv) {
     arena_destroy(cg_arena);
 
     printf("Compilation successful: %s -> %s\n", input_file, output_file);
+
+    if (run_mode) {
+        if (verbose) printf("Running: %s\n", output_file);
+        char cmd[4096];
+        snprintf(cmd, sizeof(cmd), "./%s", output_file);
+        int ret = system(cmd);
+        if (ret != 0) {
+            fprintf(stderr, "Program exited with code %d\n", ret);
+        }
+        return ret;
+    }
+
     return 0;
 }

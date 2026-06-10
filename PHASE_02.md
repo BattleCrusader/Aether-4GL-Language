@@ -44,12 +44,12 @@
 - [x] `xor rax, rax` after syscall so `main()` returns 0
 - [x] **MILESTONE**: `print("Hello\n")` works in native binary — verified output
 
-### P02.06 — `aether run` command (`P02.06`)
-- [ ] `aether run hello.ae` → compiles + executes in one step
-- [ ] Returns exit code from the compiled program
-- [ ] Works with `--target host` (implicit default for `run`)
-- [ ] Captures program stdout/stderr
-- [ ] **MILESTONE**: `aether run hello.ae` shows "Hello" and exits
+### P02.06 — `aether run` command (`P02.06`) 🟢
+- [x] `aether run <file.ae>` → compiles + executes in one step
+- [x] Auto-targets host (--target host)
+- [x] Returns exit code from the compiled program
+- [x] Captures program stdout/stderr via system()
+- [x] **MILESTONE**: `aether run hello.ae` prints output and exits cleanly
 
 ### P02.07 — Host-native test runner (`P02.07`)
 - [ ] Tests compile with `--target host` and run natively

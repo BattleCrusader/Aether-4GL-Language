@@ -42,7 +42,7 @@
 - [x] `codegen_assemble()` — multi-target assemble/link pipeline 🟢
 - [x] Host-native `print()` built-in with macOS write syscall 🟢
 - [x] String literal processing (strip quotes, decode escapes) 🟢
-- [ ] `aether run` — compile and execute in one step on host
+- [x] `aether run <file.ae>` — compile + execute in one step 🟢
 - [ ] Host-native test runner: `.ae` test suite runs natively on dev machine
 - [ ] `aether.toml` target configuration
 
