@@ -59,7 +59,7 @@
 - [x] P04.01 — Struct methods: parsing, self keyword, field access in methods 🟢
 - [x] P04.02 — Classes: `class` keyword, NODE_CLASS_DECL, treats class as struct 🟢
 - [x] P04.03 — Auto-destructor insertion: AutoDrop list, default drop stubs, forward-ref fix 🟢
-- [ ] P04.04 — Access modifiers: `pub`, `internal`, `private`
+- [x] P04.04 — Access modifiers: `pub`, `private`, `internal` parsing and storage 🟢
 - [ ] P04.05 — Traits and Impl (interfaces)
 - [ ] P04.06 — Generics (monomorphization)
 - [ ] P04.07 — `if let` pattern binding

@@ -43,7 +43,9 @@ const KeywordEntry KEYWORDS[] = {
     {"rc",       TOKEN_KW_RC},
     {"heap",     TOKEN_KW_HEAP},
     {"region",   TOKEN_KW_REGION},
+    {"private",  TOKEN_KW_PRIVATE},
     {"pub",      TOKEN_KW_PUB},
+    {"internal", TOKEN_KW_INTERNAL},
     {"static",   TOKEN_KW_STATIC},
     {"defer",    TOKEN_KW_DEFER},
     {"unsafe",   TOKEN_KW_UNSAFE},
@@ -123,7 +125,9 @@ const char *token_type_name(TokenType type) {
         case TOKEN_KW_RC: return "rc";
         case TOKEN_KW_HEAP: return "heap";
         case TOKEN_KW_REGION: return "region";
+        case TOKEN_KW_PRIVATE: return "private";
         case TOKEN_KW_PUB: return "pub";
+        case TOKEN_KW_INTERNAL: return "internal";
         case TOKEN_KW_STATIC: return "static";
         case TOKEN_KW_DEFER: return "defer";
         case TOKEN_KW_UNSAFE: return "unsafe";

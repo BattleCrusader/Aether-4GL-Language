@@ -1,0 +1,15 @@
+private func helper(): int {
+    return 0
+}
+
+pub func api(): int {
+    return helper()
+}
+
+internal func internal_fn(): int {
+    return 1
+}
+
+func main(): int {
+    return api()
+}

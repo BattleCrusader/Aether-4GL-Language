@@ -140,15 +140,19 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
         parse_attribute(p);
     }
 
-    /* Handle pub/static modifiers */
+    /* Handle pub/private/internal/static modifiers */
     bool is_pub = parser_match(p, TOKEN_KW_PUB);
+    bool is_private = parser_match(p, TOKEN_KW_PRIVATE);
+    bool is_internal = parser_match(p, TOKEN_KW_INTERNAL);
     bool is_static = parser_match(p, TOKEN_KW_STATIC);
     bool is_test = parser_match(p, TOKEN_KW_TEST);
+    AccessLevel access = is_private ? ACCESS_PRIVATE : (is_internal ? ACCESS_INTERNAL : ACCESS_PUB);
 
     if (parser_match(p, TOKEN_KW_FUNC)) {
         AstNode *func = parse_func_decl(p);
         if (func) {
-            func->data.func.is_pub = is_pub;
+            func->data.func.access = access;
+            func->data.func.is_pub = is_pub;  // kept for backward compat for now
             func->data.func.is_static = is_static;
             func->data.func.is_test = is_test;
             node_list_append(decls, func);

@@ -63,7 +63,9 @@ typedef enum {
     TOKEN_KW_RC,        /* rc */
     TOKEN_KW_HEAP,      /* heap */
     TOKEN_KW_REGION,    /* region */
+    TOKEN_KW_PRIVATE,   /* private */
     TOKEN_KW_PUB,       /* pub */
+    TOKEN_KW_INTERNAL,  /* internal */
     TOKEN_KW_STATIC,    /* static */
     TOKEN_KW_DEFER,     /* defer */
     TOKEN_KW_UNSAFE,    /* unsafe */

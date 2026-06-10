@@ -135,6 +135,12 @@ typedef struct {
 } AstNodeList;
 
 /* Function declaration */
+typedef enum {
+    ACCESS_PUB,
+    ACCESS_PRIVATE,
+    ACCESS_INTERNAL,
+} AccessLevel;
+
 typedef struct {
     AstNode *name;          /* ident node */
     AstNodeList params;     /* list of PARAM nodes */
@@ -143,6 +149,7 @@ typedef struct {
     bool is_asm;            /* asm func */
     bool is_sys;            /* sys func */
     bool is_pub;            /* public */
+    AccessLevel access;      /* pub / private / internal */
     bool is_static;         /* static */
     bool is_test;           /* @Test */
     int sys_index;          /* syscall table index (-1 if not sys) */

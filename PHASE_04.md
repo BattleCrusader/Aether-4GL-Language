@@ -28,11 +28,12 @@
 - [x] Allocator labels renamed to LA_ prefix to avoid NASM local-label conflicts
 - [x] Test: `test_class.ae` — class Buffer with auto-drop, compiles and runs
 
-### P04.04 — Access Modifiers (`P04.04`)
-- [ ] Parser: `pub`, `internal`, `private` on fields and methods
-- [ ] Semantic: enforce access rules per scope
-- [ ] Test fixture: `test_access.ae`
-- [ ] **MILESTONE**: Access control works
+### P04.04 — Access Modifiers (`P04.04`) 🟢 (parsing only — enforcement deferred to Phase 5)
+- [x] Parser: `pub`, `private`, `internal` before declarations → `AccessLevel` enum
+- [x] Tokenizer: `TOKEN_KW_PRIVATE`, `TOKEN_KW_INTERNAL` added
+- [x] FuncDecl stores `AccessLevel access` field
+- [x] Test: `test_access.ae` — private/pub/internal functions parse and compile
+- [ ] Semantic enforcement (module boundary checking deferred — Phase 5)
 
 ### P04.05 — Traits and Impl (`P04.05`)
 - [ ] Parser: `trait Name { ... }` declaration with method signatures
