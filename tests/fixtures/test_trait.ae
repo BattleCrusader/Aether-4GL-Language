@@ -1,0 +1,22 @@
+struct Point {
+    x: int
+    y: int
+}
+
+trait Hashable {
+    func hash(self): u64
+    func eq(self, other: Point): bool
+}
+
+impl Hashable for Point {
+    func hash(self): u64 {
+        return u64(self.x + self.y)
+    }
+    func eq(self, other: Point): bool {
+        return true
+    }
+}
+
+func main(): u64 {
+    return 0
+}

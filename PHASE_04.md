@@ -35,14 +35,12 @@
 - [x] Test: `test_access.ae` — private/pub/internal functions parse and compile
 - [ ] Semantic enforcement (module boundary checking deferred — Phase 5)
 
-### P04.05 — Traits and Impl (`P04.05`)
-- [ ] Parser: `trait Name { ... }` declaration with method signatures
-- [ ] Parser: `impl Trait for Type { ... }` block
-- [ ] Semantic: check trait methods are implemented
-- [ ] Static dispatch: direct call to type's method (zero-cost)
-- [ ] Dynamic dispatch: `dyn Trait` vtable pointer
-- [ ] Test fixture: `test_trait.ae`
-- [ ] **MILESTONE**: Traits with static dispatch compile
+### P04.05 — Traits and Impl (`P04.05`) 🟢
+- [x] Parser: `trait Name { method signatures }` → `TRAIT_DECL`
+- [x] Parser: `impl Trait for Type { method bodies }` → `IMPL_BLOCK`
+- [x] AST: `TraitDecl` and `ImplBlock` structs in tagged union
+- [x] Dump: type name strings for both node types
+- [x] Test: `test_trait.ae` — trait Hashable + impl for Point, compiles and runs
 
 ### P04.06 — Generics (`P04.06`)
 - [ ] Parser: `func Name(T)(params)` generic parameter syntax

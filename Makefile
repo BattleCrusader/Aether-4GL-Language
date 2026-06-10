@@ -70,10 +70,11 @@ TEST_FIXTURES = \
 	tests/fixtures/test_match.ae \
 	tests/fixtures/test_defer.ae \
 	tests/fixtures/test_region.ae \
-	tests/fixtures/test_optional.ae
+	tests/fixtures/test_optional.ae \
+	tests/fixtures/test_trait.ae
 
 # Expected exit codes for each fixture
-TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0
+TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0 0
 
 test-host: aether-cli
 	@echo "=== Host-Native Test Runner ==="

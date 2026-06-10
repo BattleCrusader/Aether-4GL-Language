@@ -317,6 +317,20 @@ typedef struct {
     AstNodeList payload_types;  /* types of data carried */
 } EnumVariant;
 
+/* Trait declaration */
+typedef struct {
+    AstNode *name;              /* trait name */
+    AstNodeList methods;        /* function declarations (signatures only) */
+    bool is_pub;
+} TraitDecl;
+
+/* Impl block: impl TraitName for TypeName { methods } */
+typedef struct {
+    StringView trait_name;      /* the trait being implemented */
+    StringView type_name;       /* the type implementing it */
+    AstNodeList methods;        /* method bodies */
+} ImplBlock;
+
 /* Inline assembly */
 typedef struct {
     AstNode *text;          /* STRING_LITERAL containing the asm text */
@@ -370,6 +384,8 @@ struct AstNode {
         AsmBlock asm_block;
         DeferNode defer_node;
         RegionNode region_node;
+        TraitDecl trait_decl;
+        ImplBlock impl_block;
         AstNodeList list;   /* generic list for blocks */
     } data;
 };

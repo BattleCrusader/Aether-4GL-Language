@@ -208,6 +208,49 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             parser_expect(p, TOKEN_RBRACE, "module body");
         }
         node_list_append(decls, mod);
+    } else if (parser_match(p, TOKEN_KW_TRAIT)) {
+        /* trait Name { method_signatures } */
+        if (parser_check(p, TOKEN_IDENT)) {
+            Token name_tok = p->current; parser_advance(p);
+            AstNode *t = node_create(p->arena, NODE_TRAIT_DECL, name_tok.loc);
+            t->data.trait_decl.name = node_ident(p->arena, name_tok.loc, name_tok.text);
+            t->data.trait_decl.is_pub = is_pub;
+            if (parser_match(p, TOKEN_LBRACE)) {
+                while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
+                    if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
+                        parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                    if (parser_match(p, TOKEN_KW_FUNC)) {
+                        AstNode *method = parse_func_decl(p);
+                        if (method) node_list_append(&t->data.trait_decl.methods, method);
+                    } else { parser_advance(p); }
+                }
+                parser_expect(p, TOKEN_RBRACE, "trait body");
+            }
+            node_list_append(decls, t);
+        }
+    } else if (parser_match(p, TOKEN_KW_IMPL)) {
+        /* impl Trait for Type { methods } */
+        if (parser_check(p, TOKEN_IDENT)) {
+            Token trait_tok = p->current; parser_advance(p);
+            if (parser_match(p, TOKEN_KW_FOR) && parser_check(p, TOKEN_IDENT)) {
+                Token type_tok = p->current; parser_advance(p);
+                AstNode *impl = node_create(p->arena, NODE_IMPL_BLOCK, trait_tok.loc);
+                impl->data.impl_block.trait_name = trait_tok.text;
+                impl->data.impl_block.type_name = type_tok.text;
+                if (parser_match(p, TOKEN_LBRACE)) {
+                    while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
+                        if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
+                            parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                        if (parser_match(p, TOKEN_KW_FUNC)) {
+                            AstNode *method = parse_func_decl(p);
+                            if (method) node_list_append(&impl->data.impl_block.methods, method);
+                        } else { parser_advance(p); }
+                    }
+                    parser_expect(p, TOKEN_RBRACE, "impl body");
+                }
+                node_list_append(decls, impl);
+            }
+        }
     } else {
         /* Try to parse as expression statement (bare identifier = call?) */
         /* Report error if nothing matched */
