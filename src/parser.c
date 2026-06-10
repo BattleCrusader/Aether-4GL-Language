@@ -746,11 +746,29 @@ AstNode *parse_type(Parser *p) {
         return t;
     }
 
-    /* ref T */
+    /* ref T — borrowed reference */
     if (parser_match(p, TOKEN_KW_REF)) {
         AstNode *inner = parse_type(p);
         AstNode *t = node_create(p->arena, NODE_TYPE_REF, p->previous.loc);
         t->data.type_node.elem_type = inner;
+        return t;
+    }
+
+    /* owned T — unique ownership */
+    if (parser_match(p, TOKEN_KW_OWNED)) {
+        AstNode *inner = parse_type(p);
+        AstNode *t = node_create(p->arena, NODE_TYPE_REF, p->previous.loc);
+        t->data.type_node.elem_type = inner;
+        t->data.type_node.is_owned = true;
+        return t;
+    }
+
+    /* rc T — shared ownership */
+    if (parser_match(p, TOKEN_KW_RC)) {
+        AstNode *inner = parse_type(p);
+        AstNode *t = node_create(p->arena, NODE_TYPE_REF, p->previous.loc);
+        t->data.type_node.elem_type = inner;
+        t->data.type_node.is_rc = true;
         return t;
     }
 
