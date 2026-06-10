@@ -17,6 +17,8 @@ typedef enum {
     TARGET_ELF64_HOST,     /* native ELF64 for Linux host */
 } Target;
 
+typedef struct AutoDrop AutoDrop;
+
 typedef struct {
     Arena *arena;
     char *output;            /* accumulated output buffer */
@@ -28,6 +30,7 @@ typedef struct {
     Target target;           /* output target format */
     AstNode *defer_stack;    /* linked list of deferred ASTs (LIFO) */
     int defer_count;         /* number of deferred items */
+    AutoDrop *auto_drops;    /* linked list of class auto-drop entries */
 } Codegen;
 
 Codegen *codegen_create(Arena *a);

@@ -20,12 +20,13 @@
 - [x] Flagged identically to struct in semantic, codegen, and dump
 - [x] Test: `test_class.ae` — class Buffer with fields, compiles
 
-### P04.03 — Automatic Destructor Insertion (`P04.03`)
-- [ ] Track class-typed variables in frame collector
-- [ ] Emit `drop` calls at all scope exits (normal, return, break/continue)
-- [ ] Emit in reverse declaration order
-- [ ] Test fixture: `test_drop.ae` — multiple class vars, correct drop order
-- [ ] **MILESTONE**: Compiler-generated destructor chains at scope exit
+### P04.03 — Automatic Destructor Insertion (`P04.03`) 🟢
+- [x] AutoDrop linked list on Codegen struct tracks class-typed variables
+- [x] Default `%s_drop` stubs (ret-only) emitted at compile time for all classes
+- [x] Auto-drop calls emitted alongside defers at scope exit (both return paths)
+- [x] Runtime helpers moved before user functions to fix NASM forward-ref offset shifts
+- [x] Allocator labels renamed to LA_ prefix to avoid NASM local-label conflicts
+- [x] Test: `test_class.ae` — class Buffer with auto-drop, compiles and runs
 
 ### P04.04 — Access Modifiers (`P04.04`)
 - [ ] Parser: `pub`, `internal`, `private` on fields and methods

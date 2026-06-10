@@ -5,16 +5,25 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 #define INITIAL_CAP 65536
 
 /* Forward declarations */
 typedef struct VarSlot VarSlot;
+typedef struct AutoDrop AutoDrop;
 static int type_size(AstNode *type);
 static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots);
 static void cg_defer_push(Codegen *cg, AstNode *body);
 static void cg_emit_defers(Codegen *cg, VarSlot *slots);
 static void cg_defer_clear(Codegen *cg);
+
+/* Auto-drop entry for class destructors (linked list) */
+struct AutoDrop {
+    const char *class_name;
+    int stack_offset;
+    AutoDrop *next;
+};
 
 /* Process a raw string literal token value into actual bytes.
  * Strips surrounding quotes, processes escape sequences.
@@ -87,6 +96,7 @@ typedef struct StructLayout {
     const char *name;          /* struct type name */
     int total_size;            /* total bytes */
     FieldLayout *fields;       /* linked list of fields */
+    bool is_class;             /* true if declared with 'class', not 'struct' */
     struct StructLayout *next;
 } StructLayout;
 
@@ -123,6 +133,7 @@ static StructLayout *build_struct_layout(Arena *a, AstNode *node) {
     
     sl->total_size = offset;
     sl->next = struct_layouts;
+    sl->is_class = (node->type == NODE_CLASS_DECL);
     struct_layouts = sl;
     return sl;
 }
@@ -273,6 +284,7 @@ Codegen *codegen_create(Arena *a) {
     cg->target = TARGET_FREESTANDING;
     cg->defer_stack = NULL;
     cg->defer_count = 0;
+    cg->auto_drops = NULL;
     return cg;
 }
 
@@ -921,6 +933,26 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                 snprintf(buf, sizeof(buf), "mov qword [rbp%+d], 0", offset);
                 cg_inst(cg, buf);
             }
+            /* Auto-defer drop() for class-typed variables */
+            if (node->data.let_decl.type && node->data.let_decl.type->type == NODE_TYPE_NAMED) {
+                char tn[256];
+                int nlen = (int)node->data.let_decl.type->data.type_node.name.len;
+                if (nlen > 255) nlen = 255;
+                memcpy(tn, node->data.let_decl.type->data.type_node.name.data, nlen);
+                tn[nlen] = '\0';
+                for (StructLayout *sl = struct_layouts; sl; sl = sl->next) {
+                    if (strcmp(sl->name, tn) == 0 && sl->is_class) {
+                        cg_comment(cg, "auto-defer drop");
+                        /* Track auto-drop for scope exit emission */
+                        AutoDrop *ad = (AutoDrop *)arena_alloc(cg->arena, sizeof(AutoDrop));
+                        ad->class_name = arena_strndup(cg->arena, tn, (size_t)nlen);
+                        ad->stack_offset = offset;
+                        ad->next = cg->auto_drops;
+                        cg->auto_drops = ad;
+                        break;
+                    }
+                }
+            }
             break;
         }
 
@@ -1229,6 +1261,119 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     cg_inst(cg, "hlt");
     cg_write(cg, "\n");
 
+    /* Emit runtime helpers and data sections — BEFORE user functions */
+    {
+        bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
+        if (is_host) {
+            /* Bump allocator state in .bss */
+            cg_write(cg, "section .bss\n");
+            cg_write(cg, "__aether_heap_start: resq 1\n");
+            cg_write(cg, "__aether_heap_cur:   resq 1\n");
+            cg_write(cg, "__aether_heap_end:   resq 1\n");
+            cg_write(cg, "__aether_region_cur: resq 1\n");
+            cg_write(cg, "__aether_region_end: resq 1\n");
+            cg_write(cg, "\n");
+
+            cg_write(cg, "section .text\n");
+            /* __aether_alloc */
+            cg_write(cg, "; __aether_alloc(rdi: size) -> rax: ptr\n");
+            cg_write(cg, "; If region is active, bump from region first.\n");
+            cg_write(cg, "__aether_alloc:\n");
+            cg_inst1(cg, "push", "rbp");
+            cg_inst1(cg, "mov", "rbp, rsp");
+            cg_inst(cg, "add rdi, 15");
+            cg_inst(cg, "and rdi, ~15");
+            cg_inst(cg, "mov rax, [rel __aether_region_cur]");
+            cg_inst1(cg, "test", "rax, rax");
+            cg_inst(cg, "jz LA_heap");
+            cg_inst(cg, "lea rcx, [rax + rdi]");
+            cg_inst(cg, "cmp rcx, [rel __aether_region_end]");
+            cg_inst(cg, "jbe LA_region_ok");
+            cg_inst(cg, "jmp LA_heap");
+            cg_write(cg, "LA_region_ok:\n");
+            cg_inst(cg, "mov [rel __aether_region_cur], rcx");
+            cg_inst1(cg, "mov", "rsp, rbp");
+            cg_inst1(cg, "pop", "rbp");
+            cg_inst(cg, "ret");
+            cg_write(cg, "LA_heap:\n");
+            cg_inst1(cg, "push", "rdi");
+            cg_write(cg, "LA_init:\n");
+            if (cg->target == TARGET_MACHO64) {
+                cg_inst1(cg, "mov", "rdi, 0");
+                cg_inst1(cg, "mov", "rsi, 65536");
+                cg_inst1(cg, "mov", "rdx, 3");
+                cg_inst1(cg, "mov", "r10, 0x1002");
+                cg_inst1(cg, "mov", "r8, -1");
+                cg_inst1(cg, "xor", "r9, r9");
+                cg_inst1(cg, "mov", "rax, 0x20000C5");
+            } else {
+                cg_inst1(cg, "mov", "rdi, 0");
+                cg_inst1(cg, "mov", "rsi, 65536");
+                cg_inst1(cg, "mov", "rdx, 3");
+                cg_inst1(cg, "mov", "r10, 0x22");
+                cg_inst1(cg, "mov", "r8, -1");
+                cg_inst1(cg, "xor", "r9, r9");
+                cg_inst1(cg, "mov", "rax, 9");
+            }
+            cg_inst(cg, "syscall");
+            cg_inst(cg, "mov [rel __aether_heap_start], rax");
+            cg_inst(cg, "lea rcx, [rax + 8]");
+            cg_inst(cg, "mov [rel __aether_heap_cur], rcx");
+            cg_inst(cg, "lea rcx, [rax + 65536]");
+            cg_inst(cg, "mov [rel __aether_heap_end], rcx");
+            cg_write(cg, "LA_try:\n");
+            cg_inst(cg, "mov rax, [rel __aether_heap_cur]");
+            cg_inst(cg, "lea rcx, [rax + rdi]");
+            cg_inst(cg, "cmp rcx, [rel __aether_heap_end]");
+            cg_inst(cg, "jbe LA_ok");
+            if (cg->target == TARGET_MACHO64) {
+                cg_inst1(cg, "mov", "rdi, 0");
+                cg_inst1(cg, "mov", "rsi, 65536");
+                cg_inst1(cg, "mov", "rdx, 3");
+                cg_inst1(cg, "mov", "r10, 0x1002");
+                cg_inst1(cg, "mov", "r8, -1");
+                cg_inst1(cg, "xor", "r9, r9");
+                cg_inst1(cg, "mov", "rax, 0x20000C5");
+            } else {
+                cg_inst1(cg, "mov", "rdi, 0");
+                cg_inst1(cg, "mov", "rsi, 65536");
+                cg_inst1(cg, "mov", "rdx, 3");
+                cg_inst1(cg, "mov", "r10, 0x22");
+                cg_inst1(cg, "mov", "r8, -1");
+                cg_inst1(cg, "xor", "r9, r9");
+                cg_inst1(cg, "mov", "rax, 9");
+            }
+            cg_inst(cg, "syscall");
+            cg_inst(cg, "lea rcx, [rax + 8]");
+            cg_inst(cg, "mov [rel __aether_heap_cur], rcx");
+            cg_inst(cg, "lea rcx, [rax + 65536]");
+            cg_inst(cg, "mov [rel __aether_heap_end], rcx");
+            cg_write(cg, "LA_ok:\n");
+            cg_inst(cg, "mov rax, [rel __aether_heap_cur]");
+            cg_inst(cg, "add [rel __aether_heap_cur], rdi");
+            cg_inst1(cg, "mov", "rsp, rbp");
+            cg_inst1(cg, "pop", "rbp");
+            cg_inst(cg, "ret");
+            cg_write(cg, "\n");
+
+            /* __aether_free — no-op bump */
+            cg_write(cg, "; __aether_free(rdi: ptr) — no-op (bump allocator)\n");
+            cg_write(cg, "__aether_free:\n");
+            cg_inst(cg, "ret");
+            cg_write(cg, "\n");
+
+            /* Default drop stubs for all classes */
+            for (StructLayout *sl = struct_layouts; sl; sl = sl->next) {
+                if (sl->is_class) {
+                    cg_write_fmt(cg, "; default %s_drop stub\n", sl->name);
+                    cg_write_fmt(cg, "%s_drop:\n", sl->name);
+                    cg_inst(cg, "ret");
+                    cg_write(cg, "\n");
+                }
+            }
+        }
+    }
+
     /* Generate each function */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *node = program->data.list.items[i];
@@ -1236,117 +1381,6 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg->current_func = node;
             cg_func(cg, node);
         }
-    }
-
-    /* Emit runtime helpers — __aether_alloc and __aether_free */
-    bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
-    if (is_host) {
-        /* Bump allocator state lives in .bss */
-        cg_write(cg, "section .bss\n");
-        cg_write(cg, "__aether_heap_start: resq 1\n");
-        cg_write(cg, "__aether_heap_cur:   resq 1\n");
-        cg_write(cg, "__aether_heap_end:   resq 1\n");
-        cg_write(cg, "__aether_region_cur: resq 1\n");
-        cg_write(cg, "__aether_region_end: resq 1\n");
-        cg_write(cg, "\n");
-
-        cg_write(cg, "section .text\n");
-        cg_write(cg, "; __aether_alloc(rdi: size) -> rax: ptr\n");
-        cg_write(cg, "; If region is active, bump from region first.\n");
-        cg_write(cg, "__aether_alloc:\n");
-        cg_inst1(cg, "push", "rbp");
-        cg_inst1(cg, "mov", "rbp, rsp");
-        /* Align size to 16 bytes */
-        cg_inst(cg, "add rdi, 15");
-        cg_inst(cg, "and rdi, ~15");
-        /* Check if region is active */
-        cg_inst(cg, "mov rax, [rel __aether_region_cur]");
-        cg_inst1(cg, "test", "rax, rax");
-        cg_inst(cg, "jz .Lalloc_heap");
-        /* Region alloc: bump from region arena */
-        cg_inst(cg, "lea rcx, [rax + rdi]");
-        cg_inst(cg, "cmp rcx, [rel __aether_region_end]");
-        cg_inst(cg, "jbe .Lalloc_region_ok");
-        /* Region overflow: fall through to heap */
-        cg_inst(cg, "jmp .Lalloc_heap");
-        cg_write(cg, ".Lalloc_region_ok:\n");
-        cg_inst(cg, "mov [rel __aether_region_cur], rcx");
-        cg_inst1(cg, "mov", "rsp, rbp");
-        cg_inst1(cg, "pop", "rbp");
-        cg_inst(cg, "ret");
-        cg_write(cg, ".Lalloc_heap:\n");
-        cg_inst1(cg, "push", "rdi");        /* save size */
-        /* First allocation: mmap a 64KB arena */
-        cg_write(cg, ".Lalloc_init:\n");
-        if (cg->target == TARGET_MACHO64) {
-            cg_inst1(cg, "mov", "rdi, 0");        /* addr=NULL */
-            cg_inst1(cg, "mov", "rsi, 65536");    /* size=64KB */
-            cg_inst1(cg, "mov", "rdx, 3");        /* PROT_READ|PROT_WRITE */
-            cg_inst1(cg, "mov", "r10, 0x1002");   /* MAP_PRIVATE|MAP_ANONYMOUS */
-            cg_inst1(cg, "mov", "r8, -1");        /* fd=-1 */
-            cg_inst1(cg, "xor", "r9, r9");
-            cg_inst1(cg, "mov", "rax, 0x20000C5");
-        } else {
-            cg_inst1(cg, "mov", "rdi, 0");
-            cg_inst1(cg, "mov", "rsi, 65536");
-            cg_inst1(cg, "mov", "rdx, 3");
-            cg_inst1(cg, "mov", "r10, 0x22");
-            cg_inst1(cg, "mov", "r8, -1");
-            cg_inst1(cg, "xor", "r9, r9");
-            cg_inst1(cg, "mov", "rax, 9");
-        }
-        cg_inst(cg, "syscall");
-        /* Store start, cur = start + 8 (skip header), end = start + 64KB */
-        cg_inst(cg, "mov [rel __aether_heap_start], rax");
-        cg_inst(cg, "lea rcx, [rax + 8]");
-        cg_inst(cg, "mov [rel __aether_heap_cur], rcx");
-        cg_inst(cg, "lea rcx, [rax + 65536]");
-        cg_inst(cg, "mov [rel __aether_heap_end], rcx");
-        /* Fall through to allocate from bumped cur */
-        cg_write(cg, ".Lalloc_try:\n");
-        /* rax = __aether_heap_cur, check if cur + size > end */
-        cg_inst(cg, "mov rax, [rel __aether_heap_cur]");
-        cg_inst(cg, "lea rcx, [rax + rdi]");
-        cg_inst(cg, "cmp rcx, [rel __aether_heap_end]");
-        cg_inst(cg, "jbe .Lalloc_ok");
-        /* Out of space: mmap another 64KB, chain it */
-        if (cg->target == TARGET_MACHO64) {
-            cg_inst1(cg, "mov", "rdi, 0");
-            cg_inst1(cg, "mov", "rsi, 65536");
-            cg_inst1(cg, "mov", "rdx, 3");
-            cg_inst1(cg, "mov", "r10, 0x1002");
-            cg_inst1(cg, "mov", "r8, -1");
-            cg_inst1(cg, "xor", "r9, r9");
-            cg_inst1(cg, "mov", "rax, 0x20000C5");
-        } else {
-            cg_inst1(cg, "mov", "rdi, 0");
-            cg_inst1(cg, "mov", "rsi, 65536");
-            cg_inst1(cg, "mov", "rdx, 3");
-            cg_inst1(cg, "mov", "r10, 0x22");
-            cg_inst1(cg, "mov", "r8, -1");
-            cg_inst1(cg, "xor", "r9, r9");
-            cg_inst1(cg, "mov", "rax, 9");
-        }
-        cg_inst(cg, "syscall");
-        /* rax = new page; store cur = rax + 8 (skip chain header) */
-        cg_inst(cg, "lea rcx, [rax + 8]");
-        cg_inst(cg, "mov [rel __aether_heap_cur], rcx");
-        cg_inst(cg, "lea rcx, [rax + 65536]");
-        cg_inst(cg, "mov [rel __aether_heap_end], rcx");
-        cg_write(cg, ".Lalloc_ok:\n");
-        /* rax = old cur, new cur = old cur + size */
-        cg_inst(cg, "mov rax, [rel __aether_heap_cur]");
-        cg_inst(cg, "add [rel __aether_heap_cur], rdi");
-        cg_inst1(cg, "mov", "rsp, rbp");
-        cg_inst1(cg, "pop", "rbp");
-        cg_inst(cg, "ret");
-        cg_write(cg, "\n");
-
-        /* __aether_free(rdi: ptr) — no-op for bump allocator */
-        cg_write(cg, "; __aether_free(rdi: ptr) — no-op (bump allocator)\n");
-        cg_write(cg, "__aether_free:\n");
-        cg_inst(cg, "ret");
-        cg_write(cg, "\n");
     }
 
     /* Emit string table — uses the label stored in each StringEntry */
@@ -1398,10 +1432,15 @@ static void cg_defer_push(Codegen *cg, AstNode *body) {
 static void cg_emit_defers(Codegen *cg, VarSlot *slots) {
     if (!cg->current_func || cg->current_func->type != NODE_FUNC_DECL) return;
     AstNodeList *defers = &cg->current_func->data.func.defer_list;
-    if (defers->count == 0) return;
+    if (defers->count == 0 && cg->auto_drops == NULL) return;
     cg_comment(cg, "defers");
     for (int i = defers->count - 1; i >= 0; i--) {
         cg_stmt(cg, defers->items[i], slots);
+    }
+    /* Emit auto-drop calls for class-typed variables (LIFO — push order is natural) */
+    for (AutoDrop *ad = cg->auto_drops; ad; ad = ad->next) {
+        cg_write_fmt(cg, "    lea rdi, [rbp%+d]\n", ad->stack_offset);
+        cg_write_fmt(cg, "    call %s_drop\n", ad->class_name);
     }
 }
 
