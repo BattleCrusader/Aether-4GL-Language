@@ -91,18 +91,20 @@ int main(int argc, char **argv) {
     /* Default output name */
     if (!output_file) {
         if (target == TARGET_HOST || target == TARGET_MACHO64 || target == TARGET_ELF64_HOST) {
-            /* Strip .ae extension for host-native */
-            const char *dot = strrchr(input_file, '.');
+            /* Write to /tmp/ so binaries don't pollute source tree */
+            const char *fname = strrchr(input_file, '/');
+            fname = fname ? fname + 1 : input_file;
+            const char *dot = strrchr(fname, '.');
             if (dot && strcmp(dot, ".ae") == 0) {
-                size_t base_len = (size_t)(dot - input_file);
-                output_file = (const char *)malloc(base_len + 1);
-                if (output_file) {
-                    char *p = (char *)output_file;
-                    memcpy(p, input_file, base_len);
-                    p[base_len] = '\0';
+                size_t base_len = (size_t)(dot - fname);
+                char buf[1024];
+                int n = snprintf(buf, sizeof(buf), "/tmp/%.*s", (int)base_len, fname);
+                if (n > 0 && n < (int)sizeof(buf)) {
+                    output_file = (const char *)malloc((size_t)n + 1);
+                    if (output_file) memcpy((char *)output_file, buf, (size_t)n + 1);
                 }
             } else {
-                output_file = "a.out";
+                output_file = "/tmp/aether.out";
             }
         } else {
             output_file = "a.out";
@@ -257,7 +259,7 @@ int main(int argc, char **argv) {
     if (run_mode) {
         if (verbose) printf("Running: %s\n", output_file);
         char cmd[4096];
-        snprintf(cmd, sizeof(cmd), "./%s", output_file);
+        snprintf(cmd, sizeof(cmd), "%s", output_file);
         int ret = system(cmd);
         if (ret != 0) {
             fprintf(stderr, "Program exited with code %d\n", ret);

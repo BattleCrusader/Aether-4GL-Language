@@ -82,14 +82,13 @@ test-host: aether-cli
 		total=$$((total + 1)); \
 		expected=$$1; shift; \
 		name=$$(basename $$fixture .ae); \
-		dir=$$(dirname $$fixture); \
 		printf "  TEST: %s ... " $$name; \
 		./$(BUILD_DIR)/aether --target host $$fixture 2>/dev/null >/dev/null; \
 		if [ $$? -ne 0 ]; then \
 			printf "FAIL (compile)\\n"; \
 			continue; \
 		fi; \
-		$$dir/$$name 2>/dev/null >/dev/null; \
+		/tmp/$$name 2>/dev/null >/dev/null; \
 		got=$$?; \
 		if [ "$$got" = "$$expected" ]; then \
 			printf "PASS (exit %d)\\n" $$got; \
