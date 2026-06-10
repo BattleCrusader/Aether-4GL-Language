@@ -1,3 +1,5 @@
 build
 *.elf
+.DS_Store*.out
+tests/fixtures/hello_native
 .DS_Store
