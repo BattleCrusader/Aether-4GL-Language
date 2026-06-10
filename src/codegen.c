@@ -733,6 +733,21 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case UNARY_NEG: cg_inst1(cg, "neg", "rax"); break;
                 case UNARY_NOT: cg_inst(cg, "test rax, rax"); cg_inst(cg, "sete al"); cg_inst(cg, "movzx rax, al"); break;
                 case UNARY_BIT_NOT: cg_inst1(cg, "not", "rax"); break;
+                case UNARY_DEREF: cg_inst(cg, "mov rax, [rax]"); break;
+                case UNARY_HEAP: {
+                    /* heap Expr — allocate, store result, return pointer */
+                    cg_comment(cg, "heap alloc");
+                    /* Save evaluated value to stack */
+                    cg_inst1(cg, "push", "rax");
+                    /* Allocate 8 bytes (pointer-sized) */
+                    cg_inst1(cg, "mov", "rdi, 8");
+                    cg_inst(cg, "call __aether_alloc");
+                    /* Pop value into rcx, store to [rax] */
+                    cg_inst1(cg, "pop", "rcx");
+                    cg_inst(cg, "mov [rax], rcx");
+                    /* rax now holds the heap pointer */
+                    break;
+                }
                 default: break;
             }
             break;
@@ -1196,6 +1211,43 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg->current_func = node;
             cg_func(cg, node);
         }
+    }
+
+    /* Emit runtime helpers — __aether_alloc */
+    bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
+    if (is_host) {
+        cg_write(cg, "; __aether_alloc(rdi: size) -> rax: ptr\n");
+        cg_write(cg, "__aether_alloc:\n");
+        cg_inst1(cg, "push", "rbp");
+        cg_inst1(cg, "mov", "rbp, rsp");
+        cg_inst1(cg, "push", "rdi");        /* save size */
+        /* Round up to page size (4096) */
+        cg_inst(cg, "add rdi, 4095");
+        cg_inst(cg, "and rdi, ~4095");
+        if (cg->target == TARGET_MACHO64) {
+            /* mmap(NULL, size, PROT_RW, MAP_PRIVATE|MAP_ANON, -1, 0) */
+            cg_inst1(cg, "mov", "rsi, rdi");   /* size */
+            cg_inst1(cg, "xor", "rdi, rdi");   /* addr = NULL */
+            cg_inst1(cg, "mov", "rdx, 3");     /* PROT_READ|PROT_WRITE */
+            cg_inst1(cg, "mov", "r10, 0x1002"); /* MAP_PRIVATE|MAP_ANONYMOUS */
+            cg_inst1(cg, "mov", "r8, -1");     /* fd = -1 */
+            cg_inst1(cg, "xor", "r9, r9");     /* offset = 0 */
+            cg_inst1(cg, "mov", "rax, 0x20000C5"); /* mmap */
+        } else {
+            /* Linux mmap(NULL, size, PROT_RW, MAP_PRIVATE|MAP_ANON, -1, 0) */
+            cg_inst1(cg, "mov", "rsi, rdi");   /* size */
+            cg_inst1(cg, "xor", "rdi, rdi");   /* addr = NULL */
+            cg_inst1(cg, "mov", "rdx, 3");     /* PROT_READ|PROT_WRITE */
+            cg_inst1(cg, "mov", "r10, 0x22");  /* MAP_PRIVATE|MAP_ANONYMOUS */
+            cg_inst1(cg, "mov", "r8, -1");     /* fd = -1 */
+            cg_inst1(cg, "xor", "r9, r9");     /* offset = 0 */
+            cg_inst1(cg, "mov", "rax, 9");     /* mmap */
+        }
+        cg_inst(cg, "syscall");
+        cg_inst1(cg, "mov", "rsp, rbp");
+        cg_inst1(cg, "pop", "rbp");
+        cg_inst(cg, "ret");
+        cg_write(cg, "\n");
     }
 
     /* Emit string table — uses the label stored in each StringEntry */

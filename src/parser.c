@@ -902,6 +902,10 @@ static AstNode *parse_prefix(Parser *p) {
             parser_advance(p);
             return node_unary(p->arena, loc, UNARY_OWNED, parse_expr_prec(p, PREC_UNARY));
 
+        case TOKEN_KW_HEAP:
+            parser_advance(p);
+            return node_unary(p->arena, loc, UNARY_HEAP, parse_expr_prec(p, PREC_UNARY));
+
         default:
             parser_error(p, token, "expected expression");
             parser_advance(p);

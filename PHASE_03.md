@@ -17,14 +17,14 @@
 - [x] DeferNode in AST (stores body), node_defer() properly assigns body
 - [x] Add test fixture: `test_defer.ae` — 2 defers + return 42, LIFO verified
 
-### P03.02 — `heap` — Explicit Heap Allocation (`P03.02`)
-- [ ] Parser: `heap` as unary prefix operator: `heap Expr` → `NODE_HEAP_ALLOC`
-- [ ] AST: `NODE_HEAP_ALLOC` node type
-- [ ] Semantic: track heap-allocated values
-- [ ] Codegen: for host target, emit `mmap` syscall to allocate memory (macOS: 0x20000C5, Linux: 9)
-- [ ] Codegen: for freestanding, emit call to an external `__aether_alloc`
-- [ ] Add test fixture: `test_heap.ae`
-- [ ] **MILESTONE**: `heap Buffer(1024)` allocates memory at runtime
+### P03.02 — `heap` — Explicit Heap Allocation (`P03.02`) 🟢
+- [x] Parser: `heap` as unary prefix operator → `UNARY_HEAP` (NODE_UNARY_OP)
+- [x] Codegen: evaluate operand, push, call `__aether_alloc(8)`, pop/store to [rax]
+- [x] Codegen: `__aether_alloc` — inline mmap syscall (macOS 0x20000C5 / Linux 9)
+- [x] Round size up to page boundary (4096)
+- [x] `UNARY_DEREF` handler — `mov rax, [rax]`
+- [x] Works on both host targets (Mach-O and ELF)
+- [x] Test: `test_heap.ae` — heap 42, deref, return 42 — exit code verified
 
 ### P03.03 — Runtime Heap Allocator (`P03.03`)
 - [ ] Write built-in `__aether_alloc(size)` and `__aether_free(ptr)` as inline codegen

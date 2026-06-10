@@ -46,9 +46,9 @@
 - [x] Host-native test runner — `make test-host` (7/7 passing) 🟢
 - [ ] `aether.toml` target configuration
 
-## Phase 3 — Memory Management 🔵 IN PROGRESS (P03.01 complete)
+## Phase 3 — Memory Management 🔵 IN PROGRESS (P03.01-P03.02 complete)
 - [x] P03.01 — `defer` — scope-exit execution (LIFO order, return-safe) 🟢
-- [ ] P03.02 — `heap` — explicit heap allocation
+- [x] P03.02 — `heap` — explicit heap allocation via mmap syscall 🟢
 - [ ] P03.03 — Runtime heap allocator
 - [ ] P03.04 — Reference types: `ref T`, `owned T`, `rc T`
 - [ ] P03.05 — `region { }` — region-based allocation

@@ -108,7 +108,7 @@ typedef enum {
 typedef enum {
     UNARY_NEG, UNARY_NOT, UNARY_BIT_NOT,
     UNARY_REF, UNARY_DEREF, UNARY_ADDR,
-    UNARY_OWNED, UNARY_MUT,
+    UNARY_OWNED, UNARY_MUT, UNARY_HEAP,
 } UnaryOp;
 
 /* ================================================================
