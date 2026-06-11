@@ -908,7 +908,7 @@ struct Point {
     return (self.x, self.y)
 }
     
-    static func origin() Point -> Point(0, 0)
+    static func origin() Point => Point(0, 0)
 }
 
 let p = Point(3, 4)
@@ -1522,7 +1522,7 @@ func setup_interrupts(): {
 
 func read_cr0(): u64 {
     let value u64
-    asm -> (value) {
+    asm: (value) {
         mov [value], cr0
     }
     return value
@@ -2193,7 +2193,7 @@ decl         = func_decl | class_decl | struct_decl | enum_decl
 ### 23.2 Functions
 
 ```
-func_decl    = "func" ident [ generic_params ] param_list [ ret_type ] ( block | "->" expr )
+func_decl    = "func" ident [ generic_params ] param_list [ ret_type ] ( block | "=>" expr )
 param_list   = "(" [ param { "," param } ] ")"
 param        = ident [ "..." ] type_annotation
 ret_type     = type_annotation
