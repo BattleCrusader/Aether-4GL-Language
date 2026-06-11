@@ -1,4 +1,4 @@
-# Aether Language Specification v0.1
+# Aether Language Specification v0.2
 
 *A fourth-generation systems language for the Aether Operating System*
 
@@ -898,7 +898,7 @@ struct Point {
     x int
     y int
     
-    func distance(self ref Point, other ref Point) float {
+    func distance(self: ref Point, other: ref Point): float {
         let dx = self.x - other.x
         let dy = self.y - other.y
         return sqrt(f32(dx * dx + dy * dy))
@@ -963,7 +963,7 @@ match c {
 ### 10.2 Enums with Payloads (Algebraic Data Types)
 
 ```aether
-enum Optional(T) {
+enum Optional<T?> {
     Some(T)
     None
 }
@@ -1034,7 +1034,7 @@ class File {
     path string
     
     # Constructor — called automatically when a File is created
-    func init(self ref File, path string) throws {
+    func init(self: ref File, path: string) throws {
         self.fd = sys_open(path)
         if self.fd < 0 {
             throw IOError("Could not open {path}")
@@ -1043,16 +1043,16 @@ class File {
     }
     
     # Destructor — called automatically when the File goes out of scope
-    func drop(self ref File) {
+    func drop(self: ref File) {
         sys_close(self.fd)
     }
     
     # Public method
-    pub func read(self ref File, buf ref [u8]) int {
+    pub func read(self: ref File, buf: ref [u8]) int {
         return sys_read(self.fd, buf)
     }
     
-    pub func write(self ref File, data [u8]) int {
+    pub func write(self: ref File, data: [u8]) int {
         return sys_write(self.fd, data)
     }
     
@@ -1129,19 +1129,19 @@ The compiler inserts destructor calls at every scope exit path:
 ```aether
 class Base {
     pub func speak(self): string {
-    return "base"
-}
+        return "base"
+    }
 }
 
 class Derived : Base {
     pub func speak(self): string {
-    return "derived"
-}
+        return "derived"
+    }
 }
 
 # Virtual dispatch (opt-in)
 virtual class Renderer {
-    pub func draw(self ref dyn Renderer)
+    pub func draw(self: ref dyn Renderer)
 }
 ```
 
@@ -1157,13 +1157,13 @@ A trait declares method signatures without implementations. The `Self` type refe
 
 ```aether
 trait Hashable {
-    func hash(self ref Self) u64
-    func eq(self ref Self, other ref Self) bool
+    func hash(self: ref Self): u64
+    func eq(self: ref Self, other: ref Self): bool
 }
 
 trait Serializable {
-    func serialize(self ref Self) [u8]
-    func deserialize(data [u8]) throws Self
+    func serialize(self: ref Self): [u8]
+    func deserialize(data: [u8]): throws Self
 }
 
 trait Default {
@@ -1175,11 +1175,11 @@ trait Default {
 
 ```aether
 impl Hashable for Point {
-    func hash(self ref Point) u64 {
+    func hash(self: ref Point): u64 {
         return u64(self.x) ^ (u64(self.y) << 32)
     }
     
-    func eq(self ref Point, other ref Point) bool {
+    func eq(self: ref Point, other ref Point): bool {
         return self.x == other.x and self.y == other.y
     }
 }
@@ -1299,7 +1299,7 @@ let max_f = max(3.14, 2.71)   # max(float, float) — generated
 ### 13.4 Where Clauses
 
 ```aether
-func serialize_all<T where T: Serializable>(items [T]) [byte] {
+func serialize_all<T where T: Serializable>(items [T]): [byte] {
     let mut result = [byte]()
     for item in items {
         result.append(item.serialize())
@@ -1317,7 +1317,7 @@ func serialize_all<T where T: Serializable>(items [T]) [byte] {
 Aether's exceptions are deterministic — no unwinding tables, no personality routines. The compiler encodes exceptions as tagged union returns.
 
 ```aether
-func divide(a int, b int) throws int {
+func divide(a: int, b: int): throws int {
     if b == 0 {
         throw DivisionByZero()
     }
@@ -1328,7 +1328,7 @@ func divide(a int, b int) throws int {
 The compiler transforms this to something equivalent to:
 
 ```aether
-func __divide(a int, b int) (int, Error?) {
+func __divide(a: int, b: int): (int, Error?) {
     if b == 0 {
         return (0, some Error::DivisionByZero)
     }
@@ -1413,7 +1413,7 @@ func outb(port: u16, value: byte) {
 func rdtsc(): u64 {
     let hi u32
     let lo u32
-    asm -> (hi, lo) {
+    asm: (hi, lo) {
         rdtsc
         mov [hi], edx
         mov [lo], eax
@@ -1770,7 +1770,7 @@ class SafeBuffer {
     # Class invariant — checked at scope entry and exit
     @invariant(self.position <= self.size)
     
-    pub func write(self ref SafeBuffer, data [byte]) {
+    pub func write(self: ref SafeBuffer, data: [byte]) {
         # Invariant checked: position <= size before
         self.position += data.len()
         # Invariant checked: position <= size after
@@ -1833,7 +1833,7 @@ protocol SerialPort {
         }
     }
     
-    func putc(c byte) {
+    func putc(c: byte) {
         asm {
             mov dx, base + 5     ; line status
         wait:
@@ -1851,6 +1851,7 @@ protocol SerialPort {
 # Usage — compiler resolves to protocol-specific operations
 let com1 = SerialPort()
 com1.putc('A')
+com1.putc(c: 'A')
 ```
 
 ### 19.2 Query-Style Pipelines
@@ -2067,10 +2068,10 @@ assert_throws(func, ErrorType)
 ### 22.1 `std.io`
 
 ```aether
-import std.io
+import std.io as io
 
 std.io.print("Hello, Aether!\n")
-std.io.println("Hello")  # auto-adds newline
+io.println("Hello")  # auto-adds newline
 std.io.format("value: {x}, name: {name}")  # string formatting
 std.io.read_line(buf)    # read a line from serial input
 ```
@@ -2078,25 +2079,27 @@ std.io.read_line(buf)    # read a line from serial input
 ### 22.2 `std.mem`
 
 ```aether
-import std.mem
+import std.mem as mem
 
 let buf = std.mem.alloc(1024)
+let buf2 = mem.alloc(1024)
 std.mem.copy(dest, src, 512)
-std.mem.zero(buf)
-std.mem.free(buf)
+mem.zero(buf)
+mem.free(buf)
 
 # Sized allocators
 let pool = std.mem.Pool(64, 128)       # pool of 128 blocks of 64 bytes
-let arena = std.mem.Arena(65536)       # arena allocator, 64KB
+let arena = mem.Arena(65536)       # arena allocator, 64KB
 ```
 
 ### 22.3 `std.str`
 
 ```aether
-import std.str
+import std.str as str
 
 let s = std.str.String("hello")
-let s2 = s.concat(" world")
+let s2 = str.String("hello")
+let s3 = s.concat(" world")
 let parts = s2.split(" ")
 let trimmed = s2.trim()
 let upper = s2.upper()
@@ -2106,9 +2109,10 @@ let has_h = s2.contains("h")
 ### 22.4 `std.collections`
 
 ```aether
-import std.collections
+import std.collections as collections
 
 let arr = std.collections.Array(int)()
+let arr2 = collections.Array(int)()
 arr.push(1)
 arr.push(2)
 let x = arr.pop()
@@ -2125,18 +2129,19 @@ assert(set.contains(1))
 ### 22.5 `std.serial`
 
 ```aether
-import std.serial
+import std.serial as serial
 
 std.serial.init(115200)
 std.serial.putc('A')
 std.serial.puts("hello\n")
+serial.puts("hello\n")
 let c = std.serial.getc()   # blocking read
 ```
 
 ### 22.6 `std.elf`
 
 ```aether
-import std.elf
+import std.elf as elf
 
 let reader = std.elf.Reader(data)
 let entry = reader.entry_point()
@@ -2159,7 +2164,7 @@ test.benchmark(func, iterations=1000)
 ### 22.8 `std.math`
 
 ```aether
-import std.math
+import std.math as math
 
 let x = std.math.sqrt(144.0)     # 12.0
 let s = std.math.sin(3.14159)    # ~0.0
