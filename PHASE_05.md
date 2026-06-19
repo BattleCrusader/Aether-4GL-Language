@@ -8,15 +8,21 @@
 
 ## Task Breakdown
 
-### P05.01 — Exception Handling: `try`/`throw`/`catch` Parsing
-- [ ] Tokenizer: ensure `try`, `throw`, `catch`, `throws` keywords are recognized
-- [ ] Parser: `try { body } catch Type { handler }` block parsing
-- [ ] Parser: `throw expr` statement parsing
-- [ ] Parser: `throws` return type annotation on function declarations
-- [ ] AST: `NODE_TRY`, `NODE_THROW`, `NODE_CATCH` node types
-- [ ] AST: `TryNode` with body, catch arms; `ThrowNode` with value
-- [ ] Semantic: validate throw values are error types
-- [ ] Test fixture: `test_trycatch.ae` — basic try/catch compiles
+### P05.01 — Exception Handling: `try`/`throw`/`catch` Parsing 🟢
+- [x] Tokenizer: ensure `try`, `throw`, `catch`, `throws` keywords are recognized 🟢
+- [x] Parser: `try { body } catch Type { handler }` block parsing 🟢
+- [x] Parser: `throw expr` statement parsing 🟢
+- [x] Parser: `throws` return type annotation on function declarations 🟢
+- [x] AST: `NODE_TRY`, `NODE_THROW`, `NODE_CATCH` node types 🟢
+- [x] AST: `TryNode` with body, catch arms; `ThrowNode` with value 🟢
+- [x] Semantic: validate throw values are error types 🟢
+- [x] Codegen: deterministic exception convention (rdx=0 success, rdx=1 error) 🟢
+- [x] Codegen: `throw` sets error tag, emits defers, returns 🟢
+- [x] Codegen: `try` clears rdx, runs body, checks rdx, branches to catch 🟢
+- [x] Codegen: `throws` functions clear rdx on normal return 🟢
+- [x] Test fixture: `test_trycatch.ae` — basic try/catch compiles and returns 42 🟢
+- [x] Test fixture: `test_throw.ae` — throw and catch, verify error propagation (returns 42) 🟢
+- [x] Fixed assignment codegen bug (left evaluation overwriting right side) 🟢
 
 ### P05.02 — Custom Error Types
 - [ ] Parser: error type declarations (enum-based, `error` keyword or convention)

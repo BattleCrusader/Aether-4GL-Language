@@ -65,8 +65,8 @@
 - [x] P04.07 — `if let` pattern binding for optionals 🟢
 - [x] P04.08 — Phase 4 Verification (16/16 + 14/14 unit, 13/13 native, both targets) 🟢
 
-## Phase 5 — Advanced Language Features 🔴 NOT STARTED
-- [ ] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen
+## Phase 5 — Advanced Language Features 🔵 IN PROGRESS
+- [x] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen 🟢
 - [ ] P05.02 — Custom error types (enum-based error hierarchy)
 - [ ] P05.03 — Deterministic exceptions (tagged union return, no unwinding tables)
 - [ ] P05.04 — Zero-cost happy path for exceptions
