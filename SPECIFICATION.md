@@ -430,11 +430,50 @@ func multiply(a: int, b: int): int {
 ```aether
 # Function declaration syntax:
 #   func name(param: type, ...): return_type { body }
+#   func name(param: type, ...): return_type -> expr   (expression body)
 # Parameters use colon syntax: name: type
 # Return type uses colon syntax: : type (after the closing paren)
 ```
 
-### 5.3 Multiple Return Values
+### 5.3 Expression-Bodied Functions
+
+When a function body is a single expression, you can use the `->` shorthand instead of a block `{ }`. The expression after `->` is evaluated and returned automatically — no `return` keyword needed.
+
+```aether
+# Block body — explicit return
+func add(a: int, b: int): int {
+    return a + b
+}
+
+# Expression body — implicit return via ->
+func add(a: int, b: int): int -> a + b
+
+# Works with any expression
+func square(x: int): int -> x * x
+func negate(x: int): int -> -x
+func is_even(x: int): bool -> x % 2 == 0
+func greet(name: string): string -> "Hello, {name}!"
+func max(a: int, b: int): int -> if a > b { a } else { b }
+```
+
+The `->` reads as **"evaluates to"** — `func add(a: int, b: int): int -> a + b` means "add takes two ints, returns an int, and evaluates to a + b."
+
+Expression-bodied functions compose naturally with other modifiers:
+
+```aether
+pub inline func fast_abs(x: int): int -> if x < 0 { -x } else { x }
+
+# Useful for simple getters/properties on structs
+struct Point {
+    x: int
+    y: int
+    func magnitude(self): float -> sqrt(f32(self.x * self.x + self.y * self.y))
+}
+```
+
+The compiler may inline expression-bodied functions more aggressively since they have no local variables or complex control flow.
+
+### 5.4 Multiple Return Values
 
 ```aether
 func divmod(a: int, b: int): (int, int) {
