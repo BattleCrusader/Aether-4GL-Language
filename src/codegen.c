@@ -692,8 +692,15 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             cg_expr(cg, node->data.binary.right, slots);
             cg_inst1(cg, "push", "rax");
 
-            cg_expr(cg, node->data.binary.left, slots);
-            cg_inst1(cg, "pop", "rcx");   /* rcx = right, rax = left */
+            /* For plain assignment, skip left evaluation — it would overwrite rax.
+               For compound assignments (+= etc.), evaluate left to get current value. */
+            if (node->data.binary.op == BIN_ASSIGN) {
+                /* Assignment: right side is in rax (pushed above), pop it back */
+                cg_inst1(cg, "pop", "rax");
+            } else {
+                cg_expr(cg, node->data.binary.left, slots);
+                cg_inst1(cg, "pop", "rcx");   /* rcx = right, rax = left */
+            }
 
             switch (node->data.binary.op) {
                 case BIN_ADD: cg_inst1(cg, "add",  "rax, rcx"); break;
@@ -728,11 +735,23 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     }
                     break;
                 }
-                /* Compound assignment: x += expr etc */
-                case BIN_ADD_ASSIGN: cg_comment(cg, "+="); cg_expr(cg, node->data.binary.left, slots); cg_inst1(cg, "add", "rax, [rsp]"); break;
-                case BIN_SUB_ASSIGN: cg_comment(cg, "-="); cg_expr(cg, node->data.binary.left, slots); cg_inst1(cg, "sub", "rax, [rsp]"); break;
-                case BIN_MUL_ASSIGN: cg_comment(cg, "*="); cg_expr(cg, node->data.binary.left, slots); cg_inst1(cg, "mul", "qword [rsp]"); break;
-                case BIN_DIV_ASSIGN: cg_comment(cg, "/="); cg_expr(cg, node->data.binary.left, slots); cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "qword [rsp]"); break;
+                /* Compound assignment: x += expr etc — left value in rax, right in rcx */
+                case BIN_ADD_ASSIGN: cg_comment(cg, "+="); cg_inst1(cg, "add", "rax, rcx"); goto store_assign;
+                case BIN_SUB_ASSIGN: cg_comment(cg, "-="); cg_inst1(cg, "sub", "rax, rcx"); goto store_assign;
+                case BIN_MUL_ASSIGN: cg_comment(cg, "*="); cg_inst1(cg, "mul", "rcx"); goto store_assign;
+                case BIN_DIV_ASSIGN: cg_comment(cg, "/="); cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "rcx"); goto store_assign;
+                store_assign:
+                    cg_comment(cg, "store compound assign");
+                    if (node->data.binary.left && node->data.binary.left->type == NODE_IDENT) {
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                node->data.binary.left->data.ident.name.data,
+                                node->data.binary.left->data.ident.name.len));
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rax", off);
+                        cg_inst(cg, buf);
+                    }
+                    break;
                 /* Logical (short-circuit emulated) */
                 case BIN_AND: cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jz .Lfalse"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
                 case BIN_OR:  cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jnz .Ltrue"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
@@ -1146,6 +1165,79 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             break;
         }
 
+        case NODE_TRY: {
+            /* try { body } catch Type(var) { handler } ...
+             * Deterministic exceptions: after try body, check error tag in rdx.
+             * rdx=0 means success, rdx=1 means error. */
+            int catch_label = cg_new_label(cg);
+            int end_label = cg_new_label(cg);
+            cg_comment(cg, "try begin");
+
+            /* Clear error tag before try body */
+            cg_inst(cg, "xor rdx, rdx");
+
+            /* Emit try body */
+            if (node->data.try_node.body)
+                cg_stmt(cg, node->data.try_node.body, slots);
+
+            /* Check error tag (rdx = 0 success, 1 = error) */
+            cg_inst(cg, "test rdx, rdx");
+            cg_write_fmt(cg, "    jnz .L%x\n", catch_label);
+            cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+
+            /* Catch arms */
+            cg_write_fmt(cg, ".L%x:\n", catch_label);
+            cg_comment(cg, "catch handlers");
+            for (int i = 0; i < node->data.try_node.catch_arms.count; i++) {
+                AstNode *arm = node->data.try_node.catch_arms.items[i];
+                int next_arm = cg_new_label(cg);
+
+                /* For now, first matching catch handles all errors */
+                /* (Type matching deferred to Phase 5.02) */
+                if (i > 0) {
+                    cg_write_fmt(cg, "    jmp .L%x\n", next_arm);
+                    cg_write_fmt(cg, ".L%x:\n", next_arm);
+                }
+
+                /* If catch has a variable binding, store the error value */
+                if (arm->data.catch_arm.var) {
+                    cg_comment(cg, "bind catch variable");
+                    /* Error value is in rax (from the throws return convention) */
+                    /* Store to a temp slot — for now just keep in rax */
+                }
+
+                /* Emit catch body */
+                if (arm->data.catch_arm.body)
+                    cg_stmt(cg, arm->data.catch_arm.body, slots);
+
+                /* Clear error tag after handling */
+                cg_inst(cg, "xor rdx, rdx");
+                cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+            }
+
+            cg_write_fmt(cg, ".L%x:\n", end_label);
+            cg_comment(cg, "try end");
+            break;
+        }
+
+        case NODE_THROW: {
+            /* throw expr — evaluate the expression, set error tag to 1,
+             * emit defers/auto-drops, then return */
+            cg_comment(cg, "throw");
+            if (node->data.throw_node.value) {
+                cg_expr(cg, node->data.throw_node.value, slots);
+            }
+            /* Set error tag (rdx = 1) */
+            cg_inst(cg, "mov rdx, 1");
+            /* Emit defers before leaving the function */
+            cg_emit_defers(cg, slots);
+            /* Epilogue: restore stack and return */
+            cg_inst(cg, "mov rsp, rbp");
+            cg_inst(cg, "pop rbp");
+            cg_inst(cg, "ret");
+            break;
+        }
+
         default:
             cg_warn(cg, node, "unsupported statement in codegen");
             break;
@@ -1214,8 +1306,11 @@ static void cg_func(Codegen *cg, AstNode *func) {
         cg_stmt(cg, func->data.func.body, slots);
     }
 
-    /* Default return */
+    /* Default return — for throws functions, clear error tag */
     cg_comment(cg, "default return");
+    if (func->data.func.is_throws) {
+        cg_inst(cg, "xor rdx, rdx");  /* clear error tag = success */
+    }
     cg_emit_defers(cg, slots);
     cg_inst1(cg, "mov", "rsp, rbp");
     cg_inst1(cg, "pop", "rbp");

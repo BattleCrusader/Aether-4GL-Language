@@ -92,7 +92,8 @@ static const TokenType STMT_START[] = {
     TOKEN_KW_FUNC, TOKEN_KW_STRUCT, TOKEN_KW_ENUM,
     TOKEN_KW_CONST, TOKEN_KW_IMPORT, TOKEN_KW_MODULE,
     TOKEN_KW_PUB, TOKEN_KW_STATIC, TOKEN_KW_TEST,
-    TOKEN_KW_UNSAFE, TOKEN_AT,
+    TOKEN_KW_UNSAFE, TOKEN_KW_TRY, TOKEN_KW_THROW,
+    TOKEN_AT,
     TOKEN_RBRACE, /* closing brace can follow statements */
 };
 
@@ -303,6 +304,11 @@ AstNode *parse_func_decl(Parser *p) {
     /* Optional return type: `: type` */
     if (parser_match(p, TOKEN_COLON)) {
         func->data.func.return_type = parse_type(p);
+    }
+
+    /* Optional throws annotation */
+    if (parser_match(p, TOKEN_KW_THROWS)) {
+        func->data.func.is_throws = true;
     }
 
     /* Body */
@@ -679,6 +685,61 @@ AstNode *parse_statement(Parser *p) {
     /* unsafe block */
     if (parser_match(p, TOKEN_KW_UNSAFE)) {
         return parse_statement(p);
+    }
+
+    /* try { body } catch Type(var) { handler } ... */
+    if (parser_match(p, TOKEN_KW_TRY)) {
+        AstNode *body = NULL;
+        if (parser_match(p, TOKEN_LBRACE)) {
+            body = parse_block_braced(p);
+        } else {
+            body = parse_block(p);
+        }
+        AstNode *try_node = node_try(p->arena, p->previous.loc, body);
+
+        /* Parse catch arms */
+        while (parser_match(p, TOKEN_KW_CATCH)) {
+            AstNode *catch_type = NULL;
+            AstNode *catch_var = NULL;
+
+            /* catch Type or catch Type(var) */
+            if (parser_check(p, TOKEN_IDENT)) {
+                Token type_tok = p->current; parser_advance(p);
+                catch_type = node_type_named(p->arena, type_tok.loc, type_tok.text);
+
+                /* Optional variable binding: catch Type(var) */
+                if (parser_match(p, TOKEN_LPAREN)) {
+                    if (parser_check(p, TOKEN_IDENT)) {
+                        Token var_tok = p->current; parser_advance(p);
+                        catch_var = node_ident(p->arena, var_tok.loc, var_tok.text);
+                    }
+                    parser_expect(p, TOKEN_RPAREN, "catch variable");
+                }
+            }
+
+            AstNode *catch_body = NULL;
+            if (parser_match(p, TOKEN_LBRACE)) {
+                catch_body = parse_block_braced(p);
+            } else {
+                catch_body = parse_block(p);
+            }
+
+            AstNode *arm = node_catch_arm(p->arena, p->previous.loc,
+                catch_type, catch_var, catch_body);
+            node_list_append(&try_node->data.try_node.catch_arms, arm);
+        }
+
+        return try_node;
+    }
+
+    /* throw expr */
+    if (parser_match(p, TOKEN_KW_THROW)) {
+        AstNode *value = NULL;
+        if (!parser_check(p, TOKEN_NEWLINE) && !parser_check(p, TOKEN_RBRACE) &&
+            !parser_check(p, TOKEN_EOF) && !parser_check(p, TOKEN_DEDENT)) {
+            value = parse_expr(p);
+        }
+        return node_throw(p->arena, p->previous.loc, value);
     }
 
     /* Expression statement */

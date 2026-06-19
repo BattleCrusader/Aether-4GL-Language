@@ -1,0 +1,17 @@
+# test_throw.ae — throw and catch
+func do_throw(): u64 throws {
+    throw 99
+    return 0
+}
+
+func main(): u64 {
+    let mut result: u64 = 0
+
+    try {
+        result = do_throw()
+    } catch Error {
+        result = 42
+    }
+
+    return result
+}

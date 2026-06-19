@@ -1,0 +1,12 @@
+# test_trycatch.ae — basic try/catch/throw
+func main(): u64 {
+    let mut result: u64 = 0
+
+    try {
+        result = 42
+    } catch Error {
+        result = 0
+    }
+
+    return result
+}

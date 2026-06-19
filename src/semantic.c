@@ -221,6 +221,33 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             semantic_visit_expr(sa, node->data.call.callee);
             break;
 
+        case NODE_TRY:
+            /* Visit the try body */
+            if (node->data.try_node.body) {
+                semantic_visit_node(sa, node->data.try_node.body);
+            }
+            /* Visit each catch arm */
+            for (int i = 0; i < node->data.try_node.catch_arms.count; i++) {
+                AstNode *arm = node->data.try_node.catch_arms.items[i];
+                /* Register the catch variable in the catch body scope */
+                if (arm->data.catch_arm.var) {
+                    const char *vname = arena_strndup(sa->arena,
+                        arm->data.catch_arm.var->data.ident.name.data,
+                        arm->data.catch_arm.var->data.ident.name.len);
+                    scope_declare(sa, vname, arm->data.catch_arm.var);
+                }
+                if (arm->data.catch_arm.body) {
+                    semantic_visit_node(sa, arm->data.catch_arm.body);
+                }
+            }
+            break;
+
+        case NODE_THROW:
+            if (node->data.throw_node.value) {
+                semantic_visit_expr(sa, node->data.throw_node.value);
+            }
+            break;
+
         default:
             break;
     }

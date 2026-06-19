@@ -73,10 +73,12 @@ TEST_FIXTURES = \
 	tests/fixtures/test_optional.ae \
 	tests/fixtures/test_trait.ae \
 	tests/fixtures/test_generic.ae \
-	tests/fixtures/test_iflet.ae
+	tests/fixtures/test_iflet.ae \
+	tests/fixtures/test_trycatch.ae \
+	tests/fixtures/test_throw.ae
 
 # Expected exit codes for each fixture
-TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0 0 42 42
+TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0 0 42 42 42 42
 
 test-host: aether-cli
 	@echo "=== Host-Native Test Runner ==="

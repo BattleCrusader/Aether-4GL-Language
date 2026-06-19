@@ -49,6 +49,9 @@ typedef enum {
     NODE_EXPR_STMT,
     NODE_MATCH,
     NODE_MATCH_ARM,
+    NODE_TRY,
+    NODE_THROW,
+    NODE_CATCH_ARM,
 
     /* Expressions */
     NODE_LITERAL_INT,
@@ -155,6 +158,7 @@ typedef struct {
     int sys_index;          /* syscall table index (-1 if not sys) */
     AstNodeList defer_list; /* deferred bodies for LIFO scope exit */
     AstNodeList type_params; /* generic type parameter identifiers */
+    bool is_throws;         /* function has throws return */
 } FuncDecl;
 
 /* Parameter */
@@ -353,6 +357,24 @@ typedef struct {
     AstNode *body;          /* region body (BLOCK) */
 } RegionNode;
 
+/* Try block: try { body } catch Type(var) { handler } ... */
+typedef struct {
+    AstNode *body;          /* the try body (BLOCK) */
+    AstNodeList catch_arms; /* list of CATCH_ARM nodes */
+} TryNode;
+
+/* Throw statement: throw expr */
+typedef struct {
+    AstNode *value;         /* the thrown value */
+} ThrowNode;
+
+/* Catch arm: catch Type(var) { handler } */
+typedef struct {
+    AstNode *type;          /* the caught error type (TYPE_NAMED) */
+    AstNode *var;           /* the variable to bind (IDENT), NULL if no binding */
+    AstNode *body;          /* handler block */
+} CatchArm;
+
 /* ================================================================
  * AST Node structure (tagged union of all the above)
  * ================================================================ */
@@ -389,6 +411,9 @@ struct AstNode {
         RegionNode region_node;
         TraitDecl trait_decl;
         ImplBlock impl_block;
+        TryNode try_node;
+        ThrowNode throw_node;
+        CatchArm catch_arm;
         AstNodeList list;   /* generic list for blocks */
     } data;
 };
@@ -434,6 +459,9 @@ AstNode *node_enum_decl(Arena *a, Location loc, AstNode *name, bool is_pub);
 AstNode *node_defer(Arena *a, Location loc, AstNode *body);
 AstNode *node_region(Arena *a, Location loc, StringView name, AstNode *body);
 AstNode *node_expr_stmt(Arena *a, Location loc, AstNode *expr);
+AstNode *node_try(Arena *a, Location loc, AstNode *body);
+AstNode *node_throw(Arena *a, Location loc, AstNode *value);
+AstNode *node_catch_arm(Arena *a, Location loc, AstNode *type, AstNode *var, AstNode *body);
 
 /* List helpers */
 void node_list_append(AstNodeList *list, AstNode *node);

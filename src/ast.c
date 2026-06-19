@@ -275,6 +275,31 @@ AstNode *node_expr_stmt(Arena *a, Location loc, AstNode *expr) {
     return node;
 }
 
+AstNode *node_try(Arena *a, Location loc, AstNode *body) {
+    AstNode *node = node_create(a, NODE_TRY, loc);
+    if (node) {
+        node->data.try_node.body = body;
+        node->data.try_node.catch_arms = (AstNodeList){0};
+    }
+    return node;
+}
+
+AstNode *node_throw(Arena *a, Location loc, AstNode *value) {
+    AstNode *node = node_create(a, NODE_THROW, loc);
+    if (node) node->data.throw_node.value = value;
+    return node;
+}
+
+AstNode *node_catch_arm(Arena *a, Location loc, AstNode *type, AstNode *var, AstNode *body) {
+    AstNode *node = node_create(a, NODE_CATCH_ARM, loc);
+    if (node) {
+        node->data.catch_arm.type = type;
+        node->data.catch_arm.var = var;
+        node->data.catch_arm.body = body;
+    }
+    return node;
+}
+
 /* ================================================================
  * List helpers
  * ================================================================ */
@@ -358,6 +383,9 @@ const char *node_type_name(NodeType type) {
         case NODE_ASM_BLOCK: return "ASM_BLOCK";
         case NODE_ATTR: return "ATTR";
         case NODE_REGION: return "REGION";
+        case NODE_TRY: return "TRY";
+        case NODE_THROW: return "THROW";
+        case NODE_CATCH_ARM: return "CATCH_ARM";
     }
     return "UNKNOWN";
 }
