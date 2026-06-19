@@ -69,6 +69,8 @@ const KeywordEntry KEYWORDS[] = {
     {"layout",   TOKEN_KW_LAYOUT},
     {"test",     TOKEN_KW_TEST},
     {"run",      TOKEN_KW_RUN},
+    {"prop",     TOKEN_KW_PROP},
+    {"inline",   TOKEN_KW_INLINE},
     {"iflet",    TOKEN_KW_IF_LET},
 };
 

@@ -384,6 +384,7 @@ const char *node_type_name(NodeType type) {
         case NODE_ATTR: return "ATTR";
         case NODE_REGION: return "REGION";
         case NODE_RUN_BLOCK: return "RUN_BLOCK";
+        case NODE_PROPERTY: return "PROPERTY";
         case NODE_TRY: return "TRY";
         case NODE_THROW: return "THROW";
         case NODE_CATCH_ARM: return "CATCH_ARM";
