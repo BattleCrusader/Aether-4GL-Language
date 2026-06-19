@@ -1197,6 +1197,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
                 /* If this catch arm specifies a type, check the discriminant */
                 if (arm->data.catch_arm.type) {
+                    /* Look up the error type's discriminant from variant_entries */
                     char type_name[256];
                     int tlen = (int)arm->data.catch_arm.type->data.type_node.name.len;
                     if (tlen > 255) tlen = 255;
@@ -1225,6 +1226,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                 /* If catch has a variable binding, store the error value */
                 if (arm->data.catch_arm.var) {
                     cg_comment(cg, "bind catch variable");
+                    /* Error discriminant is on stack; for now just keep in rax */
                 }
 
                 /* Emit catch body */

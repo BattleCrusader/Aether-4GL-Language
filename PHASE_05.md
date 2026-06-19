@@ -24,25 +24,26 @@
 - [x] Test fixture: `test_throw.ae` — throw and catch, verify error propagation (returns 42) 🟢
 - [x] Fixed assignment codegen bug (left evaluation overwriting right side) 🟢
 
-### P05.02 — Custom Error Types
-- [ ] Parser: error type declarations (enum-based, `error` keyword or convention)
-- [ ] Semantic: error type hierarchy (sub-errors, cause chaining)
-- [ ] Codegen: error type layout (tagged union with discriminant + payload)
-- [ ] Test fixture: `test_errors.ae` — custom error types with payloads
+### P05.02 — Custom Error Types 🟢
+- [x] Parser: error type declarations (enum-based, `error` keyword or convention) 🟢
+- [x] Semantic: error type hierarchy (sub-errors, cause chaining) 🟢
+- [x] Codegen: error type layout (tagged union with discriminant + payload) 🟢
+- [x] Codegen: discriminant matching in catch arms (type-specific catch) 🟢
+- [x] Test fixture: `test_errors.ae` — custom error types with enum variants, discriminant matching returns 42 🟢
 
-### P05.03 — Deterministic Exception Codegen
-- [ ] Codegen: `throws T` functions return `(T, ErrorCode?)` tagged pair
-- [ ] Codegen: `throw` sets error tag, returns early
-- [ ] Codegen: `try` checks error tag, branches to catch or continues
-- [ ] Codegen: no personality routines, no unwinding tables
-- [ ] Codegen: destructor calls on exception unwind (integrate with AutoDrop)
-- [ ] Test fixture: `test_throw.ae` — throw and catch, verify error propagation
+### P05.03 — Deterministic Exception Codegen 🟢
+- [x] Codegen: `throws T` functions return `(T, ErrorCode?)` tagged pair (rdx=0/1) 🟢
+- [x] Codegen: `throw` sets error tag, returns early 🟢
+- [x] Codegen: `try` checks error tag, branches to catch or continues 🟢
+- [x] Codegen: no personality routines, no unwinding tables 🟢
+- [x] Codegen: destructor calls on exception unwind (integrate with AutoDrop) 🟢
+- [x] Test fixture: `test_throw.ae` — throw and catch, verify error propagation 🟢
 
-### P05.04 — Zero-Cost Happy Path
-- [ ] Codegen: happy path has no branch or tag check overhead
-- [ ] Codegen: error path uses separate basic block
-- [ ] Optimization: inline error check only when catch is present
-- [ ] Test: verify no extra instructions on happy path
+### P05.04 — Zero-Cost Happy Path 🟢
+- [x] Codegen: happy path has no branch or tag check overhead (just `xor rdx, rdx` at function entry) 🟢
+- [x] Codegen: error path uses separate basic block 🟢
+- [x] Optimization: inline error check only when catch is present 🟢
+- [x] Test: verify no extra instructions on happy path (try without throw has no overhead) 🟢
 
 ### P05.05 — Compile-Time Execution: `#run` Blocks
 - [ ] Tokenizer: `#run` directive token

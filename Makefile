@@ -74,6 +74,7 @@ TEST_FIXTURES = \
 	tests/fixtures/test_trait.ae \
 	tests/fixtures/test_generic.ae \
 	tests/fixtures/test_iflet.ae \
+	tests/fixtures/test_trycatch.ae \
 	tests/fixtures/test_throw.ae \
 	tests/fixtures/test_errors.ae \
 	tests/fixtures/test_comptime.ae
