@@ -248,6 +248,13 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             }
             break;
 
+        case NODE_RUN_BLOCK:
+            /* Visit #run body statements for name resolution */
+            for (int i = 0; i < node->data.list.count; i++) {
+                semantic_visit_node(sa, node->data.list.items[i]);
+            }
+            break;
+
         default:
             break;
     }

@@ -88,6 +88,7 @@ typedef enum {
     NODE_ASM_BLOCK,
     NODE_ATTR,
     NODE_REGION,
+    NODE_RUN_BLOCK,
 } NodeType;
 
 /* ================================================================

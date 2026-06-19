@@ -1,0 +1,27 @@
+# test_errors.ae — custom error types with enum variants and discriminant matching
+enum MyError {
+    NotFound
+    PermissionDenied
+    Timeout
+}
+
+func do_fail(): u64 throws {
+    throw MyError::NotFound
+    return 0
+}
+
+func main(): u64 {
+    let mut result: u64 = 0
+
+    try {
+        result = do_fail()
+    } catch Timeout {
+        result = 10
+    } catch NotFound {
+        result = 42
+    } catch PermissionDenied {
+        result = 20
+    }
+
+    return result
+}

@@ -675,7 +675,21 @@ Token tokenizer_next(Tokenizer *t) {
             
             /* Comment at line start? Process indentation then handle comment */
             if (*t->pos == '#') {
-                /* Handle indentation just in case */
+                /* Check for #run (compile-time execution) — not a comment */
+                if (t->pos + 3 < t->end &&
+                    t->pos[1] == 'r' && t->pos[2] == 'u' && t->pos[3] == 'n' &&
+                    (t->pos + 4 >= t->end || !is_ident_continue(t->pos[4]))) {
+                    /* #run — process indentation first, then emit # token */
+                    handle_indent(t, line_start, t->pos);
+                    if (dequeue_token(t, &pending)) return pending;
+                    t->start = t->pos;
+                    t->pos++; t->col++;
+                    Token tok;
+                    tok.type = TOKEN_HASH;
+                    tok.loc = (Location){t->filename, t->line, t->col - 1, 1};
+                    tok.text = SV("#");
+                    return tok;
+                }
                 if (t->pos + 1 < t->end && t->pos[1] == '{') {
                     /* Block comment — treat as no indent change (like blank line) */
                     t->pos += 2;
@@ -724,8 +738,21 @@ Token tokenizer_next(Tokenizer *t) {
             return make_token(t, TOKEN_BACKSLASH);
         }
 
-        /* Comments */
+        /* Comments — but check for #run first (compile-time execution) */
         if (c == '#') {
+            /* Check if this is #run (not a comment) */
+            if (t->pos + 3 < t->end &&
+                t->pos[1] == 'r' && t->pos[2] == 'u' && t->pos[3] == 'n' &&
+                (t->pos + 4 >= t->end || !is_ident_continue(t->pos[4]))) {
+                /* #run — emit as TOKEN_HASH followed by TOKEN_KW_RUN */
+                t->start = t->pos;
+                t->pos++; t->col++;
+                Token tok;
+                tok.type = TOKEN_HASH;
+                tok.loc = (Location){t->filename, t->line, t->col - 1, 1};
+                tok.text = SV("#");
+                return tok;
+            }
             if (t->pos + 1 < t->end && t->pos[1] == '{') {
                 t->pos += 2;
                 t->col += 2;

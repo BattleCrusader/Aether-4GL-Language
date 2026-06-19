@@ -252,6 +252,26 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                 node_list_append(decls, impl);
             }
         }
+    } else if (parser_match(p, TOKEN_HASH)) {
+        /* #run { body } — compile-time execution block */
+        if (parser_match(p, TOKEN_KW_RUN)) {
+            AstNode *run_node = node_create(p->arena, NODE_RUN_BLOCK, p->previous.loc);
+            if (parser_match(p, TOKEN_LBRACE)) {
+                /* Collect the body as a block of statements */
+                AstNode *body = node_block(p->arena, p->previous.loc);
+                while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
+                    if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
+                        parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                    AstNode *stmt = parse_statement(p);
+                    if (stmt) node_list_append(&body->data.list, stmt);
+                }
+                parser_expect(p, TOKEN_RBRACE, "#run body");
+                run_node->data.list = body->data.list;
+            }
+            node_list_append(decls, run_node);
+        } else {
+            parser_error(p, p->current, "expected 'run' after #");
+        }
     } else {
         /* Try to parse as expression statement (bare identifier = call?) */
         /* Report error if nothing matched */

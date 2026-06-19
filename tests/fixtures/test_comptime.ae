@@ -1,0 +1,8 @@
+# test_comptime.ae — compile-time execution with #run
+#run {
+    let x = 42
+}
+
+func main(): u64 {
+    return 42
+}
