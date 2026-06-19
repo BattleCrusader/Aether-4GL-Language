@@ -1,0 +1,8 @@
+# test_contract.ae — contract programming with pre/post conditions
+func divide(a: int, b: int): int pre(b != 0) {
+    return a / b
+}
+
+func main(): u64 {
+    return 42
+}

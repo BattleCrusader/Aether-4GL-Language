@@ -331,6 +331,25 @@ AstNode *parse_func_decl(Parser *p) {
         func->data.func.is_throws = true;
     }
 
+    /* Contract conditions: pre(expr) and post(expr) */
+    /* Inline between signature and body brace:
+       func name(): type pre(cond) { body } */
+    while (true) {
+        if (parser_match(p, TOKEN_KW_PRE)) {
+            parser_expect(p, TOKEN_LPAREN, "pre condition");
+            AstNode *cond = parse_expr(p);
+            if (cond) node_list_append(&func->data.func.pre_conditions, cond);
+            parser_expect(p, TOKEN_RPAREN, "pre condition");
+        } else if (parser_match(p, TOKEN_KW_POST)) {
+            parser_expect(p, TOKEN_LPAREN, "post condition");
+            AstNode *cond = parse_expr(p);
+            if (cond) node_list_append(&func->data.func.post_conditions, cond);
+            parser_expect(p, TOKEN_RPAREN, "post condition");
+        } else {
+            break;
+        }
+    }
+
     /* Body */
     if (parser_match(p, TOKEN_LBRACE)) {
         func->data.func.body = parse_block_braced(p);

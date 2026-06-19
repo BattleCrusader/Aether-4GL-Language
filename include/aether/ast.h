@@ -160,6 +160,8 @@ typedef struct {
     AstNodeList defer_list; /* deferred bodies for LIFO scope exit */
     AstNodeList type_params; /* generic type parameter identifiers */
     bool is_throws;         /* function has throws return */
+    AstNodeList pre_conditions;  /* pre(expr) contract expressions */
+    AstNodeList post_conditions; /* post(expr) contract expressions */
 } FuncDecl;
 
 /* Parameter */

@@ -1355,6 +1355,24 @@ static void cg_func(Codegen *cg, AstNode *func) {
     /* Args > 6 are on the stack already; they're at rbp+16, rbp+24, etc.
        For now we only handle up to 6 args. */
 
+    /* Pre-conditions: check before body */
+    if (func->data.func.pre_conditions.count > 0) {
+        cg_comment(cg, "pre-conditions");
+        for (int i = 0; i < func->data.func.pre_conditions.count; i++) {
+            int fail_label = cg_new_label(cg);
+            int end_label = cg_new_label(cg);
+            cg_expr(cg, func->data.func.pre_conditions.items[i], slots);
+            cg_inst(cg, "test rax, rax");
+            cg_write_fmt(cg, "    jnz .L%x\n", end_label);
+            cg_write_fmt(cg, ".L%x:\n", fail_label);
+            cg_comment(cg, "pre-condition failed — panic");
+            cg_inst(cg, "mov rdi, 1");  /* exit code 1 */
+            cg_inst(cg, "mov rax, 0x2000001");  /* macOS exit */
+            cg_inst(cg, "syscall");
+            cg_write_fmt(cg, ".L%x:\n", end_label);
+        }
+    }
+
     /* Body */
     if (func->data.func.body) {
         cg_stmt(cg, func->data.func.body, slots);
@@ -1365,6 +1383,27 @@ static void cg_func(Codegen *cg, AstNode *func) {
     if (func->data.func.is_throws) {
         cg_inst(cg, "xor rdx, rdx");  /* clear error tag = success */
     }
+
+    /* Post-conditions: check before defers (save return value first) */
+    if (func->data.func.post_conditions.count > 0) {
+        cg_comment(cg, "post-conditions");
+        cg_inst(cg, "push rax");  /* save return value */
+        for (int i = 0; i < func->data.func.post_conditions.count; i++) {
+            int fail_label = cg_new_label(cg);
+            int end_label = cg_new_label(cg);
+            cg_expr(cg, func->data.func.post_conditions.items[i], slots);
+            cg_inst(cg, "test rax, rax");
+            cg_write_fmt(cg, "    jnz .L%x\n", end_label);
+            cg_write_fmt(cg, ".L%x:\n", fail_label);
+            cg_comment(cg, "post-condition failed — panic");
+            cg_inst(cg, "mov rdi, 1");
+            cg_inst(cg, "mov rax, 0x2000001");
+            cg_inst(cg, "syscall");
+            cg_write_fmt(cg, ".L%x:\n", end_label);
+        }
+        cg_inst(cg, "pop rax");  /* restore return value */
+    }
+
     cg_emit_defers(cg, slots);
     cg_inst1(cg, "mov", "rsp, rbp");
     cg_inst1(cg, "pop", "rbp");
