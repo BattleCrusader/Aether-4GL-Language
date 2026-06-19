@@ -1168,7 +1168,8 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         case NODE_TRY: {
             /* try { body } catch Type(var) { handler } ...
              * Deterministic exceptions: after try body, check error tag in rdx.
-             * rdx=0 means success, rdx=1 means error. */
+             * rdx=0 means success, rdx=1 means error.
+             * When rdx=1, rax holds the error discriminant (which variant of the error enum). */
             int catch_label = cg_new_label(cg);
             int end_label = cg_new_label(cg);
             cg_comment(cg, "try begin");
@@ -1185,25 +1186,47 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             cg_write_fmt(cg, "    jnz .L%x\n", catch_label);
             cg_write_fmt(cg, "    jmp .L%x\n", end_label);
 
-            /* Catch arms */
+            /* Catch arms — check discriminant against each error type */
             cg_write_fmt(cg, ".L%x:\n", catch_label);
             cg_comment(cg, "catch handlers");
+            cg_inst(cg, "push rax");  /* save error discriminant */
+
             for (int i = 0; i < node->data.try_node.catch_arms.count; i++) {
                 AstNode *arm = node->data.try_node.catch_arms.items[i];
                 int next_arm = cg_new_label(cg);
 
-                /* For now, first matching catch handles all errors */
-                /* (Type matching deferred to Phase 5.02) */
-                if (i > 0) {
-                    cg_write_fmt(cg, "    jmp .L%x\n", next_arm);
-                    cg_write_fmt(cg, ".L%x:\n", next_arm);
+                /* If this catch arm specifies a type, check the discriminant */
+                if (arm->data.catch_arm.type) {
+                    /* Look up the error type's discriminant from variant_entries */
+                    char type_name[256];
+                    int tlen = (int)arm->data.catch_arm.type->data.type_node.name.len;
+                    if (tlen > 255) tlen = 255;
+                    memcpy(type_name, arm->data.catch_arm.type->data.type_node.name.data, tlen);
+                    type_name[tlen] = '\0';
+
+                    /* Find the discriminant for this error type */
+                    int disc_val = -1;
+                    for (VariantEntry *ve = variant_entries; ve; ve = ve->next) {
+                        if (strcmp(ve->name, type_name) == 0) {
+                            disc_val = ve->discriminant;
+                            break;
+                        }
+                    }
+
+                    if (disc_val >= 0) {
+                        /* Compare error discriminant with expected value */
+                        cg_inst(cg, "mov rax, [rsp]");  /* reload discriminant */
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "cmp rax, %d", disc_val);
+                        cg_inst(cg, buf);
+                        cg_write_fmt(cg, "    jne .L%x\n", next_arm);
+                    }
                 }
 
                 /* If catch has a variable binding, store the error value */
                 if (arm->data.catch_arm.var) {
                     cg_comment(cg, "bind catch variable");
-                    /* Error value is in rax (from the throws return convention) */
-                    /* Store to a temp slot — for now just keep in rax */
+                    /* Error discriminant is on stack; for now just keep in rax */
                 }
 
                 /* Emit catch body */
@@ -1212,8 +1235,14 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
                 /* Clear error tag after handling */
                 cg_inst(cg, "xor rdx, rdx");
+                cg_inst(cg, "add rsp, 8");  /* pop saved discriminant */
                 cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+
+                cg_write_fmt(cg, ".L%x:\n", next_arm);
             }
+
+            /* No catch matched — fall through with error still set */
+            cg_inst(cg, "add rsp, 8");  /* pop saved discriminant */
 
             cg_write_fmt(cg, ".L%x:\n", end_label);
             cg_comment(cg, "try end");
@@ -1222,10 +1251,13 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
         case NODE_THROW: {
             /* throw expr — evaluate the expression, set error tag to 1,
-             * emit defers/auto-drops, then return */
+             * emit defers/auto-drops, then return.
+             * The thrown value's discriminant goes in rax. */
             cg_comment(cg, "throw");
             if (node->data.throw_node.value) {
                 cg_expr(cg, node->data.throw_node.value, slots);
+            } else {
+                cg_inst(cg, "xor rax, rax");  /* default error discriminant */
             }
             /* Set error tag (rdx = 1) */
             cg_inst(cg, "mov rdx, 1");
