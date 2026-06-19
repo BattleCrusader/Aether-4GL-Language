@@ -1,0 +1,9 @@
+# test_monomorph.ae — generics monomorphization
+func identity<T>(value: T): T {
+    return value
+}
+
+func main(): u64 {
+    let x = identity(42)
+    return x
+}
