@@ -609,6 +609,20 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             break;
 
         case NODE_IDENT: {
+            /* Check if this ident resolves to a const declaration */
+            if (node->data.ident.resolved && node->data.ident.resolved->type == NODE_CONST_DECL) {
+                /* Const value was folded to a literal by semantic analysis */
+                AstNode *val = node->data.ident.resolved->data.let_decl.value;
+                if (val && val->type == NODE_LITERAL_INT) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "mov rax, %llu",
+                        (unsigned long long)val->data.literal.int_val);
+                    cg_inst(cg, buf);
+                    break;
+                }
+                cg_inst1(cg, "mov", "rax, 0");
+                break;
+            }
             int offset = -8;
             int actual_size = 8;
             if (node->data.ident.resolved) {

@@ -2,6 +2,144 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
+
+/* ================================================================
+ * Compile-time constant evaluator
+ * ================================================================ */
+
+/* Forward declaration */
+static uint64_t const_eval_expr(SemanticAnalyzer *sa, AstNode *node, bool *ok);
+static AstNode *scope_lookup(SemanticAnalyzer *sa, const char *name);
+
+/* Evaluate a constant expression at compile time.
+ * Returns the uint64_t value. Sets *ok to false if not constant. */
+static uint64_t const_eval_expr(SemanticAnalyzer *sa, AstNode *node, bool *ok) {
+    if (!node) { *ok = false; return 0; }
+
+    switch (node->type) {
+        case NODE_LITERAL_INT:
+            *ok = true;
+            return node->data.literal.int_val;
+
+        case NODE_LITERAL_BOOL:
+            *ok = true;
+            return node->data.literal.bool_val ? 1 : 0;
+
+        case NODE_LITERAL_CHAR:
+            *ok = true;
+            return node->data.literal.char_val;
+
+        case NODE_LITERAL_NONE:
+            *ok = true;
+            return 0;
+
+        case NODE_UNARY_OP: {
+            bool sub_ok = false;
+            uint64_t val = const_eval_expr(sa, node->data.unary.operand, &sub_ok);
+            if (!sub_ok) { *ok = false; return 0; }
+            switch (node->data.unary.op) {
+                case UNARY_NEG: *ok = true; return (uint64_t)(-(int64_t)val);
+                case UNARY_NOT: *ok = true; return val ? 0 : 1;
+                case UNARY_BIT_NOT: *ok = true; return ~val;
+                default: *ok = false; return 0;
+            }
+        }
+
+        case NODE_BINARY_OP: {
+            bool left_ok = false, right_ok = false;
+            uint64_t left = const_eval_expr(sa, node->data.binary.left, &left_ok);
+            uint64_t right = const_eval_expr(sa, node->data.binary.right, &right_ok);
+            if (!left_ok || !right_ok) { *ok = false; return 0; }
+            switch (node->data.binary.op) {
+                case BIN_ADD: *ok = true; return left + right;
+                case BIN_SUB: *ok = true; return left - right;
+                case BIN_MUL: *ok = true; return left * right;
+                case BIN_DIV: *ok = true; if (right == 0) { *ok = false; return 0; } return left / right;
+                case BIN_MOD: *ok = true; if (right == 0) { *ok = false; return 0; } return left % right;
+                case BIN_EQ:  *ok = true; return left == right ? 1 : 0;
+                case BIN_NEQ: *ok = true; return left != right ? 1 : 0;
+                case BIN_LT:  *ok = true; return (int64_t)left < (int64_t)right ? 1 : 0;
+                case BIN_GT:  *ok = true; return (int64_t)left > (int64_t)right ? 1 : 0;
+                case BIN_LE:  *ok = true; return (int64_t)left <= (int64_t)right ? 1 : 0;
+                case BIN_GE:  *ok = true; return (int64_t)left >= (int64_t)right ? 1 : 0;
+                case BIN_BIT_AND: *ok = true; return left & right;
+                case BIN_BIT_OR:  *ok = true; return left | right;
+                case BIN_BIT_XOR: *ok = true; return left ^ right;
+                case BIN_SHL: *ok = true; return left << right;
+                case BIN_SHR: *ok = true; return left >> right;
+                case BIN_AND: *ok = true; return (left && right) ? 1 : 0;
+                case BIN_OR:  *ok = true; return (left || right) ? 1 : 0;
+                default: *ok = false; return 0;
+            }
+        }
+
+        case NODE_IDENT: {
+            /* Look up the identifier — if it's a const, evaluate it */
+            const char *name = arena_strndup(sa->arena,
+                node->data.ident.name.data, node->data.ident.name.len);
+            AstNode *decl = scope_lookup(sa, name);
+            if (decl && decl->type == NODE_CONST_DECL && decl->data.let_decl.value) {
+                return const_eval_expr(sa, decl->data.let_decl.value, ok);
+            }
+            /* Check for built-in sizeof/alignof called as ident (no parens yet) */
+            if (strcmp(name, "true") == 0) { *ok = true; return 1; }
+            if (strcmp(name, "false") == 0) { *ok = true; return 0; }
+            *ok = false;
+            return 0;
+        }
+
+        case NODE_CALL: {
+            /* Check for sizeof() / alignof() builtins */
+            if (node->data.call.callee && node->data.call.callee->type == NODE_IDENT) {
+                const char *fname = arena_strndup(sa->arena,
+                    node->data.call.callee->data.ident.name.data,
+                    node->data.call.callee->data.ident.name.len);
+                if (strcmp(fname, "sizeof") == 0 && node->data.call.args.count >= 1) {
+                    /* sizeof(type) — evaluate the type argument */
+                    AstNode *arg = node->data.call.args.items[0];
+                    if (arg->type == NODE_TYPE_PRIMITIVE) {
+                        *ok = true;
+                        switch (arg->data.type_node.prim) {
+                            case PRIM_VOID: return 0;
+                            case PRIM_BOOL: case PRIM_BYTE: case PRIM_U8: case PRIM_I8: return 1;
+                            case PRIM_U16: case PRIM_I16: return 2;
+                            case PRIM_U32: case PRIM_I32: case PRIM_F32: return 4;
+                            case PRIM_U64: case PRIM_I64: case PRIM_F64: return 8;
+                            case PRIM_STRING: return 8; /* pointer */
+                        }
+                    }
+                    if (arg->type == NODE_TYPE_NAMED) {
+                        *ok = true;
+                        return 8; /* default: pointer-sized */
+                    }
+                }
+                if (strcmp(fname, "alignof") == 0 && node->data.call.args.count >= 1) {
+                    AstNode *arg = node->data.call.args.items[0];
+                    if (arg->type == NODE_TYPE_PRIMITIVE) {
+                        *ok = true;
+                        switch (arg->data.type_node.prim) {
+                            case PRIM_VOID: return 1;
+                            case PRIM_BOOL: case PRIM_BYTE: case PRIM_U8: case PRIM_I8: return 1;
+                            case PRIM_U16: case PRIM_I16: return 2;
+                            case PRIM_U32: case PRIM_I32: case PRIM_F32: return 4;
+                            case PRIM_U64: case PRIM_I64: case PRIM_F64: return 8;
+                            case PRIM_STRING: return 8;
+                        }
+                    }
+                    *ok = true;
+                    return 8;
+                }
+            }
+            *ok = false;
+            return 0;
+        }
+
+        default:
+            *ok = false;
+            return 0;
+    }
+}
 
 /*
  * Scope: a simple symbol table for declarations.
@@ -170,7 +308,18 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             AstNode *name_node = NULL;
             if (node->type == NODE_STRUCT_DECL || node->type == NODE_CLASS_DECL) name_node = node->data.struct_decl.name;
             else if (node->type == NODE_ENUM_DECL) name_node = node->data.enum_decl.name;
-            else if (node->type == NODE_CONST_DECL) name_node = node->data.let_decl.name;
+            else if (node->type == NODE_CONST_DECL) {
+                name_node = node->data.let_decl.name;
+                /* Evaluate const initializer at compile time */
+                if (node->data.let_decl.value) {
+                    bool ok = false;
+                    uint64_t val = const_eval_expr(sa, node->data.let_decl.value, &ok);
+                    if (ok) {
+                        /* Replace the value with a constant literal */
+                        node->data.let_decl.value = node_int_literal(sa->arena, node->loc, val);
+                    }
+                }
+            }
             if (name_node) {
                 const char *tname = arena_strndup(sa->arena,
                     name_node->data.ident.name.data,

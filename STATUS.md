@@ -71,7 +71,7 @@
 - [x] P05.03 — Deterministic exceptions (tagged union return, no unwinding tables) 🟢
 - [x] P05.04 — Zero-cost happy path for exceptions 🟢
 - [x] P05.05 — Compile-time execution: `#run { ... }` blocks 🟢
-- [ ] P05.06 — Compile-time constant evaluation
+- [x] P05.06 — Compile-time constant evaluation 🟢
 - [ ] P05.07 — Contract programming: `pre(expr)` and `post(expr)` on functions
 - [ ] P05.08 — Debug-build runtime contract checking
 - [ ] P05.09 — Release-build contract elimination (optimizer hints)
