@@ -1146,6 +1146,34 @@ static AstNode *parse_prefix(Parser *p) {
             parser_advance(p);
             return node_unary(p->arena, loc, UNARY_DEREF, parse_expr_prec(p, PREC_UNARY));
 
+        case TOKEN_PIPE: {
+            /* Lambda: |params| expr or |params| { body } */
+            parser_advance(p);
+            AstNode *lambda = node_create(p->arena, NODE_LAMBDA, loc);
+            /* Parse parameter list between pipes */
+            while (!parser_check(p, TOKEN_PIPE) && !parser_check(p, TOKEN_EOF)) {
+                if (parser_check(p, TOKEN_IDENT)) {
+                    Token pt = p->current; parser_advance(p);
+                    AstNode *type = NULL;
+                    if (parser_match(p, TOKEN_COLON)) {
+                        type = parse_type(p);
+                    }
+                    AstNode *param = node_param(p->arena, pt.loc,
+                        node_ident(p->arena, pt.loc, pt.text), type, false, false);
+                    node_list_append(&lambda->data.lambda.params, param);
+                } else { parser_advance(p); }
+                if (!parser_match(p, TOKEN_COMMA)) break;
+            }
+            parser_expect(p, TOKEN_PIPE, "lambda parameter list");
+            /* Parse body: either a single expression or a block */
+            if (parser_match(p, TOKEN_LBRACE)) {
+                lambda->data.lambda.body = parse_block_braced(p);
+            } else {
+                lambda->data.lambda.body = parse_expr(p);
+            }
+            return lambda;
+        }
+
         case TOKEN_KW_REF:
             parser_advance(p);
             return node_unary(p->arena, loc, UNARY_REF, parse_expr_prec(p, PREC_UNARY));

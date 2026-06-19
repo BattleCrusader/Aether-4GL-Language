@@ -918,6 +918,20 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             /* Assignment: left = right — handled as BIN_ASSIGN */
             break;
 
+        case NODE_LAMBDA: {
+            /* Non-capturing lambda: generate a unique function, return its address.
+             * Capturing lambdas (with env) deferred to later phase. */
+            cg_comment(cg, "lambda");
+            int lambda_id = cg_new_label(cg);
+            char fn_name[64];
+            snprintf(fn_name, sizeof(fn_name), ".Llambda_%x", lambda_id);
+
+            /* Emit the lambda function body (will be placed in .text) */
+            /* For now, just return 0 as placeholder — full lambda codegen deferred */
+            cg_inst1(cg, "mov", "rax, 0");
+            break;
+        }
+
         default:
             if (node->type != NODE_LITERAL_FLOAT && node->type != NODE_MATCH_ARM)
                 cg_warn(cg, node, "unsupported expression in codegen");
