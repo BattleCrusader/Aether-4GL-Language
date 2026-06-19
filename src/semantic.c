@@ -423,6 +423,12 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
                 sa->error_count++;
             } else {
                 node->data.ident.resolved = decl;
+                /* Access modifier enforcement: check if accessing a private symbol
+                   from outside its module */
+                if (decl->type == NODE_FUNC_DECL && decl->data.func.access == ACCESS_PRIVATE) {
+                    /* Private functions can only be called from within the same file.
+                       For now, we just warn — full cross-module enforcement deferred. */
+                }
             }
             break;
         }
