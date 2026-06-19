@@ -67,10 +67,10 @@
 
 ## Phase 5 — Advanced Language Features 🔵 IN PROGRESS
 - [x] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen 🟢
-- [ ] P05.02 — Custom error types (enum-based error hierarchy)
-- [ ] P05.03 — Deterministic exceptions (tagged union return, no unwinding tables)
-- [ ] P05.04 — Zero-cost happy path for exceptions
-- [ ] P05.05 — Compile-time execution: `#run { ... }` blocks
+- [x] P05.02 — Custom error types (enum-based error hierarchy) 🟢
+- [x] P05.03 — Deterministic exceptions (tagged union return, no unwinding tables) 🟢
+- [x] P05.04 — Zero-cost happy path for exceptions 🟢
+- [x] P05.05 — Compile-time execution: `#run { ... }` blocks 🟢
 - [ ] P05.06 — Compile-time constant evaluation
 - [ ] P05.07 — Contract programming: `pre(expr)` and `post(expr)` on functions
 - [ ] P05.08 — Debug-build runtime contract checking
