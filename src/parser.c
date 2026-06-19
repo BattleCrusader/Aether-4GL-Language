@@ -331,6 +331,16 @@ AstNode *parse_func_decl(Parser *p) {
         func->data.func.is_throws = true;
     }
 
+    /* Check if this is an operator overload method (op_add, op_sub, etc.) */
+    {
+        const char *fname = arena_strndup(p->arena,
+            func->data.func.name->data.ident.name.data,
+            func->data.func.name->data.ident.name.len);
+        if (strncmp(fname, "op_", 3) == 0) {
+            func->data.func.is_operator = true;
+        }
+    }
+
     /* Contract conditions: pre(expr) and post(expr) */
     /* Inline between signature and body brace:
        func name(): type pre(cond) { body } */

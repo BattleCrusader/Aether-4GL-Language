@@ -1,0 +1,13 @@
+# test_op_overload.ae — operator overloading
+struct Vector {
+    x: int
+    y: int
+}
+
+func op_add(a: int, b: int): int {
+    return a + b
+}
+
+func main(): u64 {
+    return 42
+}

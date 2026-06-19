@@ -50,7 +50,7 @@ static void count_tokens(const char *source, TokenCounts *c) {
             return;
         }
         c->total++;
-        if (tok.type >= TOKEN_KW_FUNC && tok.type <= TOKEN_KW_RUN) c->keywords++;
+        if (tok.type >= TOKEN_KW_FUNC && tok.type <= TOKEN_KW_INLINE) c->keywords++;
         if (tok.type == TOKEN_INDENT || tok.type == TOKEN_DEDENT) c->indent_related++;
         if (tok.type == TOKEN_INT_LITERAL || tok.type == TOKEN_FLOAT_LITERAL ||
             tok.type == TOKEN_STRING_LITERAL || tok.type == TOKEN_CHAR_LITERAL) c->literals++;
@@ -364,7 +364,7 @@ static void test_keywords() {
         "region pub static defer unsafe module sys "
         "pre post drop init self type trait impl "
         "pool protocol virtual dyn throws export entry "
-        "layout test run\n";
+        "layout test run prop inline\n";
 
     Tokenizer *t = tokenizer_create(src, strlen(src), "test");
     int kw = 0;
@@ -377,12 +377,12 @@ static void test_keywords() {
             FAIL("unrecognized keyword treated as identifier");
             return;
         }
-        ASSERT(tok.type >= TOKEN_KW_FUNC && tok.type <= TOKEN_KW_RUN,
+        ASSERT(tok.type >= TOKEN_KW_FUNC && tok.type <= TOKEN_KW_INLINE,
                "unexpected token type for keyword");
         kw++;
     }
     tokenizer_destroy(t);
-    ASSERT(kw == 58, "should have 58 keywords");
+    ASSERT(kw == 60, "should have 60 keywords");
     PASS();
 }
 
