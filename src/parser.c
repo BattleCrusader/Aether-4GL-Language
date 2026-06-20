@@ -168,6 +168,11 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     func->data.func.is_exported = true;
                 } else if (strcmp(aname, "entry") == 0) {
                     func->data.func.entry_addr = last_attr->data.attr.int_value;
+                } else if (strcmp(aname, "layout") == 0) {
+                    func->data.func.has_layout = true;
+                    func->data.func.layout_start = (uint64_t)last_attr->data.attr.layout_start;
+                    func->data.func.layout_max = (uint64_t)last_attr->data.attr.layout_max;
+                    func->data.func.layout_file = last_attr->data.attr.layout_file;
                 }
             }
             node_list_append(decls, func);
@@ -752,15 +757,73 @@ AstNode *parse_statement(Parser *p) {
 
     /* asm block */
     if (parser_match(p, TOKEN_KW_ASM)) {
+        /* Optional output binding: asm: (var1, var2) { ... } */
+        AstNodeList outputs = {0};
+        if (parser_match(p, TOKEN_COLON)) {
+            parser_expect(p, TOKEN_LPAREN, "asm output list");
+            while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+                AstNode *var = node_create(p->arena, NODE_IDENT, p->current.loc);
+                if (parser_check(p, TOKEN_IDENT)) {
+                    var->data.ident.name = p->current.text;
+                    parser_advance(p);
+                    node_list_append(&outputs, var);
+                    parser_match(p, TOKEN_COMMA);
+                } else break;
+            }
+            parser_expect(p, TOKEN_RPAREN, "asm output list");
+        }
+
         if (parser_match(p, TOKEN_LBRACE)) {
-            /* Skip tokens until matching } counting brace depth */
+            /* Record the source position right after opening brace */
+            const char *asm_start = p->lexer->tok->pos;
+            const char *asm_end = asm_start;
             int brace_depth = 1;
+            /* Track line/col of the opening brace for error reporting */
+            int start_line = p->previous.loc.line;
+            int start_col = p->previous.loc.col;
+
             while (brace_depth > 0 && !parser_check(p, TOKEN_EOF)) {
                 parser_advance(p);
-                if (p->previous.type == TOKEN_LBRACE) brace_depth++;
-                if (p->previous.type == TOKEN_RBRACE) brace_depth--;
+                asm_end = p->lexer->tok->pos; /* track end after each token */
+                if (p->previous.type == TOKEN_LBRACE) {
+                    brace_depth++;
+                    asm_end = p->lexer->tok->start;
+                }
+                if (p->previous.type == TOKEN_RBRACE) {
+                    brace_depth--;
+                    if (brace_depth == 0) {
+                        /* Calculate end — before the closing } */
+                        asm_end = p->lexer->tok->start;
+                        /* Trim trailing whitespace/newline from asm text */
+                        while (asm_end > asm_start &&
+                               (asm_end[-1] == '\n' || asm_end[-1] == '\r' ||
+                                asm_end[-1] == ' ' || asm_end[-1] == '\t'))
+                            asm_end--;
+                    }
+                }
             }
-            return node_create(p->arena, NODE_ASM_BLOCK, p->previous.loc);
+
+            /* Create the asm block node with captured text */
+            AstNode *node = node_create(p->arena, NODE_ASM_BLOCK, LOCATION(p->lexer->tok->filename, start_line, start_col, 0));
+            /* Store the assembly text as a string literal */
+            if (asm_end > asm_start) {
+                /* Trim trailing closing brace if present */
+                const char *trim_end = asm_end;
+                while (trim_end > asm_start && (trim_end[-1] == ' ' || trim_end[-1] == '\t' || trim_end[-1] == '\n' || trim_end[-1] == '\r'))
+                    trim_end--;
+                if (trim_end > asm_start && trim_end[-1] == '}') {
+                    trim_end--; /* remove the closing } */
+                    /* Trim again after removing brace */
+                    while (trim_end > asm_start && (trim_end[-1] == ' ' || trim_end[-1] == '\t' || trim_end[-1] == '\n' || trim_end[-1] == '\r'))
+                        trim_end--;
+                }
+                if (trim_end > asm_start) {
+                    StringView asm_text = sv_from_parts(asm_start, (size_t)(trim_end - asm_start));
+                    node->data.asm_block.text = node_string_literal(p->arena, NO_LOCATION, asm_text);
+                }
+            }
+            node->data.asm_block.outputs = outputs;
+            return node;
         } else {
             parser_error(p, p->current, "asm block requires { }");
             return NULL;
@@ -1077,11 +1140,59 @@ AstNode *parse_attribute(Parser *p) {
         attr->data.ident.name = t.text;
         attr->data.attr.name = t.text;
         attr->data.attr.int_value = -1;
+        attr->data.attr.has_layout_start = false;
+        attr->data.attr.has_layout_max = false;
+        attr->data.attr.layout_file = (StringView){0};
 
-        /* @entry(0x2000000) — attribute with numeric payload */
+        /* @name(payload) — parenthesized attribute arguments */
         if (parser_match(p, TOKEN_LPAREN)) {
-            /* Try to parse a numeric expression (hex/decimal) */
-            if (parser_check(p, TOKEN_INT_LITERAL)) {
+            /* Try key=value pairs first (e.g., @layout(start=0x7C00, ...)) */
+            if (parser_check(p, TOKEN_IDENT) || parser_check(p, TOKEN_KW_LAYOUT) ||
+                parser_check(p, TOKEN_KW_ENTRY)) {
+                /* Parse key = value [, key = value] ... */
+                while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+                    /* Skip newlines */
+                    while (parser_match(p, TOKEN_NEWLINE));
+                    if (parser_check(p, TOKEN_RPAREN)) break;
+
+                    /* Parse key — identifier or keyword */
+                    StringView key;
+                    if (parser_check(p, TOKEN_IDENT)) {
+                        key = p->current.text; parser_advance(p);
+                    } else {
+                        /* keyword as key name */
+                        Token kt = p->current; parser_advance(p);
+                        key = kt.text;
+                    }
+
+                    /* Expect = */
+                    if (parser_match(p, TOKEN_EQ)) {
+                        /* Parse value — int or string */
+                        if (parser_check(p, TOKEN_INT_LITERAL)) {
+                            uint64_t val = p->current.val.int_value; parser_advance(p);
+                            /* Match key name */
+                            size_t klen = key.len;
+                            if (klen == 5 && strncmp(key.data, "start", 5) == 0) {
+                                attr->data.attr.has_layout_start = true;
+                                attr->data.attr.layout_start = (int64_t)val;
+                            } else if (klen == 3 && strncmp(key.data, "max", 3) == 0) {
+                                attr->data.attr.has_layout_max = true;
+                                attr->data.attr.layout_max = (int64_t)val;
+                            }
+                        } else if (parser_check(p, TOKEN_STRING_LITERAL)) {
+                            attr->data.attr.layout_file = p->current.text; parser_advance(p);
+                        } else {
+                            /* Skip unknown value */
+                            parser_advance(p);
+                        }
+                    }
+
+                    /* Skip comma (optional before RPAREN) */
+                    while (parser_match(p, TOKEN_COMMA));
+                    while (parser_match(p, TOKEN_NEWLINE));
+                }
+            } else if (parser_check(p, TOKEN_INT_LITERAL)) {
+                /* Numeric payload — @entry(0x2000000) */
                 Token val_tok = p->current; parser_advance(p);
                 attr->data.attr.int_value = (int64_t)val_tok.val.int_value;
             } else {

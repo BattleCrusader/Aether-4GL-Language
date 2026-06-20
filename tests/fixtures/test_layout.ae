@@ -1,0 +1,4 @@
+@layout(start=0x7C00, max=512, file="stage1.bin")
+func stage1() {
+    let x = 42
+}

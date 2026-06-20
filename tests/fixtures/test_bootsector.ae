@@ -1,0 +1,31 @@
+@layout(start=0x7C00, max=512, file="stage1.bin")
+func stage1() {
+    asm {
+        [bits 16]
+        xor ax, ax
+        mov ds, ax
+        mov es, ax
+        mov ss, ax
+        mov sp, 0x7C00
+
+        mov si, msg
+        call print_str
+        hlt
+
+print_str:
+        lodsb
+        or al, al
+        jz .done
+        mov ah, 0x0E
+        mov bx, 7
+        int 0x10
+        jmp print_str
+.done:
+        ret
+
+msg: db "Aether", 0
+
+        times 510-($-$$) db 0
+        dw 0xAA55
+    }
+}

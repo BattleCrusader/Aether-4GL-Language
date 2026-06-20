@@ -91,6 +91,12 @@ TEST_FIXTURES = \
 # Expected exit codes for each fixture
 TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0 0 42 42 42 42 42 42 128 42 42 42 42 42 42 42 42
 
+# Layout test fixtures — compiled as flat binary, verified by size
+LAYOUT_FIXTURES = \
+	tests/fixtures/test_layout.ae
+
+LAYOUT_EXPECTED_SIZES = 512
+
 test-host: aether-cli
 	@echo "=== Host-Native Test Runner ==="
 	@echo ""
@@ -103,16 +109,44 @@ test-host: aether-cli
 		printf "  TEST: %s ... " $$name; \
 		./$(BUILD_DIR)/aether --target host $$fixture 2>/dev/null >/dev/null; \
 		if [ $$? -ne 0 ]; then \
-			printf "FAIL (compile)\\n"; \
+			printf "FAIL (compile)\n"; \
 			continue; \
 		fi; \
 		/tmp/$$name 2>/dev/null >/dev/null; \
 		got=$$?; \
 		if [ "$$got" = "$$expected" ]; then \
-			printf "PASS (exit %d)\\n" $$got; \
+			printf "PASS (exit %d)\n" $$got; \
 			pass=$$((pass + 1)); \
 		else \
-			printf "FAIL (expected %d, got %d)\\n" $$expected $$got; \
+			printf "FAIL (expected %d, got %d)\n" $$expected $$got; \
+		fi; \
+	done; \
+	echo ""; \
+	echo "=== Results: $$pass/$$total passed, $$((total - pass)) failed ==="; \
+	[ $$pass -eq $$total ]
+
+test-layout: aether-cli
+	@echo "=== Layout (Flat Binary) Test Runner ==="
+	@echo ""
+	@total=0; pass=0; \
+	set -- $(LAYOUT_EXPECTED_SIZES); \
+	for fixture in $(LAYOUT_FIXTURES); do \
+		total=$$((total + 1)); \
+		expected=$$1; shift; \
+		name=$$(basename $$fixture .ae); \
+		out="/tmp/$$name.bin"; \
+		printf "  TEST: %s ... " $$name; \
+		./$(BUILD_DIR)/aether --target x86_64-freestanding $$fixture -o $$out 2>/dev/null >/dev/null; \
+		if [ $$? -ne 0 ]; then \
+			printf "FAIL (compile)\n"; \
+			continue; \
+		fi; \
+		actual=$$(stat -f%z $$out 2>/dev/null || stat -c%s $$out 2>/dev/null); \
+		if [ "$$actual" = "$$expected" ]; then \
+			printf "PASS (%d bytes)\n" $$actual; \
+			pass=$$((pass + 1)); \
+		else \
+			printf "FAIL (expected %d bytes, got %d)\n" $$expected $$actual; \
 		fi; \
 	done; \
 	echo ""; \

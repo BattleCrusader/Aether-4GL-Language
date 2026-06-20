@@ -44,15 +44,17 @@
 - [x] Test fixture: `test_entry.ae` — `@entry(0x2000000) func main(): int` returns 42 🟢
 - [x] All 26 host-native tests passing (16/16 tokenizer, 14/14 parser) 🟢
 
-### P06.05 — `@layout(start, max, file)` Attribute
-- [ ] Parser: `@layout(start=0x7C00, max=512, file="stage1.bin")` syntax
-- [ ] AST: store layout parameters (start addr, max size, output filename)
-- [ ] Codegen: generate flat binary with correct origin and size limit
-- [ ] Codegen: truncate/pad to exact `max` size
-- [ ] Codegen: verify binary fits within `max` bytes, error if not
-- [ ] Semantic: validate layout constraints (start must be page-aligned, etc.)
-- [ ] Test: `@layout` for boot sector (512 bytes at 0x7C00)
-- [ ] Multiple layout sections in one compilation (stage1 + stage2)
+### P06.05 — `@layout(start, max, file)` Attribute 🟢
+- [x] Parser: `@layout(start=N, max=M, file="name")` key=value syntax 🟢
+- [x] AST: layout fields on FuncDecl (has_layout, layout_start, layout_max, layout_file) 🟢
+- [x] Codegen: `@layout` functions emit `bits 64` + `[org N]` for flat binary mode 🟢
+- [x] Codegen: `@layout` functions skip prologue/epilogue (no push rbp / pop rbp / ret) 🟢
+- [x] Codegen: padding via `times max-($-$$) db 0` to exactly fill max bytes 🟢
+- [x] Codegen: flat binary assembly via `nasm -f bin`, bypassing ELF linker 🟢
+- [x] Codegen: size verification — error if binary exceeds layout_max 🟢
+- [x] Codegen: skip entry wrapper, runtime helpers, and .rodata for layout functions 🟢
+- [x] Test fixture: `test_layout.ae` — compiles to 512-byte flat binary 🟢
+- [x] `make test-layout` target added — verifies flat binary output size 🟢
 
 ### P06.06 — `@kernel_layout` — Memory Map Verification
 - [ ] Parser: `@kernel_layout` attribute on functions
