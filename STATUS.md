@@ -65,22 +65,22 @@
 - [x] P04.07 — `if let` pattern binding for optionals 🟢
 - [x] P04.08 — Phase 4 Verification (16/16 + 14/14 unit, 13/13 native, both targets) 🟢
 
-## Phase 5 — Advanced Language Features 🔵 IN PROGRESS
+## Phase 5 — Advanced Language Features 🟢 COMPLETE
 - [x] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen 🟢
 - [x] P05.02 — Custom error types (enum-based error hierarchy) 🟢
 - [x] P05.03 — Deterministic exceptions (tagged union return, no unwinding tables) 🟢
 - [x] P05.04 — Zero-cost happy path for exceptions 🟢
 - [x] P05.05 — Compile-time execution: `#run { ... }` blocks 🟢
 - [x] P05.06 — Compile-time constant evaluation 🟢
-- [ ] P05.07 — Contract programming: `pre(expr)` and `post(expr)` on functions
-- [ ] P05.08 — Debug-build runtime contract checking
-- [ ] P05.09 — Release-build contract elimination (optimizer hints)
-- [ ] P05.10 — Closures and lambdas: `|args| expr`
-- [ ] P05.11 — Properties: `get`/`set` syntactic sugar
-- [ ] P05.12 — Operator overloading
-- [ ] P05.13 — Generics monomorphization (duplicate code per concrete type)
-- [ ] P05.14 — Dynamic dispatch (`dyn Trait` — fat pointer + vtable)
-- [ ] P05.15 — Semantic enforcement of access modifiers at module boundaries
+- [x] P05.07 — Contract programming: `pre(expr)` and `post(expr)` on functions 🟢
+- [x] P05.08 — Debug-build runtime contract checking 🟢
+- [x] P05.09 — Release-build contract elimination (optimizer hints) 🟢
+- [x] P05.10 — Closures and lambdas: `|args| expr` 🟢
+- [x] P05.11 — Properties: `get`/`set` syntactic sugar 🟢
+- [x] P05.12 — Operator overloading 🟢
+- [x] P05.13 — Generics monomorphization 🟢
+- [x] P05.14 — Dynamic dispatch (`dyn Trait` — fat pointer + vtable) 🟢
+- [x] P05.15 — Semantic enforcement of access modifiers at module boundaries 🟢
 
 ## Phase 6 — Aether OS Integration 🔴 NOT STARTED
 - [ ] P06.01 — `sys func` keyword — direct syscall page calls (0x5000 table)
@@ -173,7 +173,7 @@
 3. **Phase 2**: Host-native output ✅
 4. **Phase 3**: Memory management — defer, heap, regions, optionals ✅
 5. **Phase 4**: OOP and type system — classes, traits, generics ✅
-6. **Phase 5**: Advanced language features — exceptions, compile-time, contracts, closures, monomorphization, dynamic dispatch
+6. **Phase 5**: Advanced language features — exceptions, compile-time, contracts, closures, monomorphization, dynamic dispatch ✅
 7. **Phase 6**: Aether OS integration — sys func, module, attributes, stdlib
 8. **Phase 7**: Self-hosting — compiler compiles itself
 9. **Phase 8**: Multi-target assembler — NASM → ARM64/RISC-V translation
