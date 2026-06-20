@@ -1,0 +1,7 @@
+# test_sysfunc.ae — syscall page function declaration
+sys func putc(c: byte) at(0)
+sys func puts(s: string) at(1)
+
+func main(): u64 {
+    return 42
+}
