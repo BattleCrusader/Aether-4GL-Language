@@ -15,7 +15,8 @@ CORE_SRCS = \
 	src/ast.c \
 	src/parser.c \
 	src/semantic.c \
-	src/codegen.c
+	src/codegen.c \
+	src/asm_ir.c
 
 CORE_OBJS = $(CORE_SRCS:src/%.c=$(BUILD_DIR)/%.o)
 

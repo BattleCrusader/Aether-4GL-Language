@@ -118,8 +118,8 @@
 - [ ] P07.08 — Compiler can compile itself with no C bootstrap
 - [ ] P07.09 — C bootstrap source archived as historical reference only
 
-## Phase 8 — Multi-Target Assembler 🔴 NOT STARTED
-- [ ] P08.01 — NASM IR definition (instruction set, register file, addressing modes)
+## Phase 8 — Multi-Target Assembler 🔵 IN PROGRESS
+- [x] P08.01 — NASM IR definition (instruction set, register file, addressing modes) 🟢
 - [ ] P08.02 — NASM parser (extract instructions, operands, directives from asm blocks)
 - [ ] P08.03 — x86_64 backend (passthrough — direct NASM emission)
 - [ ] P08.04 — ARM64 backend (instruction mapping table)
