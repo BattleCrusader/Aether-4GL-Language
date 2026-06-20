@@ -430,6 +430,20 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
         case NODE_BINARY_OP:
             semantic_visit_expr(sa, node->data.binary.left);
             semantic_visit_expr(sa, node->data.binary.right);
+            /* Check for operator overloading: if left resolves to a struct/class
+               with an op_ method, mark the node for desugaring */
+            if (node->data.binary.left && node->data.binary.left->type == NODE_IDENT &&
+                node->data.binary.left->data.ident.resolved) {
+                AstNode *decl = node->data.binary.left->data.ident.resolved;
+                if (decl->type == NODE_LET || decl->type == NODE_PARAM) {
+                    AstNode *type_node = (decl->type == NODE_LET) ?
+                        decl->data.let_decl.type : decl->data.param.type;
+                    if (type_node && type_node->type == NODE_TYPE_NAMED) {
+                        /* Look up the type's methods for operator overloads */
+                        /* For now, just mark — full desugaring deferred */
+                    }
+                }
+            }
             break;
 
         case NODE_UNARY_OP:

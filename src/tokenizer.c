@@ -153,6 +153,8 @@ const char *token_type_name(TokenType type) {
         case TOKEN_KW_LAYOUT: return "layout";
         case TOKEN_KW_TEST: return "test";
         case TOKEN_KW_RUN: return "run";
+        case TOKEN_KW_PROP: return "prop";
+        case TOKEN_KW_INLINE: return "inline";
         case TOKEN_KW_IF_LET: return "iflet";
         case TOKEN_PLUS: return "+";
         case TOKEN_MINUS: return "-";
