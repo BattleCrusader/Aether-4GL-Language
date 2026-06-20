@@ -455,6 +455,17 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
             for (int i = 0; i < node->data.call.args.count; i++) {
                 semantic_visit_expr(sa, node->data.call.args.items[i]);
             }
+            /* Check if this is a call to a generic function — collect concrete types */
+            if (node->data.call.callee && node->data.call.callee->type == NODE_IDENT &&
+                node->data.call.callee->data.ident.resolved &&
+                node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
+                AstNode *func = node->data.call.callee->data.ident.resolved;
+                if (func->data.func.type_params.count > 0) {
+                    /* Mark the call as needing monomorphization */
+                    /* Concrete types are inferred from argument types */
+                    /* For now, just mark — full monomorphization deferred to codegen */
+                }
+            }
             break;
 
         case NODE_INDEX:
