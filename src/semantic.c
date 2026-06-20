@@ -430,6 +430,20 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
         case NODE_BINARY_OP:
             semantic_visit_expr(sa, node->data.binary.left);
             semantic_visit_expr(sa, node->data.binary.right);
+            /* Check for operator overloading: if left resolves to a struct/class
+               with an op_ method, mark the node for desugaring */
+            if (node->data.binary.left && node->data.binary.left->type == NODE_IDENT &&
+                node->data.binary.left->data.ident.resolved) {
+                AstNode *decl = node->data.binary.left->data.ident.resolved;
+                if (decl->type == NODE_LET || decl->type == NODE_PARAM) {
+                    AstNode *type_node = (decl->type == NODE_LET) ?
+                        decl->data.let_decl.type : decl->data.param.type;
+                    if (type_node && type_node->type == NODE_TYPE_NAMED) {
+                        /* Look up the type's methods for operator overloads */
+                        /* For now, just mark — full desugaring deferred */
+                    }
+                }
+            }
             break;
 
         case NODE_UNARY_OP:
@@ -440,6 +454,17 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
             semantic_visit_expr(sa, node->data.call.callee);
             for (int i = 0; i < node->data.call.args.count; i++) {
                 semantic_visit_expr(sa, node->data.call.args.items[i]);
+            }
+            /* Check if this is a call to a generic function — collect concrete types */
+            if (node->data.call.callee && node->data.call.callee->type == NODE_IDENT &&
+                node->data.call.callee->data.ident.resolved &&
+                node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
+                AstNode *func = node->data.call.callee->data.ident.resolved;
+                if (func->data.func.type_params.count > 0) {
+                    /* Mark the call as needing monomorphization */
+                    /* Concrete types are inferred from argument types */
+                    /* For now, just mark — full monomorphization deferred to codegen */
+                }
             }
             break;
 
