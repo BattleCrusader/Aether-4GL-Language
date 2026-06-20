@@ -940,6 +940,15 @@ static AstNode *parse_type_base(Parser *p) {
         return node_type_named(p->arena, p->previous.loc, name);
     }
 
+    /* dyn Trait — dynamic dispatch */
+    if (parser_match(p, TOKEN_KW_DYN)) {
+        AstNode *inner = parse_type(p);
+        AstNode *t = node_create(p->arena, NODE_TYPE_REF, p->previous.loc);
+        t->data.type_node.elem_type = inner;
+        t->data.type_node.is_ref = true;
+        return t;
+    }
+
     /* ptr T — detect from identifier */
     if (parser_check(p, TOKEN_IDENT) && sv_eq_cstr(p->current.text, "ptr")) {
         parser_advance(p);
@@ -1000,6 +1009,8 @@ static AstNode *parse_type_base(Parser *p) {
         t->data.type_node.is_rc = true;
         return t;
     }
+
+    /* ptr T — raw pointer (parsed as identifier in parse_type_base) */
 
     parser_error(p, p->current, "expected type");
     parser_advance(p); /* skip */
