@@ -1,0 +1,41 @@
+# std/str.ae — String operations: concat, split, trim, to_upper, to_lower
+# Freestanding standard library — stub implementations
+
+func concat(a: string, b: string): string {
+    asm {
+        ; concatenate two strings, return new string in rax
+        xor rax, rax
+    }
+}
+
+func split(s: string, delimiter: string): [string] {
+    asm {
+        ; split string by delimiter, return pointer to slice
+        xor rax, rax
+    }
+}
+
+func trim(s: string): string {
+    asm {
+        ; trim leading/trailing whitespace
+        xor rax, rax
+    }
+}
+
+func to_upper(s: string): string {
+    asm {
+        ; convert to uppercase
+        xor rax, rax
+    }
+}
+
+func to_lower(s: string): string {
+    asm {
+        ; convert to lowercase
+        xor rax, rax
+    }
+}
+
+func main(): u64 {
+    return 0
+}

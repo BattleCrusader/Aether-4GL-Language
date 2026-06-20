@@ -1,0 +1,32 @@
+# std/collections.ae — Simple collections: Array, List
+# Freestanding standard library — stub implementations
+
+struct Array {
+    data: u64
+    len: u64
+    cap: u64
+}
+
+struct List {
+    data: u64
+    len: u64
+    cap: u64
+}
+
+func array_new(): Array {
+    asm {
+        xor rax, rax
+        xor rdx, rdx
+    }
+}
+
+func list_new(): List {
+    asm {
+        xor rax, rax
+        xor rdx, rdx
+    }
+}
+
+func main(): u64 {
+    return 0
+}

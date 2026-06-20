@@ -1,0 +1,4 @@
+protocol Readable {
+    func read(): int
+    func close()
+}

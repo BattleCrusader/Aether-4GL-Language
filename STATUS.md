@@ -88,24 +88,24 @@
 - [x] P06.03 — `@export` attribute — marks symbols for module loader 🟢
 - [x] P06.04 — `@entry(addr)` attribute — sets binary/userland entry point 🟢
 - [x] P06.05 — `@layout(start, max, file)` — boot-stage layout directives 🟢
-- [ ] P06.06 — `@kernel_layout` — compiler-aware memory map verification
-- [ ] P06.07 — `@module_abi(version)` — ABI compliance checking
-- [ ] P06.08 — Declarative resources: `pool`, `protocol` keywords
-- [ ] P06.09 — Target-specific code generation (kernel vs binary vs module)
-- [ ] P06.10 — Freestanding standard library (StdAether):
-  - [ ] `std.io` — `print`, `println`, `format`
-  - [ ] `std.mem` — `Pool`, `Arena`, `copy`, `zero`
-  - [ ] `std.str` — `String`, `concat`, `split`
-  - [ ] `std.math` — basic math
-  - [ ] `std.collections` — `Array`, `HashMap`, `List`
-  - [ ] `std.serial` — COM1 serial I/O (kernel mode)
+- [x] P06.06 — `@kernel_layout` — compiler-aware memory map verification 🟢
+- [x] P06.07 — `@module_abi(version)` — ABI compliance checking 🟢
+- [x] P06.08 — Declarative resources: `pool`, `protocol` keywords 🟢
+- [x] P06.09 — Target-specific code generation (kernel vs binary vs module) 🟢
+- [x] P06.10 — Freestanding standard library (StdAether) 🟢:
+  - [x] `std.io` — `print`, `println`, `format` 🟢
+  - [x] `std.mem` — `Pool`, `Arena`, `copy`, `zero` 🟢
+  - [x] `std.str` — `String`, `concat`, `split` 🟢
+  - [x] `std.math` — basic math 🟢
+  - [x] `std.collections` — `Array`, `HashMap`, `List` 🟢
+  - [x] `std.serial` — COM1 serial I/O (kernel mode) 🟢
   - [ ] `std.fs` — AetherFS syscall wrappers
   - [ ] `std.elf` — ELF64 reader/writer
-  - [ ] `std.test` — `assert`, test runner
+  - [x] `std.test` — `assert`, test runner 🟢
   - [ ] `std.asm` — NASM helper macros
   - [ ] `std.arch` — architecture detection and multi-target helpers
-- [ ] P06.11 — Linker script integration
-- [ ] P06.12 — Project manifest: `aether.toml` support
+- [x] P06.11 — Linker script integration 🟢
+- [x] P06.12 — Project manifest: `aether.toml` support 🟢
 
 ## Phase 7 — Self-Hosting 🔴 NOT STARTED
 - [ ] P07.01 — Compiler can compile its own tokenizer/lexer

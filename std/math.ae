@@ -1,0 +1,38 @@
+# std/math.ae — Basic math: abs, min, max, clamp
+# Freestanding standard library — stub implementations
+
+func abs_val(value: int): int {
+    asm {
+        ; |value|
+        xor eax, eax
+    }
+    return 0
+}
+
+func min_val(a: int, b: int): int {
+    asm {
+        ; min(a, b)
+        xor eax, eax
+    }
+    return 0
+}
+
+func max_val(a: int, b: int): int {
+    asm {
+        ; max(a, b)
+        xor eax, eax
+    }
+    return 0
+}
+
+func clamp_val(value: int, lo: int, hi: int): int {
+    asm {
+        ; clamp value between lo and hi
+        xor eax, eax
+    }
+    return 0
+}
+
+func main(): u64 {
+    return 0
+}

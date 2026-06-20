@@ -260,6 +260,60 @@ static void test_complex_program() {
     PASS();
 }
 
+static void test_pool_decl() {
+    TEST("pool declaration");
+    const char *src = "pool PagePool of size 4096, count 64, alignment 4096";
+    AstNode *p = parse_source(src, "pool");
+    if (!p) { FAIL("parse failed"); return; }
+    if (count_decls(p) < 1) { FAIL("expected 1 decl"); return; }
+    AstNode *pool = p->data.list.items[0];
+    ASSERT(pool->type == NODE_POOL_DECL, "expected POOL_DECL");
+    ASSERT(pool->data.pool_decl.name != NULL, "pool has name");
+    ASSERT(sv_eq_cstr(pool->data.pool_decl.name->data.ident.name, "PagePool"), "pool name is PagePool");
+    ASSERT(pool->data.pool_decl.size == 4096, "pool size = 4096");
+    ASSERT(pool->data.pool_decl.count == 64, "pool count = 64");
+    ASSERT(pool->data.pool_decl.alignment == 4096, "pool alignment = 4096");
+    PASS();
+}
+
+static void test_pool_decl_minimal() {
+    TEST("pool declaration — name only");
+    AstNode *p = parse_source("pool ScratchBuf", "pool-min");
+    if (!p) { FAIL("parse failed"); return; }
+    AstNode *pool = p->data.list.items[0];
+    ASSERT(pool->type == NODE_POOL_DECL, "expected POOL_DECL");
+    ASSERT(sv_eq_cstr(pool->data.pool_decl.name->data.ident.name, "ScratchBuf"), "pool name");
+    ASSERT(pool->data.pool_decl.size == 0, "default size = 0");
+    PASS();
+}
+
+static void test_protocol_decl() {
+    TEST("protocol declaration");
+    const char *src = "protocol Readable { func read(): int func close() }";
+    AstNode *p = parse_source(src, "proto");
+    if (!p) { FAIL("parse failed"); return; }
+    if (count_decls(p) < 1) { FAIL("expected 1 decl"); return; }
+    AstNode *proto = p->data.list.items[0];
+    ASSERT(proto->type == NODE_PROTOCOL_DECL, "expected PROTOCOL_DECL");
+    ASSERT(sv_eq_cstr(proto->data.protocol_decl.name->data.ident.name, "Readable"), "protocol name");
+    ASSERT(proto->data.protocol_decl.methods.count == 2, "expected 2 methods");
+    if (proto->data.protocol_decl.methods.count >= 2) {
+        AstNode *m0 = proto->data.protocol_decl.methods.items[0];
+        ASSERT(m0->type == NODE_FUNC_DECL, "method is FUNC_DECL");
+    }
+    PASS();
+}
+
+static void test_protocol_decl_empty() {
+    TEST("protocol declaration — empty body");
+    AstNode *p = parse_source("protocol Empty {}", "proto-empty");
+    if (!p) { FAIL("parse failed"); return; }
+    AstNode *proto = p->data.list.items[0];
+    ASSERT(proto->type == NODE_PROTOCOL_DECL, "expected PROTOCOL_DECL");
+    ASSERT(proto->data.protocol_decl.methods.count == 0, "0 methods");
+    PASS();
+}
+
 /* ================================================================ */
 
 int main() {
@@ -279,6 +333,11 @@ int main() {
     test_binary_expr();
     test_string_literal();
     test_complex_program();
+
+    test_pool_decl();
+    test_pool_decl_minimal();
+    test_protocol_decl();
+    test_protocol_decl_empty();
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

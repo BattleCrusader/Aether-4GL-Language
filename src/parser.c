@@ -173,6 +173,8 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     func->data.func.layout_start = (uint64_t)last_attr->data.attr.layout_start;
                     func->data.func.layout_max = (uint64_t)last_attr->data.attr.layout_max;
                     func->data.func.layout_file = last_attr->data.attr.layout_file;
+                } else if (strcmp(aname, "kernel_layout") == 0) {
+                    func->data.func.is_kernel_layout = true;
                 }
             }
             node_list_append(decls, func);
@@ -240,14 +242,30 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
         /* module name { decls } */
         Token name = p->current; parser_advance(p);
         AstNode *mod = node_create(p->arena, NODE_MODULE_DECL, name.loc);
+        mod->data.module_decl.name = node_ident(p->arena, name.loc, name.text);
+        mod->data.module_decl.module_abi_version = -1;
         if (parser_check(p, TOKEN_LBRACE)) {
             parser_advance(p);
-            /* parse module body */
+            /* parse module body — decls go to top-level for codegen compatibility */
             while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
+                while (parser_match(p, TOKEN_NEWLINE));
                 parse_declaration(p, decls);
                 while (parser_match(p, TOKEN_NEWLINE));
             }
             parser_expect(p, TOKEN_RBRACE, "module body");
+        }
+        /* Apply @module_abi(version=N) attribute */
+        if (last_attr) {
+            const char *aname = arena_strndup(p->arena,
+                last_attr->data.ident.name.data,
+                last_attr->data.ident.name.len);
+            if (strcmp(aname, "module_abi") == 0) {
+                if (last_attr->data.attr.has_module_abi) {
+                    mod->data.module_decl.module_abi_version = (int)last_attr->data.attr.module_abi_version;
+                } else {
+                    parser_error(p, name, "@module_abi requires version=N argument");
+                }
+            }
         }
         node_list_append(decls, mod);
     } else if (parser_match(p, TOKEN_KW_TRAIT)) {
@@ -269,6 +287,77 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                 parser_expect(p, TOKEN_RBRACE, "trait body");
             }
             node_list_append(decls, t);
+        }
+    } else if (parser_match(p, TOKEN_KW_POOL)) {
+        /* pool Name of size N, count M, alignment A */
+        if (parser_check(p, TOKEN_IDENT)) {
+            Token name_tok = p->current; parser_advance(p);
+            AstNode *pool_node = node_create(p->arena, NODE_POOL_DECL, name_tok.loc);
+            pool_node->data.pool_decl.name = node_ident(p->arena, name_tok.loc, name_tok.text);
+            pool_node->data.pool_decl.size = 0;
+            pool_node->data.pool_decl.count = 0;
+            pool_node->data.pool_decl.alignment = 0;
+
+            /* Parse optional "of size N, count M, alignment A" */
+            if (parser_check(p, TOKEN_IDENT) && 
+                sv_eq_cstr(p->current.text, "of")) {
+                parser_advance(p); /* consume "of" */
+                if (parser_check(p, TOKEN_IDENT) &&
+                    sv_eq_cstr(p->current.text, "size")) {
+                    parser_advance(p); /* consume "size" */
+                    if (parser_check(p, TOKEN_INT_LITERAL)) {
+                        pool_node->data.pool_decl.size = p->current.val.int_value;
+                        parser_advance(p);
+                    }
+                }
+                /* Optional ", count M" */
+                if (parser_match(p, TOKEN_COMMA)) {
+                    if (parser_check(p, TOKEN_IDENT) &&
+                        sv_eq_cstr(p->current.text, "count")) {
+                        parser_advance(p);
+                        if (parser_check(p, TOKEN_INT_LITERAL)) {
+                            pool_node->data.pool_decl.count = p->current.val.int_value;
+                            parser_advance(p);
+                        }
+                    }
+                }
+                /* Optional ", alignment A" */
+                if (parser_match(p, TOKEN_COMMA)) {
+                    if (parser_check(p, TOKEN_IDENT) &&
+                        sv_eq_cstr(p->current.text, "alignment")) {
+                        parser_advance(p);
+                        if (parser_check(p, TOKEN_INT_LITERAL)) {
+                            pool_node->data.pool_decl.alignment = p->current.val.int_value;
+                            parser_advance(p);
+                        }
+                    }
+                }
+            }
+
+            node_list_append(decls, pool_node);
+        } else {
+            parser_error(p, p->current, "expected pool name");
+        }
+    } else if (parser_match(p, TOKEN_KW_PROTOCOL)) {
+        /* protocol Name { func_decls } */
+        if (parser_check(p, TOKEN_IDENT)) {
+            Token name_tok = p->current; parser_advance(p);
+            AstNode *proto = node_create(p->arena, NODE_PROTOCOL_DECL, name_tok.loc);
+            proto->data.protocol_decl.name = node_ident(p->arena, name_tok.loc, name_tok.text);
+            if (parser_match(p, TOKEN_LBRACE)) {
+                while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
+                    if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
+                        parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                    if (parser_match(p, TOKEN_KW_FUNC)) {
+                        AstNode *method = parse_func_decl(p);
+                        if (method) node_list_append(&proto->data.protocol_decl.methods, method);
+                    } else { parser_advance(p); }
+                }
+                parser_expect(p, TOKEN_RBRACE, "protocol body");
+            }
+            node_list_append(decls, proto);
+        } else {
+            parser_error(p, p->current, "expected protocol name");
         }
     } else if (parser_match(p, TOKEN_KW_IMPL)) {
         /* impl Trait for Type { methods } */
@@ -1143,6 +1232,8 @@ AstNode *parse_attribute(Parser *p) {
         attr->data.attr.has_layout_start = false;
         attr->data.attr.has_layout_max = false;
         attr->data.attr.layout_file = (StringView){0};
+        attr->data.attr.has_module_abi = false;
+        attr->data.attr.module_abi_version = -1;
 
         /* @name(payload) — parenthesized attribute arguments */
         if (parser_match(p, TOKEN_LPAREN)) {
@@ -1178,6 +1269,9 @@ AstNode *parse_attribute(Parser *p) {
                             } else if (klen == 3 && strncmp(key.data, "max", 3) == 0) {
                                 attr->data.attr.has_layout_max = true;
                                 attr->data.attr.layout_max = (int64_t)val;
+                            } else if (klen == 7 && strncmp(key.data, "version", 7) == 0) {
+                                attr->data.attr.has_module_abi = true;
+                                attr->data.attr.module_abi_version = (int64_t)val;
                             }
                         } else if (parser_check(p, TOKEN_STRING_LITERAL)) {
                             attr->data.attr.layout_file = p->current.text; parser_advance(p);

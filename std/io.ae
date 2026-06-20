@@ -1,0 +1,23 @@
+# std/io.ae — I/O operations: print, format, write
+# Freestanding standard library — stub implementations
+
+func print(value: string) {
+    # For host targets, call print builtin
+    # For freestanding, call syscall
+    asm {
+        ; host target calls print builtin
+        ; freestanding calls sys_puts
+    }
+}
+
+func println(value: string) {
+    print(value)
+    asm {
+        ; sys_putc(10) for newline
+        nop
+    }
+}
+
+func main(): u64 {
+    return 0
+}

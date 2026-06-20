@@ -1,0 +1,28 @@
+# std/test.ae — Testing: assert, test runner stub
+# Freestanding standard library — stub implementations
+
+func assert(condition: bool, message: string) {
+    asm {
+        ; assert condition, panic with message if false
+        nop
+    }
+}
+
+func assert_eq(a: u64, b: u64, message: string) {
+    asm {
+        ; assert a == b
+        nop
+    }
+}
+
+func test_run(name: string): u64 {
+    asm {
+        ; run a test function and report
+        xor rax, rax
+    }
+    return 0
+}
+
+func main(): u64 {
+    return 0
+}

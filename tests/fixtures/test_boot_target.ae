@@ -1,0 +1,8 @@
+# test_boot_target.ae — Boot sector test (flat binary)
+# Must be 512 bytes or less
+
+@layout(start=0x7C00, max=512)
+@entry(0x7C00)
+func boot_entry() {
+    let x = 42
+}

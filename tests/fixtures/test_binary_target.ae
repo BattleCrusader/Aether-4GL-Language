@@ -1,0 +1,6 @@
+# test_binary_target.ae — Binary target test
+# Returns 42
+
+func main(): u64 {
+    return 42
+}

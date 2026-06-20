@@ -1,0 +1,6 @@
+@kernel_layout
+func init_memory() {
+    let bitmap = 0x1000
+    let registry = 0x4000
+    let syscall = 0x5000
+}

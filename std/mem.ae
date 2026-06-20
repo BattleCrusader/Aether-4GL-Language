@@ -1,0 +1,38 @@
+# std/mem.ae — Memory operations: copy, zero, alloc, free
+# Freestanding standard library — stub implementations
+
+func mem_copy(dest: u64, src: u64, size: u64) {
+    asm {
+        ; memcpy implementation
+        ; rdi = dest, rsi = src, rdx = size
+        nop
+    }
+}
+
+func mem_zero(ptr: u64, size: u64) {
+    asm {
+        ; memset(ptr, 0, size)
+        nop
+    }
+}
+
+func alloc(size: u64): u64 {
+    asm {
+        ; allocate size bytes, return pointer
+        ; freestanding: sbrk / brk
+        ; host: malloc
+        nop
+    }
+    return 0
+}
+
+func free(ptr: u64) {
+    asm {
+        ; free allocated memory
+        nop
+    }
+}
+
+func main(): u64 {
+    return 0
+}

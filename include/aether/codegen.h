@@ -15,6 +15,10 @@ typedef enum {
     TARGET_MACHO64,        /* x86_64 Mach-O for macOS */
     TARGET_HOST,           /* auto-detect: Mach-O on macOS, ELF64 on Linux */
     TARGET_ELF64_HOST,     /* native ELF64 for Linux host */
+    TARGET_KERNEL,         /* x86_64 kernel ELF at 0x1000000 */
+    TARGET_MODULE,         /* .ko module ELF for Aether OS */
+    TARGET_BINARY,         /* /bin/ userland ELF at 0x2000000 */
+    TARGET_BOOT,           /* flat binary boot sector */
 } Target;
 
 typedef struct AutoDrop AutoDrop;
@@ -38,6 +42,8 @@ typedef struct {
     int64_t layout_start;    /* [org N] origin */
     int64_t layout_max;      /* max binary size, pad/error if exceeded */
     const char *layout_file; /* output filename, NULL = use normal pipeline */
+    /* User-supplied linker script path, NULL = auto-generate */
+    const char *linker_script;
 } Codegen;
 
 Codegen *codegen_create(Arena *a);

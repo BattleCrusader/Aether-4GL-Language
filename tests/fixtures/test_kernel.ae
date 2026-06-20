@@ -1,0 +1,6 @@
+# test_kernel.ae — Kernel target test
+# Compiles as kernel ELF, returns 42
+
+func kernel_entry(): u64 {
+    return 42
+}

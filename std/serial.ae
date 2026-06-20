@@ -1,0 +1,38 @@
+# std/serial.ae — COM1 serial I/O for kernel mode
+# Freestanding standard library — stub implementations
+
+const COM1_PORT = 0x3F8
+
+func serial_init(): bool {
+    asm {
+        ; initialize COM1 serial port
+        xor eax, eax
+    }
+    return false
+}
+
+func serial_putc(c: byte) {
+    asm {
+        ; write one byte to COM1
+        nop
+    }
+}
+
+func serial_puts(s: string) {
+    asm {
+        ; write string to COM1
+        nop
+    }
+}
+
+func serial_getc(): byte {
+    asm {
+        ; read one byte from COM1
+        xor eax, eax
+    }
+    return 0
+}
+
+func main(): u64 {
+    return 0
+}

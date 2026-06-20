@@ -1,0 +1,6 @@
+@module_abi(version=1)
+module mymod {
+func main(): int {
+return 42
+}
+}

@@ -86,16 +86,24 @@ TEST_FIXTURES = \
 	tests/fixtures/test_dyn.ae \
 	tests/fixtures/test_sysfunc.ae \
 	tests/fixtures/test_export.ae \
-	tests/fixtures/test_entry.ae
+	tests/fixtures/test_entry.ae \
+	tests/fixtures/test_module_abi.ae
 
 # Expected exit codes for each fixture
-TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0 0 42 42 42 42 42 42 128 42 42 42 42 42 42 42 42
+TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0 0 42 42 42 42 42 42 128 42 42 42 42 42 42 42 42 42
 
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \
 	tests/fixtures/test_layout.ae
 
 LAYOUT_EXPECTED_SIZES = 512
+
+# New-target test fixtures — compile check only (no native run)
+NEW_TARGET_FIXTURES = \
+	tests/fixtures/test_kernel.ae \
+	tests/fixtures/test_module_target.ae \
+	tests/fixtures/test_binary_target.ae \
+	tests/fixtures/test_boot_target.ae
 
 test-host: aether-cli
 	@echo "=== Host-Native Test Runner ==="

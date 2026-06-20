@@ -31,6 +31,7 @@ AstNode *node_func_decl(Arena *a, Location loc, AstNode *name, bool is_pub, bool
         node->data.func.is_static = is_static;
         node->data.func.sys_index = -1;
         node->data.func.entry_addr = -1;
+        node->data.func.is_kernel_layout = false;
         node->data.func.has_layout = false;
         node->data.func.layout_start = 0;
         node->data.func.layout_max = 0;
@@ -345,6 +346,8 @@ const char *node_type_name(NodeType type) {
         case NODE_TYPE_ALIAS: return "TYPE_ALIAS";
         case NODE_TRAIT_DECL: return "TRAIT_DECL";
         case NODE_IMPL_BLOCK: return "IMPL_BLOCK";
+        case NODE_POOL_DECL: return "POOL_DECL";
+        case NODE_PROTOCOL_DECL: return "PROTOCOL_DECL";
         case NODE_BLOCK: return "BLOCK";
         case NODE_LET: return "LET";
         case NODE_ASSIGN: return "ASSIGN";
