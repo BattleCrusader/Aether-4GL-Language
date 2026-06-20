@@ -118,17 +118,17 @@
 - [ ] P07.08 — Compiler can compile itself with no C bootstrap
 - [ ] P07.09 — C bootstrap source archived as historical reference only
 
-## Phase 8 — Multi-Target Assembler 🔴 NOT STARTED
-- [ ] P08.01 — NASM IR definition (instruction set, register file, addressing modes)
-- [ ] P08.02 — NASM parser (extract instructions, operands, directives from asm blocks)
-- [ ] P08.03 — x86_64 backend (passthrough — direct NASM emission)
-- [ ] P08.04 — ARM64 backend (instruction mapping table)
-- [ ] P08.05 — RISC-V backend (instruction mapping table)
-- [ ] P08.06 — Register translation layer (NASM regs → target regs)
-- [ ] P08.07 — Addressing mode translation
-- [ ] P08.08 — Directive translation (align, section, etc.)
-- [ ] P08.09 — Pseudo-instruction expansion
-- [ ] P08.10 — Multi-target test suite (same NASM source → multiple architectures)
+## Phase 8 — Multi-Target Assembler 🔵 IN PROGRESS
+- [x] P08.01 — NASM IR definition (instruction set, register file, addressing modes) 🟢
+- [x] P08.02 — NASM parser (extract instructions, operands, directives from asm blocks) 🟢
+- [x] P08.03 — x86_64 backend (passthrough — direct NASM emission) 🟢
+- [x] P08.04 — ARM64 backend (instruction mapping table) 🟢
+- [x] P08.05 — RISC-V backend (instruction mapping table) 🟢
+- [x] P08.06 — Register translation layer (NASM regs → target regs) 🟢
+- [x] P08.07 — Addressing mode translation 🟢
+- [x] P08.08 — Directive translation (align, section, etc.) 🟢
+- [x] P08.09 — Pseudo-instruction expansion 🟢
+- [x] P08.10 — Multi-target test suite (same NASM source → multiple architectures) 🟢
 - [ ] P08.11 — Integration with `--target` CLI flag
 
 ## Phase 9 — Optimization & Polish 🔴 NOT STARTED

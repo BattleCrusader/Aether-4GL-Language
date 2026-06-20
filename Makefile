@@ -15,7 +15,12 @@ CORE_SRCS = \
 	src/ast.c \
 	src/parser.c \
 	src/semantic.c \
-	src/codegen.c
+	src/codegen.c \
+	src/asm_ir.c \
+	src/asm_parser.c \
+	src/asm_backend_x86_64.c \
+	src/asm_backend_arm64.c \
+	src/asm_backend_riscv64.c
 
 CORE_OBJS = $(CORE_SRCS:src/%.c=$(BUILD_DIR)/%.o)
 
@@ -40,6 +45,9 @@ $(BUILD_DIR)/test_tokenizer: $(CORE_OBJS) $(BUILD_DIR)/test_tokenizer.o
 $(BUILD_DIR)/test_parser: $(CORE_OBJS) $(BUILD_DIR)/test_parser.o
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $^
 
+$(BUILD_DIR)/test_asm: $(CORE_OBJS) $(BUILD_DIR)/test_asm.o
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $^
+
 $(BUILD_DIR)/aether.o: src/aether.c
 	@mkdir -p $(@D)
 	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
@@ -58,6 +66,9 @@ test: tokenizer parser-test
 	@echo ""
 	@echo "=== Parser Tests ==="
 	@$(BUILD_DIR)/test_parser
+	@echo ""
+	@echo "=== ASM Tests ==="
+	@$(BUILD_DIR)/test_asm
 
 # Host-native test runner — compiles .ae fixtures and runs them natively
 TEST_FIXTURES = \
