@@ -287,6 +287,10 @@ Codegen *codegen_create(Arena *a) {
     cg->auto_drops = NULL;
     cg->entry_addr = 0;
     cg->entry_func = NULL;
+    cg->has_layout = false;
+    cg->layout_start = 0;
+    cg->layout_max = 0;
+    cg->layout_file = NULL;
     return cg;
 }
 
@@ -1365,28 +1369,30 @@ static void cg_func(Codegen *cg, AstNode *func) {
     cg_write_fmt(cg, "global %s\n", fn_label);
     cg_write_fmt(cg, "%s:\n", fn_label);
 
-    /* Prologue */
-    cg_inst1(cg, "push", "rbp");
-    cg_inst1(cg, "mov", "rbp, rsp");
+    /* Prologue — skip for @layout functions (flat binary boot sectors, etc.) */
+    if (!func->data.func.has_layout) {
+        cg_inst1(cg, "push", "rbp");
+        cg_inst1(cg, "mov", "rbp, rsp");
 
-    /* Allocate stack frame */
-    if (frame_size > 0) {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "sub rsp, %d", frame_size);
-        cg_inst(cg, buf);
-    }
+        /* Allocate stack frame */
+        if (frame_size > 0) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "sub rsp, %d", frame_size);
+            cg_inst(cg, buf);
+        }
 
-    /* Save incoming args from registers to their stack slots */
-    for (int i = 0; i < func->data.func.params.count && i < 6; i++) {
-        const char *regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-        AstNode *param = func->data.func.params.items[i];
-        int offset = find_var_offset(slots, param);
-        char buf[64];
-        snprintf(buf, sizeof(buf), "mov [rbp%+d], %s", offset, regs[i]);
-        cg_inst(cg, buf);
+        /* Save incoming args from registers to their stack slots */
+        for (int i = 0; i < func->data.func.params.count && i < 6; i++) {
+            const char *regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+            AstNode *param = func->data.func.params.items[i];
+            int offset = find_var_offset(slots, param);
+            char buf[64];
+            snprintf(buf, sizeof(buf), "mov [rbp%+d], %s", offset, regs[i]);
+            cg_inst(cg, buf);
+        }
+        /* Args > 6 are on the stack already; they're at rbp+16, rbp+24, etc.
+           For now we only handle up to 6 args. */
     }
-    /* Args > 6 are on the stack already; they're at rbp+16, rbp+24, etc.
-       For now we only handle up to 6 args. */
 
     /* Pre-conditions: check before body */
     if (func->data.func.pre_conditions.count > 0) {
@@ -1438,9 +1444,11 @@ static void cg_func(Codegen *cg, AstNode *func) {
     }
 
     cg_emit_defers(cg, slots);
-    cg_inst1(cg, "mov", "rsp, rbp");
-    cg_inst1(cg, "pop", "rbp");
-    cg_inst(cg, "ret");
+    if (!func->data.func.has_layout) {
+        cg_inst1(cg, "mov", "rsp, rbp");
+        cg_inst1(cg, "pop", "rbp");
+        cg_inst(cg, "ret");
+    }
     cg_write(cg, "\n");
 
     cg_defer_clear(cg);
@@ -1464,97 +1472,123 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         }
     }
 
-    /* First pass: scan for functions with @entry(addr) attribute */
+    /* First pass: scan for functions with @entry(addr) or @layout attributes */
     cg->entry_addr = 0;
     cg->entry_func = NULL;
+    cg->has_layout = false;
+    cg->layout_start = 0;
+    cg->layout_max = 0;
+    cg->layout_file = NULL;
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *node = program->data.list.items[i];
-        if (node->type == NODE_FUNC_DECL && node->data.func.entry_addr != -1) {
-            cg->entry_addr = node->data.func.entry_addr;
-            cg->entry_func = arena_strndup(cg->arena,
-                node->data.func.name->data.ident.name.data,
-                node->data.func.name->data.ident.name.len);
-            break;  /* first entry-point function wins */
+        if (node->type == NODE_FUNC_DECL) {
+            if (node->data.func.entry_addr != -1 && !cg->entry_func) {
+                cg->entry_addr = node->data.func.entry_addr;
+                cg->entry_func = arena_strndup(cg->arena,
+                    node->data.func.name->data.ident.name.data,
+                    node->data.func.name->data.ident.name.len);
+                /* first entry-point function wins */
+            }
+            if (node->data.func.has_layout) {
+                cg->has_layout = true;
+                cg->layout_start = (int64_t)node->data.func.layout_start;
+                cg->layout_max = (int64_t)node->data.func.layout_max;
+                if (node->data.func.layout_file.len > 0) {
+                    cg->layout_file = arena_strndup(cg->arena,
+                        node->data.func.layout_file.data,
+                        node->data.func.layout_file.len);
+                }
+            }
         }
     }
 
     /* Target-specific directives */
     bool is_macho = (cg->target == TARGET_MACHO64);
-    if (!is_macho) {
+    if (!is_macho && !cg->has_layout) {
         cg_write(cg, "bits 64\n");
     }
-    cg_write(cg, "default rel\n\n");
-    cg_write(cg, "section .text\n\n");
+    if (!cg->has_layout) {
+        cg_write(cg, "default rel\n\n");
+    }
 
-    /* Entry point */
-    if (cg->entry_func) {
-        /* @entry(addr) is set — function IS the entry point directly */
-        cg_write_fmt(cg, "; Entry point: %s at 0x%lx\n", cg->entry_func, (unsigned long)cg->entry_addr);
-        cg_write_fmt(cg, "global %s\n", cg->entry_func);
-        /* The function label is emitted by cg_func later — no wrapper needed
-           for freestanding targets (linker script handles ENTRY(func_name)).
-           For host targets, we still need an OS-visible entry point that
-           calls the @entry function. */
-        if (is_macho) {
-            const char *entry = "_aether_entry";
-            cg_write_fmt(cg, "global %s\n", entry);
-            cg_write_fmt(cg, "%s:\n", entry);
-            cg_inst1(cg, "mov", "rbp, rsp");
-            cg_comment(cg, "call entry function");
-            cg_write_fmt(cg, "    call %s\n", cg->entry_func);
-            cg_comment(cg, "macOS exit(rdi = rax)");
-            cg_inst1(cg, "mov", "rdi, rax");
-            cg_inst1(cg, "mov", "rax, 0x2000001");
-            cg_inst(cg, "syscall");
-            cg_inst(cg, "hlt");
-            cg_write(cg, "\n");
-        } else if (cg->target == TARGET_ELF64_HOST) {
-            const char *entry = "_start";
-            cg_write_fmt(cg, "global %s\n", entry);
-            cg_write_fmt(cg, "%s:\n", entry);
-            cg_inst1(cg, "mov", "rbp, rsp");
-            cg_comment(cg, "call entry function");
-            cg_write_fmt(cg, "    call %s\n", cg->entry_func);
-            cg_comment(cg, "Linux exit(rdi = rax)");
-            cg_inst1(cg, "mov", "rdi, rax");
-            cg_inst1(cg, "mov", "rax, 60");
-            cg_inst(cg, "syscall");
-            cg_inst(cg, "hlt");
-            cg_write(cg, "\n");
-        }
+    /* If @layout is set, use [org N] instead of ELF sections */
+    if (cg->has_layout) {
+        cg_write(cg, "bits 64\n");
+        cg_write_fmt(cg, "; Layout: start=0x%lx, max=%ld bytes\n",
+            (unsigned long)cg->layout_start, (unsigned long)cg->layout_max);
+        cg_write_fmt(cg, "[org 0x%lx]\n", (unsigned long)cg->layout_start);
+        /* Section .text is not emitted for flat binary layout */
     } else {
-        /* Default entry point: wrapper calls main(), then exits */
-        const char *entry;
-        if (is_macho) {
-            entry = "_aether_entry";  /* Mach-O: custom entry, linker -e flag */
-        } else {
-            entry = "_start";          /* ELF: ENTRY(_start) in linker script */
-        }
-        cg_write_fmt(cg, "global %s\n", entry);
-        cg_write_fmt(cg, "%s:\n", entry);
-        cg_inst1(cg, "mov", "rbp, rsp");
-        cg_comment(cg, "call main()");
-        cg_inst(cg, "call main");
+        cg_write(cg, "section .text\n\n");
+    }
 
-        if (is_macho) {
-            /* macOS exit: syscall 0x2000001 */
-            cg_comment(cg, "macOS exit(rdi = rax)");
-            cg_inst1(cg, "mov", "rdi, rax");
-            cg_inst1(cg, "mov", "rax, 0x2000001");
-            cg_inst(cg, "syscall");
+    /* Entry point — skip for @layout (flat binaries define their own entry) */
+    if (!cg->has_layout) {
+        if (cg->entry_func) {
+            /* @entry(addr) is set — function IS the entry point directly */
+            cg_write_fmt(cg, "; Entry point: %s at 0x%lx\n", cg->entry_func, (unsigned long)cg->entry_addr);
+            cg_write_fmt(cg, "global %s\n", cg->entry_func);
+            /* For host targets, we still need an OS-visible entry wrapper */
+            if (is_macho) {
+                const char *entry = "_aether_entry";
+                cg_write_fmt(cg, "global %s\n", entry);
+                cg_write_fmt(cg, "%s:\n", entry);
+                cg_inst1(cg, "mov", "rbp, rsp");
+                cg_comment(cg, "call entry function");
+                cg_write_fmt(cg, "    call %s\n", cg->entry_func);
+                cg_comment(cg, "macOS exit(rdi = rax)");
+                cg_inst1(cg, "mov", "rdi, rax");
+                cg_inst1(cg, "mov", "rax, 0x2000001");
+                cg_inst(cg, "syscall");
+                cg_inst(cg, "hlt");
+                cg_write(cg, "\n");
+            } else if (cg->target == TARGET_ELF64_HOST) {
+                const char *entry = "_start";
+                cg_write_fmt(cg, "global %s\n", entry);
+                cg_write_fmt(cg, "%s:\n", entry);
+                cg_inst1(cg, "mov", "rbp, rsp");
+                cg_comment(cg, "call entry function");
+                cg_write_fmt(cg, "    call %s\n", cg->entry_func);
+                cg_comment(cg, "Linux exit(rdi = rax)");
+                cg_inst1(cg, "mov", "rdi, rax");
+                cg_inst1(cg, "mov", "rax, 60");
+                cg_inst(cg, "syscall");
+                cg_inst(cg, "hlt");
+                cg_write(cg, "\n");
+            }
+            /* For freestanding: linker script handles ENTRY(func_name) — no wrapper needed */
         } else {
-            /* Linux exit: syscall 60 */
-            cg_comment(cg, "Linux exit(rdi = rax)");
-            cg_inst1(cg, "mov", "rdi, rax");
-            cg_inst1(cg, "mov", "rax, 60");
-            cg_inst(cg, "syscall");
+            /* Default entry point: wrapper calls main(), then exits */
+            const char *entry;
+            if (is_macho) {
+                entry = "_aether_entry";  /* Mach-O: custom entry, linker -e flag */
+            } else {
+                entry = "_start";          /* ELF: ENTRY(_start) in linker script */
+            }
+            cg_write_fmt(cg, "global %s\n", entry);
+            cg_write_fmt(cg, "%s:\n", entry);
+            cg_inst1(cg, "mov", "rbp, rsp");
+            cg_comment(cg, "call main()");
+            cg_inst(cg, "call main");
+
+            if (is_macho) {
+                cg_comment(cg, "macOS exit(rdi = rax)");
+                cg_inst1(cg, "mov", "rdi, rax");
+                cg_inst1(cg, "mov", "rax, 0x2000001");
+                cg_inst(cg, "syscall");
+            } else {
+                cg_comment(cg, "Linux exit(rdi = rax)");
+                cg_inst1(cg, "mov", "rdi, rax");
+                cg_inst1(cg, "mov", "rax, 60");
+                cg_inst(cg, "syscall");
+            }
+            cg_inst(cg, "hlt");
+            cg_write(cg, "\n");
         }
-        cg_inst(cg, "hlt");
-        cg_write(cg, "\n");
     }
 
     /* Emit runtime helpers and data sections — BEFORE user functions */
-    {
+    if (!cg->has_layout) {
         bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
         if (is_host) {
             /* Bump allocator state in .bss */
@@ -1672,26 +1706,34 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         if (node->type == NODE_FUNC_DECL) {
             cg->current_func = node;
             cg_func(cg, node);
+            /* If this function has @layout, emit padding to exactly fill max bytes */
+            if (node->data.func.has_layout && cg->layout_max > 0) {
+                cg_write_fmt(cg, "; @layout padding to %ld bytes\n", (unsigned long)cg->layout_max);
+                cg_write_fmt(cg, "times %ld-($-$$) db 0\n", (unsigned long)cg->layout_max);
+                cg_write(cg, "\n");
+            }
         }
     }
 
     /* Emit string table — uses the label stored in each StringEntry */
-    cg_write(cg, "section .rodata\n");
-    for (StringEntry *e = string_entries; e; e = e->next) {
-        cg_write_fmt(cg, "Lstr%d: db ", e->label_num);
-        /* Emit printable chars between quotes, non-printable as numeric */
-        cg_write(cg, "\"");
-        for (size_t i = 0; i < e->sv.len; i++) {
-            unsigned char c = (unsigned char)e->sv.data[i];
-            if (c == '"') cg_write(cg, "\\\"");
-            else if (c == '\\') cg_write(cg, "\\\\");
-            else if (c >= 32 && c < 127) { char buf[2] = {c, 0}; cg_write(cg, buf); }
-            else {
-                /* Non-printable: close string, emit as numeric, reopen */
-                cg_write_fmt(cg, "\", %u, \"", c);
+    if (!cg->has_layout) {
+        cg_write(cg, "section .rodata\n");
+        for (StringEntry *e = string_entries; e; e = e->next) {
+            cg_write_fmt(cg, "Lstr%d: db ", e->label_num);
+            /* Emit printable chars between quotes, non-printable as numeric */
+            cg_write(cg, "\"");
+            for (size_t i = 0; i < e->sv.len; i++) {
+                unsigned char c = (unsigned char)e->sv.data[i];
+                if (c == '"') cg_write(cg, "\\\"");
+                else if (c == '\\') cg_write(cg, "\\\\");
+                else if (c >= 32 && c < 127) { char buf[2] = {c, 0}; cg_write(cg, buf); }
+                else {
+                    /* Non-printable: close string, emit as numeric, reopen */
+                    cg_write_fmt(cg, "\", %u, \"", c);
+                }
             }
+            cg_write(cg, "\", 0\n");
         }
-        cg_write(cg, "\", 0\n");
     }
 
     cg->output[cg->output_len] = '\0';
@@ -1788,6 +1830,32 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
 
     /* Step 2: Assemble with nasm */
     char cmd[4096];
+
+    /* If @layout is set, assemble as flat binary — direct output, no linker */
+    if (cg->has_layout) {
+        snprintf(cmd, sizeof(cmd), "nasm -f bin -o %s %s", output_file, asm_file);
+        int ret = system(cmd);
+        if (ret != 0) {
+            fprintf(stderr, "nasm (flat binary) failed (exit %d)\n", ret);
+            return ret;
+        }
+        /* Verify binary fits within layout_max if specified */
+        if (cg->layout_max > 0) {
+            FILE *f = fopen(output_file, "rb");
+            if (f) {
+                fseek(f, 0, SEEK_END);
+                long actual = ftell(f);
+                fclose(f);
+                if (actual > cg->layout_max) {
+                    fprintf(stderr, "ERROR: binary size %ld exceeds @layout max %ld\n",
+                        actual, (long)cg->layout_max);
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+
     snprintf(cmd, sizeof(cmd), "nasm -f %s -o %s %s", nasm_format, obj_file, asm_file);
     int ret = system(cmd);
     if (ret != 0) {

@@ -33,6 +33,11 @@ typedef struct {
     AutoDrop *auto_drops;    /* linked list of class auto-drop entries */
     int64_t entry_addr;      /* load address from @entry(addr), 0 = default */
     const char *entry_func;  /* name of the entry-point function, NULL = default */
+    /* @layout state — for flat binary boot sectors etc. */
+    bool has_layout;
+    int64_t layout_start;    /* [org N] origin */
+    int64_t layout_max;      /* max binary size, pad/error if exceeded */
+    const char *layout_file; /* output filename, NULL = use normal pipeline */
 } Codegen;
 
 Codegen *codegen_create(Arena *a);

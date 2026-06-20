@@ -168,6 +168,11 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     func->data.func.is_exported = true;
                 } else if (strcmp(aname, "entry") == 0) {
                     func->data.func.entry_addr = last_attr->data.attr.int_value;
+                } else if (strcmp(aname, "layout") == 0) {
+                    func->data.func.has_layout = true;
+                    func->data.func.layout_start = (uint64_t)last_attr->data.attr.layout_start;
+                    func->data.func.layout_max = (uint64_t)last_attr->data.attr.layout_max;
+                    func->data.func.layout_file = last_attr->data.attr.layout_file;
                 }
             }
             node_list_append(decls, func);
@@ -1077,11 +1082,59 @@ AstNode *parse_attribute(Parser *p) {
         attr->data.ident.name = t.text;
         attr->data.attr.name = t.text;
         attr->data.attr.int_value = -1;
+        attr->data.attr.has_layout_start = false;
+        attr->data.attr.has_layout_max = false;
+        attr->data.attr.layout_file = (StringView){0};
 
-        /* @entry(0x2000000) — attribute with numeric payload */
+        /* @name(payload) — parenthesized attribute arguments */
         if (parser_match(p, TOKEN_LPAREN)) {
-            /* Try to parse a numeric expression (hex/decimal) */
-            if (parser_check(p, TOKEN_INT_LITERAL)) {
+            /* Try key=value pairs first (e.g., @layout(start=0x7C00, ...)) */
+            if (parser_check(p, TOKEN_IDENT) || parser_check(p, TOKEN_KW_LAYOUT) ||
+                parser_check(p, TOKEN_KW_ENTRY)) {
+                /* Parse key = value [, key = value] ... */
+                while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+                    /* Skip newlines */
+                    while (parser_match(p, TOKEN_NEWLINE));
+                    if (parser_check(p, TOKEN_RPAREN)) break;
+
+                    /* Parse key — identifier or keyword */
+                    StringView key;
+                    if (parser_check(p, TOKEN_IDENT)) {
+                        key = p->current.text; parser_advance(p);
+                    } else {
+                        /* keyword as key name */
+                        Token kt = p->current; parser_advance(p);
+                        key = kt.text;
+                    }
+
+                    /* Expect = */
+                    if (parser_match(p, TOKEN_EQ)) {
+                        /* Parse value — int or string */
+                        if (parser_check(p, TOKEN_INT_LITERAL)) {
+                            uint64_t val = p->current.val.int_value; parser_advance(p);
+                            /* Match key name */
+                            size_t klen = key.len;
+                            if (klen == 5 && strncmp(key.data, "start", 5) == 0) {
+                                attr->data.attr.has_layout_start = true;
+                                attr->data.attr.layout_start = (int64_t)val;
+                            } else if (klen == 3 && strncmp(key.data, "max", 3) == 0) {
+                                attr->data.attr.has_layout_max = true;
+                                attr->data.attr.layout_max = (int64_t)val;
+                            }
+                        } else if (parser_check(p, TOKEN_STRING_LITERAL)) {
+                            attr->data.attr.layout_file = p->current.text; parser_advance(p);
+                        } else {
+                            /* Skip unknown value */
+                            parser_advance(p);
+                        }
+                    }
+
+                    /* Skip comma (optional before RPAREN) */
+                    while (parser_match(p, TOKEN_COMMA));
+                    while (parser_match(p, TOKEN_NEWLINE));
+                }
+            } else if (parser_check(p, TOKEN_INT_LITERAL)) {
+                /* Numeric payload — @entry(0x2000000) */
                 Token val_tok = p->current; parser_advance(p);
                 attr->data.attr.int_value = (int64_t)val_tok.val.int_value;
             } else {

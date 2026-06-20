@@ -164,6 +164,10 @@ typedef struct {
     bool is_operator;       /* true if this is an operator overload (op_add, etc.) */
     bool is_exported;       /* true if marked with @export */
     int64_t entry_addr;     /* load address from @entry(addr), -1 if not set */
+    bool has_layout;        /* true if @layout attribute is set */
+    uint64_t layout_start;  /* start address from @layout(start=N) */
+    uint64_t layout_max;    /* max size from @layout(max=N) */
+    StringView layout_file; /* output filename from @layout(file="name") */
     AstNodeList pre_conditions;  /* pre(expr) contract expressions */
     AstNodeList post_conditions; /* post(expr) contract expressions */
 } FuncDecl;
@@ -382,10 +386,16 @@ typedef struct {
     AstNode *body;          /* handler block */
 } CatchArm;
 
-/* Attribute: @name or @name(payload) */
+/* Attribute: @name or @name(payload) or @name(key=val, ...) */
 typedef struct {
     StringView name;        /* attribute name (e.g. "export", "entry") */
     int64_t int_value;      /* for numeric payloads like @entry(addr), -1 if not set */
+    /* @layout(start=N, max=M, file="name") params */
+    bool has_layout_start;
+    int64_t layout_start;
+    bool has_layout_max;
+    int64_t layout_max;
+    StringView layout_file; /* empty if not set */
 } AttrData;
 
 /* ================================================================

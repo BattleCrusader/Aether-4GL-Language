@@ -87,7 +87,7 @@
 - [x] P06.02 — `module` keyword — generates kernel module `.ko` ELF 🟢
 - [x] P06.03 — `@export` attribute — marks symbols for module loader 🟢
 - [x] P06.04 — `@entry(addr)` attribute — sets binary/userland entry point 🟢
-- [ ] P06.05 — `@layout(start, max, file)` — boot-stage layout directives
+- [x] P06.05 — `@layout(start, max, file)` — boot-stage layout directives 🟢
 - [ ] P06.06 — `@kernel_layout` — compiler-aware memory map verification
 - [ ] P06.07 — `@module_abi(version)` — ABI compliance checking
 - [ ] P06.08 — Declarative resources: `pool`, `protocol` keywords
