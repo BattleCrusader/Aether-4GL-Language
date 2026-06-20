@@ -158,6 +158,28 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             func->data.func.is_test = is_test;
             node_list_append(decls, func);
         }
+    } else if (parser_match(p, TOKEN_KW_SYS)) {
+        /* sys func name() at(N) — syscall page declaration */
+        if (parser_match(p, TOKEN_KW_FUNC)) {
+            AstNode *func = parse_func_decl(p);
+            if (func) {
+                func->data.func.is_sys = true;
+                func->data.func.access = access;
+                func->data.func.is_pub = is_pub;
+                /* Parse optional at(N) for syscall table index */
+                if (parser_match(p, TOKEN_KW_AT)) {
+                    parser_expect(p, TOKEN_LPAREN, "syscall index");
+                    if (parser_check(p, TOKEN_INT_LITERAL)) {
+                        func->data.func.sys_index = (int)p->current.val.int_value;
+                        parser_advance(p);
+                    }
+                    parser_expect(p, TOKEN_RPAREN, "syscall index");
+                }
+                node_list_append(decls, func);
+            }
+        } else {
+            parser_error(p, p->current, "expected 'func' after 'sys'");
+        }
     } else if (parser_match(p, TOKEN_KW_STRUCT)) {
         AstNode *s = parse_struct_decl(p);
         if (s) {

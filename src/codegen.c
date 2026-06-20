@@ -902,7 +902,24 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 snprintf(buf, sizeof(buf), "%.*s",
                     (int)node->data.call.callee->data.ident.name.len,
                     node->data.call.callee->data.ident.name.data);
-                cg_inst1(cg, "call", buf);
+
+                /* Check if this is a sys func call — emit indirect call through 0x5000 table */
+                if (node->data.call.callee->data.ident.resolved &&
+                    node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL &&
+                    node->data.call.callee->data.ident.resolved->data.func.is_sys) {
+                    int idx = node->data.call.callee->data.ident.resolved->data.func.sys_index;
+                    if (idx >= 0) {
+                        cg_comment(cg, "syscall via 0x5000 table");
+                        char tmp[64];
+                        snprintf(tmp, sizeof(tmp), "mov rax, 0x%x", 0x5000 + idx * 8);
+                        cg_inst(cg, tmp);
+                        cg_inst(cg, "call [rax]");
+                    } else {
+                        cg_inst1(cg, "call", buf);
+                    }
+                } else {
+                    cg_inst1(cg, "call", buf);
+                }
             }
 
             /* Clean up remaining stack args after call */

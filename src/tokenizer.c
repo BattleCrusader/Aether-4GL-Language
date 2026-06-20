@@ -71,6 +71,7 @@ const KeywordEntry KEYWORDS[] = {
     {"run",      TOKEN_KW_RUN},
     {"prop",     TOKEN_KW_PROP},
     {"inline",   TOKEN_KW_INLINE},
+    {"at",       TOKEN_KW_AT},
     {"iflet",    TOKEN_KW_IF_LET},
 };
 
@@ -155,6 +156,7 @@ const char *token_type_name(TokenType type) {
         case TOKEN_KW_RUN: return "run";
         case TOKEN_KW_PROP: return "prop";
         case TOKEN_KW_INLINE: return "inline";
+        case TOKEN_KW_AT: return "at";
         case TOKEN_KW_IF_LET: return "iflet";
         case TOKEN_PLUS: return "+";
         case TOKEN_MINUS: return "-";
