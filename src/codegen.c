@@ -1699,6 +1699,32 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "\n");
     }
 
+    /* Emit top-level asm blocks after bits/default/const but before section .text */
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *node = program->data.list.items[i];
+        if (node->type == NODE_ASM_BLOCK) {
+            if (node->data.asm_block.text) {
+                StringView asm_text = node->data.asm_block.text->data.literal.string_val;
+                if (asm_text.len > 0) {
+                    cg_write(cg, "; top-level asm block\n");
+                    const char *p = asm_text.data;
+                    const char *end = p + asm_text.len;
+                    while (p < end) {
+                        const char *line_start = p;
+                        while (p < end && *p != '\n') p++;
+                        if (p > line_start) {
+                            cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                        } else {
+                            cg_write(cg, "\n");
+                        }
+                        if (p < end) p++;
+                    }
+                    cg_write(cg, "; end top-level asm block\n\n");
+                }
+            }
+        }
+    }
+
     /* If @layout is set, emit bits, org, and auto-padding */
     if (cg->has_layout) {
         /* Emit bits directive from @layout(bits=N), default 64 */
@@ -1776,6 +1802,9 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                 cg_inst1(cg, "mov", "rdi, rax");
                 cg_inst1(cg, "mov", "rax, 60");
                 cg_inst(cg, "syscall");
+            } else if (cg->target == TARGET_BINARY) {
+                cg_comment(cg, "Aether OS binary: ret to shell after main returns");
+                cg_inst(cg, "ret");
             } else {
                 cg_comment(cg, "freestanding: just hlt after main returns");
                 cg_inst(cg, "hlt");
@@ -1898,7 +1927,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         }
     }
 
-    /* Generate each function and top-level asm block */
+    /* Generate each function */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *node = program->data.list.items[i];
         if (node->type == NODE_FUNC_DECL) {
@@ -1917,27 +1946,6 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                     cg_write_fmt(cg, "times %ld-($-$$) db 0\n", (unsigned long)cg->layout_max);
                 }
                 cg_write(cg, "\n");
-            }
-        } else if (node->type == NODE_ASM_BLOCK) {
-            /* Top-level asm block — emit directly without function wrapping */
-            if (node->data.asm_block.text) {
-                StringView asm_text = node->data.asm_block.text->data.literal.string_val;
-                if (asm_text.len > 0) {
-                    cg_write(cg, "; top-level asm block\n");
-                    const char *p = asm_text.data;
-                    const char *end = p + asm_text.len;
-                    while (p < end) {
-                        const char *line_start = p;
-                        while (p < end && *p != '\n') p++;
-                        if (p > line_start) {
-                            cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
-                        } else {
-                            cg_write(cg, "\n");
-                        }
-                        if (p < end) p++;
-                    }
-                    cg_write(cg, "; end top-level asm block\n");
-                }
             }
         }
     }
@@ -2199,7 +2207,22 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         case TARGET_BINARY:
             nasm_format = "elf64";
             snprintf(obj_file, sizeof(obj_file), "/tmp/aether_binary.o");
-            link_cmd_prefix = "";
+            /* Write linker script for Aether OS binary at 0x2000000 */
+            {
+                FILE *ldf = fopen("/tmp/aether_binary.ld", "w");
+                if (ldf) {
+                    uint64_t load_addr = (cg->entry_addr > 0) ? (uint64_t)cg->entry_addr : 0x2000000;
+                    const char *entry_name = cg->entry_func ? cg->entry_func : "_start";
+                    fprintf(ldf, "OUTPUT_FORMAT(elf64-x86-64)\nENTRY(%s)\nSECTIONS {\n", entry_name);
+                    fprintf(ldf, "  . = 0x%lx;\n", (unsigned long)load_addr);
+                    fprintf(ldf, "  .text : { *(.text) *(.text.*) }\n");
+                    fprintf(ldf, "  .rodata : { *(.rodata) *(.rodata.*) }\n");
+                    fprintf(ldf, "  .data : { *(.data) *(.data.*) }\n");
+                    fprintf(ldf, "  .bss : { *(.bss) *(.bss.*) *(COMMON) }\n}\n");
+                    fclose(ldf);
+                }
+            }
+            link_cmd_prefix = LD " -T /tmp/aether_binary.ld -o";
             break;
         default:
             /* Freestanding — use external LD variable */
