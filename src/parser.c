@@ -1,4 +1,5 @@
 #include "aether/parser.h"
+#include "aether/str.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -581,8 +582,18 @@ AstNode *parse_struct_decl(Parser *p) {
                 parser_advance(p);
                 AstNode *method = parse_func_decl(p);
                 if (method) {
-                    /* Property detection: if preceded by 'prop' keyword, mark as property accessor.
-                     * Getters have a return type, setters don't. */
+                    /* Auto-inject 'self' as the first parameter for methods.
+                     * The user writes: func fahrenheit(): f64 { return self.celsius * ... }
+                     * The parser adds: self: ref StructName as the first param. */
+                    AstNode *self_param = node_param(p->arena, method->loc,
+                        node_ident(p->arena, method->loc, SV("self")),
+                        NULL, false, false);
+                    /* Prepend self to the param list */
+                    AstNodeList new_params = {0};
+                    node_list_append(&new_params, self_param);
+                    for (int pi = 0; pi < method->data.func.params.count; pi++)
+                        node_list_append(&new_params, method->data.func.params.items[pi]);
+                    method->data.func.params = new_params;
                     node_list_append(&st->data.struct_decl.methods, method);
                 }
                 continue;
