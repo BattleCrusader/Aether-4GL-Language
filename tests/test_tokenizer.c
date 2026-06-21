@@ -364,7 +364,7 @@ static void test_keywords() {
         "region pub static defer unsafe module sys "
         "pre post drop init self type trait impl "
         "pool protocol virtual dyn throws export entry "
-        "layout test run prop inline at\n";
+        "layout test run prop get set inline at\n";
 
     Tokenizer *t = tokenizer_create(src, strlen(src), "test");
     int kw = 0;
@@ -382,7 +382,7 @@ static void test_keywords() {
         kw++;
     }
     tokenizer_destroy(t);
-    ASSERT(kw == 61, "should have 61 keywords");
+    ASSERT(kw == 63, "should have 63 keywords");
     PASS();
 }
 

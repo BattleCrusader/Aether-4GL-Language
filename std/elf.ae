@@ -1,0 +1,53 @@
+# std.elf — ELF64 reader/writer
+#
+# Provides structures and functions for parsing and generating ELF64 files.
+# Used by the module loader, linker, and binary inspection tools.
+
+struct Elf64Header {
+    magic: u64
+    class: u8
+    endian: u8
+    version: u8
+    osabi: u8
+    abi_version: u8
+    padding: [u8; 7]
+    type: u16
+    machine: u16
+    version2: u32
+    entry: u64
+    phoff: u64
+    shoff: u64
+    flags: u32
+    ehsize: u16
+    phentsize: u16
+    phnum: u16
+    shentsize: u16
+    shnum: u16
+    shstrndx: u16
+}
+
+struct Elf64SectionHeader {
+    name: u32
+    type: u32
+    flags: u64
+    addr: u64
+    offset: u64
+    size: u64
+    link: u32
+    info: u32
+    addralign: u64
+    entsize: u64
+}
+
+struct Elf64Symbol {
+    name: u32
+    info: u8
+    other: u8
+    shndx: u16
+    value: u64
+    size: u64
+}
+
+func elf_verify_magic(header: ref Elf64Header): bool {
+    return header.magic == 0x00010102464C457F  /* little-endian ELF64 magic */
+}

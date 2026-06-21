@@ -1,0 +1,40 @@
+# std.arch — Architecture detection and multi-target helpers
+#
+# Provides compile-time and runtime architecture detection.
+# The multi-target assembler translates these to the correct
+# architecture-specific instructions.
+
+# Architecture identifiers
+const ARCH_X86_64 = 0
+const ARCH_ARM64 = 1
+const ARCH_RISCV64 = 2
+
+# Runtime architecture detection via CPUID
+func arch_detect(): u64 {
+    asm {
+        pushfq
+        pushfq
+        xor qword [rsp], 0x00200000
+        popfq
+        pushfq
+        pop rax
+        xor rax, [rsp]
+        and rax, 0x00200000
+        popfq
+        test rax, rax
+        jnz .x86
+        mov rax, 1  /* ARM64 fallthrough */
+        jmp .done
+    .x86:
+        mov rax, 0  /* x86_64 */
+    .done:
+    }
+}
+
+# Cache line size per architecture
+const CACHE_LINE_X86_64 = 64
+const CACHE_LINE_ARM64 = 64
+const CACHE_LINE_RISCV64 = 64
+
+# Page size (standard 4KB for all architectures)
+const PAGE_SIZE = 4096

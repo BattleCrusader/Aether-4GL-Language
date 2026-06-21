@@ -1342,6 +1342,16 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             break;
         }
 
+        case NODE_UNSAFE: {
+            /* unsafe { body } — just emit the body, no special handling needed */
+            if (node->data.list.count > 0) {
+                for (int i = 0; i < node->data.list.count; i++) {
+                    cg_stmt(cg, node->data.list.items[i], slots);
+                }
+            }
+            break;
+        }
+
         case NODE_ASM_BLOCK: {
             /* Emit raw assembly text directly into the output */
             if (node->data.asm_block.text) {
@@ -1364,6 +1374,16 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     cg_write(cg, "; end asm block\n");
                 }
             }
+            break;
+        }
+
+        case NODE_POOL_DECL: {
+            cg_comment(cg, "pool declaration (reserved)");
+            break;
+        }
+
+        case NODE_PROTOCOL_DECL: {
+            cg_comment(cg, "protocol declaration (interface)");
             break;
         }
 

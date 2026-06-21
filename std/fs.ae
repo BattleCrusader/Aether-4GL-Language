@@ -1,0 +1,33 @@
+# std.fs — AetherFS syscall wrappers
+#
+# Provides file system operations that map to AetherFS syscalls.
+# In freestanding mode, these call through the syscall page at 0x5000.
+# In host mode, they use the host OS's native file I/O.
+
+sys func fs_open(path: *u8, flags: u64): u64 at(10)
+sys func fs_read(fd: u64, buf: *u8, count: u64): u64 at(11)
+sys func fs_write(fd: u64, buf: *u8, count: u64): u64 at(12)
+sys func fs_close(fd: u64): u64 at(13)
+sys func fs_seek(fd: u64, offset: i64, whence: u64): u64 at(14)
+sys func fs_stat(fd: u64, buf: *u8): u64 at(15)
+
+struct File {
+    fd: u64
+}
+
+func File.open(self: ref File, path: string): u64 {
+    self.fd = fs_open(path.data, 0)
+    return self.fd
+}
+
+func File.read(self: ref File, buf: *u8, count: u64): u64 {
+    return fs_read(self.fd, buf, count)
+}
+
+func File.write(self: ref File, buf: *u8, count: u64): u64 {
+    return fs_write(self.fd, buf, count)
+}
+
+func File.close(self: ref File): u64 {
+    return fs_close(self.fd)
+}

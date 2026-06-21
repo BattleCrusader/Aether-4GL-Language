@@ -91,6 +91,8 @@ typedef enum {
     TOKEN_KW_TEST,      /* test */
     TOKEN_KW_RUN,       /* run (#run) */
     TOKEN_KW_PROP,      /* prop */
+    TOKEN_KW_GET,       /* get */
+    TOKEN_KW_SET,       /* set */
     TOKEN_KW_INLINE,    /* inline */
     TOKEN_KW_AT,        /* at */
 

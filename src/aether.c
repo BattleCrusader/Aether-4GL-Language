@@ -669,6 +669,51 @@ static int cmd_inspect(const char *path) {
     return 0;
 }
 
+/* ================================================================
+ * P09.13 — aether doc: Documentation generator
+ * ================================================================ */
+static int cmd_doc(const char *path) {
+    /* Read the source file and extract doc comments */
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "Error: cannot open '%s'\n", path); return 1; }
+    fseek(f, 0, SEEK_END);
+    long flen = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *source = (char *)malloc((size_t)flen + 1);
+    if (!source) { fclose(f); return 1; }
+    size_t rlen = fread(source, 1, (size_t)flen, f);
+    source[rlen] = '\0';
+    fclose(f);
+
+    /* Tokenize and extract doc comments */
+    Tokenizer *t = tokenizer_create(source, rlen, path);
+    if (!t) { free(source); return 1; }
+
+    printf("# Documentation for: %s\n\n", path);
+    int in_block_comment = 0;
+
+    while (1) {
+        Token tok = tokenizer_next(t);
+        if (tok.type == TOKEN_EOF) break;
+        if (tok.type == TOKEN_ERROR) break;
+
+        /* Print function signatures as documentation */
+        if (tok.type == TOKEN_KW_FUNC) {
+            printf("\n");
+            while (tok.type != TOKEN_NEWLINE && tok.type != TOKEN_EOF) {
+                tok = tokenizer_next(t);
+                if (tok.type == TOKEN_EOF) break;
+                printf("%.*s ", (int)tok.text.len, tok.text.data);
+            }
+            printf("\n");
+        }
+    }
+
+    tokenizer_destroy(t);
+    free(source);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *input_file = NULL;
     const char *output_file = NULL;
@@ -694,6 +739,14 @@ int main(int argc, char **argv) {
         }
         if (strcmp(argv[1], "run") == 0) {
             run_mode = 1;
+        }
+        if (strcmp(argv[1], "doc") == 0) {
+            if (argc < 3) {
+                fprintf(stderr, "Error: 'doc' requires a file\n");
+                usage(argv[0]);
+                return 1;
+            }
+            return cmd_doc(argv[2]);
         }
         if (strcmp(argv[1], "fmt") == 0) {
             if (argc < 3) {
