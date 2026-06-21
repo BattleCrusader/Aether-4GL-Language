@@ -591,7 +591,8 @@ static AstNode *dce_remove_dead(AstNode *node, SymbolTable *st) {
                         if (stmt->data.let_decl.value) {
                             /* Simple check: if the value is a call or asm block, keep it */
                             if (stmt->data.let_decl.value->type == NODE_CALL ||
-                                stmt->data.let_decl.value->type == NODE_ASM_BLOCK) {
+                                stmt->data.let_decl.value->type == NODE_ASM_BLOCK ||
+                                stmt->data.let_decl.value->type == NODE_BINARY_OP) {
                                 has_side_effects = true;
                             }
                         }

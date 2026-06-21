@@ -1,0 +1,6 @@
+func main() {
+    let name = "World"
+    let greeting = "Hello {name}!"
+    # Use greeting so it doesn't get optimized away
+    let _ = greeting
+}

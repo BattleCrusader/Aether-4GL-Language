@@ -1426,9 +1426,113 @@ static AstNode *parse_prefix(Parser *p) {
             parser_advance(p);
             return node_float_literal(p->arena, loc, token.val.float_value);
 
-        case TOKEN_STRING_LITERAL:
+        case TOKEN_STRING_LITERAL: {
             parser_advance(p);
+            StringView raw = token.text;
+            /* Strip surrounding quotes */
+            const char *content = raw.data;
+            size_t content_len = raw.len;
+            if (content_len >= 2 && content[0] == '"' && content[content_len-1] == '"') {
+                content += 1;
+                content_len -= 2;
+            }
+            /* Scan for {expr} interpolation patterns */
+            const char *p_start = content;
+            const char *p_end = content + content_len;
+            const char *cur = content;
+            AstNode *result = NULL;
+            bool found_interp = false;
+            while (cur < p_end) {
+                if (*cur == '{') {
+                    found_interp = true;
+                    /* Emit literal text before this { */
+                    size_t lit_len = (size_t)(cur - p_start);
+                    if (lit_len > 0) {
+                        /* Wrap in quotes for codegen's process_string_literal */
+                        char *quoted = (char *)arena_alloc(p->arena, lit_len + 3);
+                        quoted[0] = '"';
+                        memcpy(quoted + 1, p_start, lit_len);
+                        quoted[lit_len + 1] = '"';
+                        quoted[lit_len + 2] = '\0';
+                        StringView lit_sv = sv_from_parts(quoted, lit_len + 2);
+                        AstNode *lit_node = node_string_literal(p->arena, loc, lit_sv);
+                        if (result) {
+                            result = node_binary(p->arena, loc, BIN_CONCAT, result, lit_node);
+                        } else {
+                            result = lit_node;
+                        }
+                    }
+                    /* Find matching } */
+                    cur++; /* skip { */
+                    const char *expr_start = cur;
+                    int depth = 1;
+                    while (cur < p_end && depth > 0) {
+                        if (*cur == '{') depth++;
+                        else if (*cur == '}') depth--;
+                        if (depth > 0) cur++;
+                    }
+                    if (depth == 0) {
+                        /* Parse expression between { and } */
+                        size_t expr_len = (size_t)(cur - expr_start);
+                        if (expr_len > 0) {
+                            /* Create a temporary parser using the main arena */
+                            Parser *sub_p = (Parser *)calloc(1, sizeof(Parser));
+                            if (sub_p) {
+                                sub_p->lexer = lexer_create(expr_start, expr_len, loc.file);
+                                sub_p->arena = p->arena;  /* Use main arena so nodes persist */
+                                sub_p->has_current = false;
+                                sub_p->error_count = 0;
+                                sub_p->panic_mode = false;
+                                sub_p->current_scope = NULL;
+                                AstNode *expr_node = parse_expr(sub_p);
+                                if (expr_node) {
+                                    if (result) {
+                                        result = node_binary(p->arena, loc, BIN_CONCAT, result, expr_node);
+                                    } else {
+                                        result = expr_node;
+                                    }
+                                }
+                                lexer_destroy(sub_p->lexer);
+                                free(sub_p);
+                            }
+                        }
+                        cur++; /* skip } */
+                        p_start = cur;
+                    } else {
+                        /* Unmatched { — treat as literal */
+                        cur = expr_start; /* backtrack to after the { */
+                        p_start = cur;
+                    }
+                } else {
+                    cur++;
+                }
+            }
+            if (found_interp) {
+                /* Emit trailing literal text */
+                size_t lit_len = (size_t)(p_end - p_start);
+                if (lit_len > 0) {
+                    /* Wrap in quotes for codegen's process_string_literal */
+                    char *quoted = (char *)arena_alloc(p->arena, lit_len + 3);
+                    quoted[0] = '"';
+                    memcpy(quoted + 1, p_start, lit_len);
+                    quoted[lit_len + 1] = '"';
+                    quoted[lit_len + 2] = '\0';
+                    StringView lit_sv = sv_from_parts(quoted, lit_len + 2);
+                    AstNode *lit_node = node_string_literal(p->arena, loc, lit_sv);
+                    if (result) {
+                        result = node_binary(p->arena, loc, BIN_CONCAT, result, lit_node);
+                    } else {
+                        result = lit_node;
+                    }
+                }
+                if (!result) {
+                    /* Empty string interpolation like "{}" — emit empty string */
+                    result = node_string_literal(p->arena, loc, SV("\"\""));
+                }
+                return result;
+            }
             return node_string_literal(p->arena, loc, token.text);
+        }
 
         case TOKEN_CHAR_LITERAL:
             parser_advance(p);

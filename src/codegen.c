@@ -808,6 +808,15 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case BIN_AND: cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jz .Lfalse"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
                 case BIN_OR:  cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jnz .Ltrue"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
                 case BIN_RANGE: cg_comment(cg, "range"); cg_inst1(cg, "mov", "rax, rcx"); break;
+                case BIN_CONCAT: {
+                    cg_comment(cg, "string concat");
+                    /* rax = left, rcx = right. Push left first (higher address), then right */
+                    cg_inst1(cg, "push", "rax");   /* left arg (rbp+24) */
+                    cg_inst1(cg, "push", "rcx");   /* right arg (rbp+16) */
+                    cg_inst(cg, "call __aether_concat");
+                    cg_inst(cg, "add rsp, 16");    /* pop both args */
+                    break;
+                }
                 default: cg_inst1(cg, "add", "rax, rcx"); break;
             }
             break;
@@ -902,7 +911,34 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                         }
                         cg_inst1(cg, "xor", "rax, rax");
                     } else {
-                        cg_warn(cg, arg, "print() only supports string literals on host targets");
+                        /* Runtime string: evaluate expression, then call write syscall with strlen */
+                        cg_comment(cg, "print() runtime string");
+                        cg_expr(cg, arg, slots);
+                        /* rax = string pointer, save it */
+                        cg_inst1(cg, "push", "rax");
+                        /* Compute strlen */
+                        cg_inst(cg, "xor rcx, rcx");
+                        cg_inst(cg, "mov rdi, rax");
+                        cg_write(cg, ".strlen_loop:\n");
+                        cg_write(cg, "    cmp byte [rdi + rcx], 0\n");
+                        cg_write(cg, "    je .strlen_done\n");
+                        cg_write(cg, "    inc rcx\n");
+                        cg_write(cg, "    jmp .strlen_loop\n");
+                        cg_write(cg, ".strlen_done:\n");
+                        /* rcx = length, pop rsi = string pointer */
+                        cg_inst1(cg, "pop", "rsi");
+                        cg_inst1(cg, "mov", "rdx, rcx");
+                        if (cg->target == TARGET_MACHO64) {
+                            cg_inst1(cg, "mov", "rdi, 1");
+                            cg_inst1(cg, "mov", "rax, 0x2000004");
+                            cg_inst(cg, "syscall");
+                        } else if (cg->target == TARGET_ELF64_HOST) {
+                            cg_inst1(cg, "mov", "rdi, 1");
+                            cg_inst1(cg, "mov", "rax, 1");
+                            cg_inst(cg, "syscall");
+                        } else {
+                            cg_comment(cg, "freestanding: print() is a no-op");
+                        }
                         cg_inst1(cg, "xor", "rax, rax");
                     }
                     break;
@@ -2001,6 +2037,83 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             /* __aether_free — no-op bump */
             cg_write(cg, "; __aether_free(rdi: ptr) — no-op (bump allocator)\n");
             cg_write(cg, "__aether_free:\n");
+            cg_inst(cg, "ret");
+            cg_write(cg, "\n");
+
+            /* __aether_concat(left: ptr, right: ptr) -> rax: ptr */
+            cg_write(cg, "; __aether_concat(left: ptr, right: ptr) -> rax: ptr\n");
+            cg_write(cg, "; Concatenates two null-terminated strings, returns new string\n");
+            cg_write(cg, "__aether_concat:\n");
+            cg_inst1(cg, "push", "rbp");
+            cg_inst1(cg, "mov", "rbp, rsp");
+            cg_inst1(cg, "push", "r12");
+            cg_inst1(cg, "push", "r13");
+            cg_inst1(cg, "push", "r14");
+            cg_inst1(cg, "push", "r15");
+            /* Args: call pushed ret_addr, then push rbp; mov rbp,rsp.
+               After prologue: [rbp]=old_rbp, [rbp+8]=ret_addr.
+               The 4 pushes (r12-r15) after mov rbp,rsp do not move rbp.
+               [rbp+16] = right arg (pushed second/last by caller)
+               [rbp+24] = left arg (pushed first by caller) */
+            cg_inst(cg, "mov r12, [rbp+24]");  /* r12 = left ptr */
+            cg_inst(cg, "mov r13, [rbp+16]");  /* r13 = right ptr */
+            /* strlen(left) */
+            cg_inst1(cg, "xor", "rcx, rcx");
+            cg_write(cg, "LA_concat_strlen_left:\n");
+            cg_inst(cg, "cmp byte [r12+rcx], 0");
+            cg_inst(cg, "jz LA_concat_left_done");
+            cg_inst1(cg, "inc", "rcx");
+            cg_inst(cg, "jmp LA_concat_strlen_left");
+            cg_write(cg, "LA_concat_left_done:\n");
+            cg_inst1(cg, "mov", "r14, rcx");  /* r14 = left_len */
+            /* strlen(right) */
+            cg_inst1(cg, "xor", "rcx, rcx");
+            cg_write(cg, "LA_concat_strlen_right:\n");
+            cg_inst(cg, "cmp byte [r13+rcx], 0");
+            cg_inst(cg, "jz LA_concat_right_done");
+            cg_inst1(cg, "inc", "rcx");
+            cg_inst(cg, "jmp LA_concat_strlen_right");
+            cg_write(cg, "LA_concat_right_done:\n");
+            cg_inst1(cg, "mov", "r15, rcx");  /* r15 = right_len (callee-saved, survives calls) */
+            /* total = left_len + right_len + 1 */
+            cg_inst1(cg, "lea", "rdi, [r14+r15+1]");
+            cg_inst(cg, "call __aether_alloc");
+            /* rax = allocated buffer, save it */
+            cg_inst1(cg, "mov", "r12, rax");  /* r12 = buffer ptr (overwrites left ptr, but we still have it in [rbp+24]) */
+            /* Copy left string */
+            cg_inst(cg, "mov rsi, [rbp+24]");  /* src = left ptr (re-read from stack args) */
+            cg_inst1(cg, "mov", "rdi, r12");  /* dest = buffer */
+            cg_inst1(cg, "mov", "rdx, r14");  /* count = left_len */
+            cg_inst(cg, "call LA_concat_memcpy");
+            /* Advance past left */
+            cg_inst1(cg, "add", "rdi, r14");
+            /* Copy right string */
+            cg_inst1(cg, "mov", "rsi, r13");  /* src = right ptr */
+            cg_inst1(cg, "mov", "rdx, r15");  /* count = right_len */
+            cg_inst(cg, "call LA_concat_memcpy");
+            /* Null-terminate */
+            cg_inst(cg, "mov byte [rdi+r15], 0");
+            /* Return buffer ptr in rax */
+            cg_inst1(cg, "mov", "rax, r12");
+            cg_inst1(cg, "pop", "r15");
+            cg_inst1(cg, "pop", "r14");
+            cg_inst1(cg, "pop", "r13");
+            cg_inst1(cg, "pop", "r12");
+            cg_inst1(cg, "mov", "rsp, rbp");
+            cg_inst1(cg, "pop", "rbp");
+            cg_inst(cg, "ret");
+            cg_write(cg, "\n");
+            /* memcpy helper: rdi=dest, rsi=src, rdx=count */
+            cg_write(cg, "LA_concat_memcpy:\n");
+            cg_inst1(cg, "xor", "rcx, rcx");
+            cg_write(cg, "LA_concat_memcpy_loop:\n");
+            cg_inst(cg, "cmp rcx, rdx");
+            cg_inst(cg, "jae LA_concat_memcpy_done");
+            cg_inst(cg, "mov al, [rsi+rcx]");
+            cg_inst(cg, "mov [rdi+rcx], al");
+            cg_inst1(cg, "inc", "rcx");
+            cg_inst(cg, "jmp LA_concat_memcpy_loop");
+            cg_write(cg, "LA_concat_memcpy_done:\n");
             cg_inst(cg, "ret");
             cg_write(cg, "\n");
 

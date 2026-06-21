@@ -185,7 +185,7 @@
 - [x] P13.03 — OS pipeline mapping for every compiler feature 🟢
 - [x] P13.04 — STATUS.md updated with new phases 🟢
 
-## Phase 14 — OS Boot & Shell Stabilization 🔵 IN PROGRESS
+## Phase 14 — OS Boot & Shell Stabilization 🟢 COMPLETE
 - [x] P14.01 — Fix triple fault: add `cli` before kernel call in boot.ae 🟢
 - [x] P14.02 — Verify kernel boots and blocks at read_line waiting for input 🟢
 - [x] P14.03 — Uncomment `if cmd != 0 { exec_cmd(cmd) }` in shell_main 🟢
@@ -204,14 +204,23 @@
 - [ ] P14.16 — Implement `fs_readdir` for directory listing
 - [ ] P14.17 — Phase 14 Verification & Cleanup
 
-## Phase 15 — OS Memory & Process Management 🔴 NOT STARTED
-- [ ] P15.01 — Virtual memory manager (paging, page faults)
-- [ ] P15.02 — Process/task management (multitasking)
-- [ ] P15.03 — Interrupt handling (IDT, IRQ handlers)
-- [ ] P15.04 — Syscall interface (0x5000 page)
-- [ ] P15.05 — Module loading and registry
-- [ ] P15.06 — User mode switching
-- [ ] P15.07 — Phase 15 Verification & Cleanup
+## Phase 15 — String Interpolation 🟢 COMPLETE
+- [x] P15.01 — Parser: scan string literals for `{expr}` patterns and build BIN_CONCAT chains 🟢
+- [x] P15.02 — Codegen: BIN_CONCAT case emits `push` args + `call __aether_concat` 🟢
+- [x] P15.03 — Runtime: `__aether_concat` helper computes strlen, allocates buffer, copies strings 🟢
+- [x] P15.04 — Runtime: `LA_concat_memcpy` byte-by-byte copy helper 🟢
+- [x] P15.05 — DCE fix: keep `let` assignments with BIN_CONCAT initializers 🟢
+- [x] P15.06 — `print()` handles runtime strings via strlen + write syscall 🟢
+- [x] P15.07 — Host-native build and test: `"Hello {name}!"` produces correct output 🟢
+
+## Phase 16 — OS Memory & Process Management 🔴 NOT STARTED
+- [ ] P16.01 — Virtual memory manager (paging, page faults)
+- [ ] P16.02 — Process/task management (multitasking)
+- [ ] P16.03 — Interrupt handling (IDT, IRQ handlers)
+- [ ] P16.04 — Syscall interface (0x5000 page)
+- [ ] P16.05 — Module loading and registry
+- [ ] P16.06 — User mode switching
+- [ ] P16.07 — Phase 16 Verification & Cleanup
 
 ---
 
@@ -243,8 +252,9 @@
 12. **Phase 11**: Kernel codegen fixes — const→equ, no Linux syscalls in freestanding, Aether kernel ✅
 13. **Phase 12**: @layout auto-injection — bits, org, padding from attributes ✅
 14. **Phase 13**: Language specification & requirements ✅
-15. **Phase 14**: OS boot & shell stabilization — triple fault fix, shell I/O, binary loading 🔵
-16. **Phase 15**: OS memory & process management — paging, multitasking, interrupts
+|15. **Phase 14**: OS boot & shell stabilization — triple fault fix, shell I/O, binary loading ✅
+16. **Phase 15**: String interpolation — `{expr}` in strings, BIN_CONCAT, __aether_concat runtime ✅
+17. **Phase 16**: OS memory & process management — paging, multitasking, interrupts
 
 ---
 
