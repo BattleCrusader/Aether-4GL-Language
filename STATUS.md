@@ -219,10 +219,10 @@
 - [x] P15.12 — `is_numeric_expr()` helper: detects numeric literals, idents, binary/unary ops 🟢
 - [x] P15.13 — BIN_CONCAT auto-converts numeric operands to strings via `__aether_itoa` 🟢
 - [x] P15.14 — `print()` auto-converts numeric args to strings 🟢
-- [x] P15.15 — Parser: `++`/`--` disambiguated as infix concat vs postfix increment via peek-ahead 🟢
-- [x] P15.16 — Parser: `TOKEN_PLUS_PLUS`/`TOKEN_MINUS_MINUS` recognized as infix binary ops (BIN_CONCAT) 🟢
+- [x] P15.15 — `+` operator does string concat when either operand is a string (like Python/JS) 🟢
+- [x] P15.16 — `is_string_expr()` helper: detects string literals, BIN_CONCAT chains, typed/untyped string idents 🟢
 - [x] P15.17 — Duplicate label fix: `.strlen_loop`/`.strlen_done` use unique IDs per call 🟢
-- [x] P15.18 — Test fixtures: `test_interp_numbers` (numeric interpolation), `test_interp_numeric` (num ++ string), `test_interp_num_concat` (both directions), `test_interp_print_num` (print numeric) 🟢
+- [x] P15.18 — Test fixtures: `test_interp_numbers` (numeric interpolation), `test_interp_numeric` (num + string), `test_interp_num_concat` (both directions), `test_interp_print_num` (print numeric) 🟢
 - [x] P15.19 — All 36/36 host-native tests passing 🟢
 
 ## Phase 16 — OS Memory & Process Management 🔴 NOT STARTED
@@ -265,7 +265,7 @@
 13. **Phase 12**: @layout auto-injection — bits, org, padding from attributes ✅
 14. **Phase 13**: Language specification & requirements ✅
 |15. **Phase 14**: OS boot & shell stabilization — triple fault fix, shell I/O, binary loading ✅
-|16. **Phase 15**: String interpolation — `{expr}` in strings, BIN_CONCAT, __aether_concat runtime, __aether_itoa numeric-to-string, print() numeric support, ++/-- disambiguation ✅
+|16. **Phase 15**: String interpolation — `{expr}` in strings, BIN_CONCAT, __aether_concat runtime, __aether_itoa numeric-to-string, `+` does concat when either operand is a string, print() numeric support ✅
 |17. **Phase 16**: OS memory & process management — paging, multitasking, interrupts
 
 ---
