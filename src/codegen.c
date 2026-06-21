@@ -823,10 +823,26 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case UNARY_INC:
                     cg_comment(cg, "increment");
                     cg_inst(cg, "add rax, 1");
+                    /* Store back to variable if operand is an ident */
+                    if (node->data.unary.operand && node->data.unary.operand->type == NODE_IDENT) {
+                        int off = find_var_offset_by_name(slots,
+                            node->data.unary.operand->data.ident.name.data);
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rax", off);
+                        cg_inst(cg, buf);
+                    }
                     break;
                 case UNARY_DEC:
                     cg_comment(cg, "decrement");
                     cg_inst(cg, "sub rax, 1");
+                    /* Store back to variable if operand is an ident */
+                    if (node->data.unary.operand && node->data.unary.operand->type == NODE_IDENT) {
+                        int off = find_var_offset_by_name(slots,
+                            node->data.unary.operand->data.ident.name.data);
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rax", off);
+                        cg_inst(cg, buf);
+                    }
                     break;
                 case UNARY_HEAP: {
                     /* heap Expr — allocate, store result, return pointer */

@@ -1462,6 +1462,19 @@ static AstNode *parse_prefix(Parser *p) {
             return expr;
         }
 
+        /* Prefix ++ and -- */
+        case TOKEN_PLUS_PLUS:
+        case TOKEN_MINUS_MINUS: {
+            parser_advance(p);
+            UnaryOp op = (token.type == TOKEN_PLUS_PLUS) ? UNARY_INC : UNARY_DEC;
+            AstNode *operand = parse_prefix(p);
+            if (!operand) return NULL;
+            AstNode *node = node_create(p->arena, NODE_UNARY_OP, loc);
+            node->data.unary.op = op;
+            node->data.unary.operand = operand;
+            return node;
+        }
+
         case TOKEN_LBRACKET: {
             parser_advance(p);
             /* Array literal: [1, 2, 3] */

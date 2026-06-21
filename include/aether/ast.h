@@ -108,6 +108,7 @@ typedef enum {
     BIN_ASSIGN, BIN_ADD_ASSIGN, BIN_SUB_ASSIGN,
     BIN_MUL_ASSIGN, BIN_DIV_ASSIGN,
     BIN_RANGE, BIN_RANGE_INCLUSIVE,
+    BIN_CONCAT,  /* string concatenation */
 } BinOp;
 
 /* ================================================================

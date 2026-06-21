@@ -1,7 +1,6 @@
 # Aether Compiler — Implementation Status
 
 ## Phase 0 — Bootstrap Toolchain 🟢 COMPLETE
-- [x] Language specification (REQUIREMENTS.md) — **DONE**
 - [x] P00.01 — Project Structure 🟢
 - [x] P00.02 — Build System (Makefile) 🟢
 - [x] P00.03 — Tokenizer / Lexer 🟢
@@ -186,6 +185,28 @@
 - [x] P13.03 — OS pipeline mapping for every compiler feature 🟢
 - [x] P13.04 — STATUS.md updated with new phases 🟢
 
+## Phase 14 — OS Boot & Shell Stabilization 🔵 IN PROGRESS
+- [x] P14.01 — Fix triple fault: add `cli` before kernel call in boot.ae 🟢
+- [x] P14.02 — Verify kernel boots and blocks at read_line waiting for input 🟢
+- [x] P14.03 — Uncomment `if cmd != 0 { exec_cmd(cmd) }` in shell_main 🟢
+- [x] P14.04 — Verify shell accepts commands and loops correctly 🟢
+- [ ] P14.05 — Wire up command registration (help, ls, echo, reboot binaries)
+- [ ] P14.06 — Implement ATA PIO disk read for binary loading
+- [ ] P14.07 — Implement ELF64 binary loader in kernel
+- [ ] P14.08 — Implement boot filesystem (AetherFS) read support
+- [ ] P14.09 — Implement `fs_read` for disk-backed files
+- [ ] P14.10 — Implement `fs_readdir` for directory listing
+- [ ] P14.11 — Phase 14 Verification & Cleanup
+
+## Phase 15 — OS Memory & Process Management 🔴 NOT STARTED
+- [ ] P15.01 — Virtual memory manager (paging, page faults)
+- [ ] P15.02 — Process/task management (multitasking)
+- [ ] P15.03 — Interrupt handling (IDT, IRQ handlers)
+- [ ] P15.04 — Syscall interface (0x5000 page)
+- [ ] P15.05 — Module loading and registry
+- [ ] P15.06 — User mode switching
+- [ ] P15.07 — Phase 15 Verification & Cleanup
+
 ---
 
 ## Legend
@@ -214,6 +235,10 @@
 10. **Phase 9**: Optimization & polish — constant folding, DCE, inlining, fmt, asm, inspect ✅
 11. **Phase 10**: Universal binary & multi-arch dispatch — fat binaries, CPU detection trampoline ✅
 12. **Phase 11**: Kernel codegen fixes — const→equ, no Linux syscalls in freestanding, Aether kernel ✅
+13. **Phase 12**: @layout auto-injection — bits, org, padding from attributes ✅
+14. **Phase 13**: Language specification & requirements ✅
+15. **Phase 14**: OS boot & shell stabilization — triple fault fix, shell I/O, binary loading 🔵
+16. **Phase 15**: OS memory & process management — paging, multitasking, interrupts
 
 ---
 
@@ -229,3 +254,4 @@
 - **Compile-time**: `#run` blocks, not a separate macro system
 - **Indentation**: Significant (Python-style), 4 spaces
 - **Host native**: Multi-backend codegen; host syscall ABI instead of 0x5000 table; `aether run` for one-step compile+execute
+- **Boot triple fault fix**: `cli` must be emitted before calling kernel from boot.ae — no IDT is set up, so any interrupt causes GPF → double fault → triple fault
