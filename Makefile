@@ -21,7 +21,8 @@ CORE_SRCS = \
 	src/asm_backend_x86_64.c \
 	src/asm_backend_arm64.c \
 	src/asm_backend_riscv64.c \
-	src/universal.c
+	src/universal.c \
+	src/optimizer.c
 
 CORE_OBJS = $(CORE_SRCS:src/%.c=$(BUILD_DIR)/%.o)
 

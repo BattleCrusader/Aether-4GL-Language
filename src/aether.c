@@ -17,6 +17,7 @@
 #include "aether/parser.h"
 #include "aether/semantic.h"
 #include "aether/codegen.h"
+#include "aether/optimizer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +25,7 @@
 #include <errno.h>
 
 static void usage(const char *prog) {
-    fprintf(stderr, "Aether Compiler v0.3 (Phase 6 — OS Integration)\n");
+    fprintf(stderr, "Aether Compiler v0.4 (Phase 9 — Optimization & Polish)\n");
     fprintf(stderr, "Usage:\n");
     fprintf(stderr, "  %s [options] <file.ae>\n", prog);
     fprintf(stderr, "  %s init|new <project-name>\n", prog);
@@ -233,6 +234,441 @@ static int file_exists(const char *path) {
     return 0;
 }
 
+/* ================================================================
+ * P09.12 — aether fmt: Source code formatter
+ * ================================================================ */
+static int cmd_fmt(const char *path) {
+    /* Read the source file */
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "Error: cannot open '%s'\n", path); return 1; }
+    fseek(f, 0, SEEK_END);
+    long flen = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *source = (char *)malloc((size_t)flen + 1);
+    if (!source) { fclose(f); return 1; }
+    size_t rlen = fread(source, 1, (size_t)flen, f);
+    source[rlen] = '\0';
+    fclose(f);
+
+    /* Tokenize to understand structure */
+    Tokenizer *t = tokenizer_create(source, rlen, path);
+    if (!t) { free(source); return 1; }
+
+    /* Build a formatted output by re-emitting tokens with normalized spacing.
+     * This is a simplified formatter that normalizes indentation and spacing. */
+    char *out = (char *)malloc(rlen * 2 + 1);
+    if (!out) { tokenizer_destroy(t); free(source); return 1; }
+    size_t out_pos = 0;
+    int indent = 0;
+    int at_line_start = 1;
+    int prev_newline = 0;
+
+    while (1) {
+        Token tok = tokenizer_next(t);
+        if (tok.type == TOKEN_EOF) break;
+        if (tok.type == TOKEN_ERROR) {
+            fprintf(stderr, "Error: %.*s\n", (int)tok.text.len, tok.text.data);
+            tokenizer_destroy(t); free(source); free(out);
+            return 1;
+        }
+
+        /* Handle newlines */
+        if (tok.type == TOKEN_NEWLINE) {
+            if (!prev_newline) {
+                out[out_pos++] = '\n';
+                prev_newline = 1;
+                at_line_start = 1;
+            }
+            continue;
+        }
+        prev_newline = 0;
+
+        /* Handle indentation */
+        if (tok.type == TOKEN_INDENT) {
+            indent++;
+            continue;
+        }
+        if (tok.type == TOKEN_DEDENT) {
+            indent--;
+            if (indent < 0) indent = 0;
+            continue;
+        }
+
+        /* Add indentation at line start */
+        if (at_line_start) {
+            for (int i = 0; i < indent; i++) {
+                out[out_pos++] = ' ';
+                out[out_pos++] = ' ';
+                out[out_pos++] = ' ';
+                out[out_pos++] = ' ';
+            }
+            at_line_start = 0;
+        }
+
+        /* Add space before certain tokens */
+        if (tok.type == TOKEN_KW_IF || tok.type == TOKEN_KW_WHILE ||
+            tok.type == TOKEN_KW_FOR || tok.type == TOKEN_KW_RETURN ||
+            tok.type == TOKEN_KW_LET || tok.type == TOKEN_KW_FUNC) {
+            if (out_pos > 0 && out[out_pos-1] != '\n' && out[out_pos-1] != ' ')
+                out[out_pos++] = ' ';
+        }
+
+        /* Emit the token text */
+        size_t tlen = tok.text.len;
+        if (out_pos + tlen + 1 > rlen * 2) break;
+        memcpy(out + out_pos, tok.text.data, tlen);
+        out_pos += tlen;
+
+        /* Add space after certain tokens */
+        if (tok.type == TOKEN_COMMA || tok.type == TOKEN_SEMICOLON) {
+            out[out_pos++] = ' ';
+        }
+        if (tok.type == TOKEN_COLON) {
+            out[out_pos++] = ' ';
+        }
+        if (tok.type == TOKEN_ARROW) {
+            out[out_pos++] = ' ';
+        }
+    }
+
+    out[out_pos] = '\0';
+    tokenizer_destroy(t);
+
+    /* Write formatted output back to the file */
+    f = fopen(path, "wb");
+    if (!f) {
+        fprintf(stderr, "Error: cannot write '%s'\n", path);
+        free(source); free(out);
+        return 1;
+    }
+    fwrite(out, 1, out_pos, f);
+    fclose(f);
+
+    printf("Formatted: %s\n", path);
+    free(source);
+    free(out);
+    return 0;
+}
+
+/* ================================================================
+ * P09.14 — aether asm: Show generated assembly
+ * ================================================================ */
+static int cmd_asm(const char *prog, int argc, char **argv) {
+    const char *input_file = NULL;
+    const char *output_file = NULL;
+    Target target = TARGET_ASM_X86_64; /* default: x86_64 assembly */
+    int verbose = 0;
+
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "--target") == 0 && i + 1 < argc) {
+            const char *t = argv[++i];
+            if (strcmp(t, "x86_64") == 0 || strcmp(t, "asm-x86_64") == 0)
+                target = TARGET_ASM_X86_64;
+            else if (strcmp(t, "arm64") == 0 || strcmp(t, "asm-arm64") == 0)
+                target = TARGET_ASM_ARM64;
+            else if (strcmp(t, "riscv64") == 0 || strcmp(t, "asm-riscv64") == 0)
+                target = TARGET_ASM_RISCV64;
+            else {
+                fprintf(stderr, "Unknown asm target: %s (use x86_64, arm64, or riscv64)\n", t);
+                return 1;
+            }
+        } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+            output_file = argv[++i];
+        } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
+            verbose = 1;
+        } else if (argv[i][0] != '-') {
+            input_file = argv[i];
+        } else {
+            fprintf(stderr, "Unknown option: %s\n", argv[i]);
+            usage(prog);
+            return 1;
+        }
+    }
+
+    if (!input_file) {
+        fprintf(stderr, "Error: no input file specified\n");
+        usage(prog);
+        return 1;
+    }
+
+    /* Read, parse, analyze, generate */
+    FILE *f = fopen(input_file, "rb");
+    if (!f) { fprintf(stderr, "Error: cannot open '%s'\n", input_file); return 1; }
+    fseek(f, 0, SEEK_END);
+    long flen = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *source = (char *)malloc((size_t)flen + 1);
+    if (!source) { fclose(f); return 1; }
+    size_t rlen = fread(source, 1, (size_t)flen, f);
+    source[rlen] = '\0';
+    fclose(f);
+
+    Parser *parser = parser_create(source, rlen, input_file);
+    AstNode *program = parser_parse(parser);
+    if (parser->error_count > 0) {
+        fprintf(stderr, "Parse failed with %d errors\n", parser->error_count);
+        parser_destroy(parser); free(source);
+        return 1;
+    }
+
+    Arena *sa_arena = arena_create();
+    SemanticAnalyzer *sa = semantic_create(sa_arena);
+    semantic_analyze(sa, program);
+    if (sa->error_count > 0) {
+        fprintf(stderr, "Semantic analysis failed\n");
+        parser_destroy(parser); free(source); arena_destroy(sa_arena);
+        return 1;
+    }
+
+    Arena *cg_arena = arena_create();
+    Codegen *cg = codegen_create(cg_arena);
+    codegen_set_target(cg, target);
+    codegen_generate(cg, program);
+
+    const char *asm_text = codegen_get_asm(cg);
+    if (!asm_text) {
+        fprintf(stderr, "Code generation failed\n");
+        parser_destroy(parser); free(source);
+        arena_destroy(sa_arena); arena_destroy(cg_arena);
+        return 1;
+    }
+
+    if (output_file) {
+        FILE *of = fopen(output_file, "w");
+        if (!of) { fprintf(stderr, "Error: cannot write '%s'\n", output_file); return 1; }
+        fwrite(asm_text, 1, strlen(asm_text), of);
+        fclose(of);
+        printf("Wrote assembly to %s\n", output_file);
+    } else {
+        /* Print to stdout with source annotations */
+        printf("; Assembly for: %s\n", input_file);
+        printf("; Target: %s\n", target_name(target));
+        printf("; ========================================\n");
+        printf("%s", asm_text);
+    }
+
+    parser_destroy(parser);
+    free(source);
+    arena_destroy(sa_arena);
+    arena_destroy(cg_arena);
+    return 0;
+}
+
+/* ================================================================
+ * P09.15 — aether inspect: ELF binary inspection
+ * ================================================================ */
+static int cmd_inspect(const char *path) {
+    /* Read the ELF file */
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "Error: cannot open '%s'\n", path); return 1; }
+    fseek(f, 0, SEEK_END);
+    long flen = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    /* Read ELF header */
+    unsigned char header[64];
+    if (flen < 64) {
+        fprintf(stderr, "Error: file too small to be an ELF\n");
+        fclose(f); return 1;
+    }
+    if (fread(header, 1, 64, f) != 64) {
+        fprintf(stderr, "Error: cannot read ELF header\n");
+        fclose(f); return 1;
+    }
+
+    /* Verify ELF magic */
+    if (header[0] != 0x7F || header[1] != 'E' || header[2] != 'L' || header[3] != 'F') {
+        fprintf(stderr, "Error: not an ELF file (bad magic)\n");
+        fclose(f); return 1;
+    }
+
+    printf("=== ELF Binary: %s ===\n", path);
+    printf("  Class:      %s\n", header[4] == 1 ? "ELF32" : header[4] == 2 ? "ELF64" : "Unknown");
+    printf("  Endian:     %s\n", header[5] == 1 ? "Little" : header[5] == 2 ? "Big" : "Unknown");
+    printf("  OS/ABI:     %s\n", header[7] == 0 ? "UNIX System V" : "Other");
+    printf("  Type:       ");
+    uint16_t e_type;
+    memcpy(&e_type, header + 16, 2);
+    switch (e_type) {
+        case 0: printf("NONE\n"); break;
+        case 1: printf("REL (Relocatable)\n"); break;
+        case 2: printf("EXEC (Executable)\n"); break;
+        case 3: printf("DYN (Shared object)\n"); break;
+        default: printf("0x%x\n", e_type); break;
+    }
+
+    uint16_t e_machine;
+    memcpy(&e_machine, header + 18, 2);
+    printf("  Machine:    ");
+    switch (e_machine) {
+        case 0x3E: printf("x86_64\n"); break;
+        case 0xB7: printf("ARM64 (AArch64)\n"); break;
+        case 0xF3: printf("RISC-V\n"); break;
+        default: printf("0x%x\n", e_machine); break;
+    }
+
+    uint64_t e_entry;
+    memcpy(&e_entry, header + 24, 8);
+    printf("  Entry:      0x%lx\n", (unsigned long)e_entry);
+
+    uint64_t e_shoff;
+    memcpy(&e_shoff, header + 40, 8);
+    uint16_t e_shnum;
+    memcpy(&e_shnum, header + 60, 2);
+    uint16_t e_shentsize;
+    memcpy(&e_shentsize, header + 58, 2);
+    uint16_t e_shstrndx;
+    memcpy(&e_shstrndx, header + 62, 2);
+
+    printf("  Sections:   %d (at offset 0x%lx)\n", e_shnum, (unsigned long)e_shoff);
+
+    /* Read section headers */
+    if (e_shoff > 0 && e_shnum > 0 && e_shentsize >= 64) {
+        /* Read section name string table */
+        unsigned char *shstrtab = NULL;
+        if (e_shstrndx < e_shnum) {
+            unsigned char shdr[64];
+            fseek(f, (long)(e_shoff + e_shstrndx * e_shentsize), SEEK_SET);
+            if (fread(shdr, 1, 64, f) == 64) {
+                uint64_t sh_offset;
+                uint64_t sh_size;
+                memcpy(&sh_offset, shdr + 24, 8);
+                memcpy(&sh_size, shdr + 32, 8);
+                if (sh_size > 0) {
+                    shstrtab = (unsigned char *)malloc((size_t)sh_size);
+                    if (shstrtab) {
+                        fseek(f, (long)sh_offset, SEEK_SET);
+                        fread(shstrtab, 1, (size_t)sh_size, f);
+                    }
+                }
+            }
+        }
+
+        printf("\n  Section Headers:\n");
+        printf("    %-20s %-10s %-10s %s\n", "Name", "Type", "Size", "Flags");
+        printf("    %-20s %-10s %-10s %s\n", "----", "----", "----", "-----");
+
+        for (int i = 0; i < e_shnum; i++) {
+            unsigned char shdr[64];
+            fseek(f, (long)(e_shoff + i * e_shentsize), SEEK_SET);
+            if (fread(shdr, 1, 64, f) != 64) break;
+
+            uint32_t sh_name;
+            uint32_t sh_type;
+            uint64_t sh_size;
+            uint64_t sh_flags;
+            memcpy(&sh_name, shdr, 4);
+            memcpy(&sh_type, shdr + 4, 4);
+            memcpy(&sh_flags, shdr + 8, 8);
+            memcpy(&sh_size, shdr + 32, 8);
+
+            const char *sname = (shstrtab && sh_name > 0) ?
+                (const char *)(shstrtab + sh_name) : "";
+            const char *stype = "?";
+            switch (sh_type) {
+                case 0: stype = "NULL"; break;
+                case 1: stype = "PROGBITS"; break;
+                case 2: stype = "SYMTAB"; break;
+                case 3: stype = "STRTAB"; break;
+                case 4: stype = "RELA"; break;
+                case 8: stype = "NOBITS"; break;
+            }
+
+            char flags[8] = {0};
+            int fi = 0;
+            if (sh_flags & 1) flags[fi++] = 'W';
+            if (sh_flags & 2) flags[fi++] = 'A';
+            if (sh_flags & 4) flags[fi++] = 'X';
+            if (sh_flags & 0x10) flags[fi++] = 'M';
+            if (sh_flags & 0x20) flags[fi++] = 'S';
+
+            printf("    %-20s %-10s %-10lu %s\n",
+                   sname, stype, (unsigned long)sh_size, flags);
+        }
+
+        /* Read symbol table */
+        for (int i = 0; i < e_shnum; i++) {
+            unsigned char shdr[64];
+            fseek(f, (long)(e_shoff + i * e_shentsize), SEEK_SET);
+            if (fread(shdr, 1, 64, f) != 64) break;
+
+            uint32_t sh_type;
+            uint64_t sh_offset;
+            uint64_t sh_size;
+            uint64_t sh_entsize;
+            memcpy(&sh_type, shdr + 4, 4);
+            memcpy(&sh_offset, shdr + 24, 8);
+            memcpy(&sh_size, shdr + 32, 8);
+            memcpy(&sh_entsize, shdr + 56, 8);
+
+            if (sh_type == 2 && sh_entsize > 0) { /* SYMTAB */
+                int sym_count = (int)(sh_size / sh_entsize);
+                printf("\n  Symbol Table:\n");
+                printf("    %-20s %-10s %s\n", "Name", "Value", "Type");
+                printf("    %-20s %-10s %s\n", "----", "-----", "----");
+
+                /* Find associated string table */
+                uint32_t sh_link;
+                memcpy(&sh_link, shdr + 40, 4);
+                unsigned char *strtab = NULL;
+                if (sh_link < (uint32_t)e_shnum) {
+                    unsigned char strhdr[64];
+                    fseek(f, (long)(e_shoff + sh_link * e_shentsize), SEEK_SET);
+                    if (fread(strhdr, 1, 64, f) == 64) {
+                        uint64_t str_offset, str_size;
+                        memcpy(&str_offset, strhdr + 24, 8);
+                        memcpy(&str_size, strhdr + 32, 8);
+                        if (str_size > 0) {
+                            strtab = (unsigned char *)malloc((size_t)str_size);
+                            if (strtab) {
+                                fseek(f, (long)str_offset, SEEK_SET);
+                                fread(strtab, 1, (size_t)str_size, f);
+                            }
+                        }
+                    }
+                }
+
+                for (int j = 0; j < sym_count; j++) {
+                    unsigned char sym[24];
+                    fseek(f, (long)(sh_offset + j * sh_entsize), SEEK_SET);
+                    if (fread(sym, 1, 24, f) != 24) break;
+
+                    uint32_t sym_name;
+                    uint64_t sym_value;
+                    unsigned char sym_info;
+                    memcpy(&sym_name, sym, 4);
+                    memcpy(&sym_value, sym + 8, 8);
+                    sym_info = sym[12];
+
+                    const char *sname = (strtab && sym_name > 0) ?
+                        (const char *)(strtab + sym_name) : "";
+                    char stype_c = '?';
+                    switch (sym_info & 0x0F) {
+                        case 0: stype_c = 'N'; break; /* NOTYPE */
+                        case 1: stype_c = 'O'; break; /* OBJECT */
+                        case 2: stype_c = 'F'; break; /* FUNC */
+                        case 3: stype_c = 'S'; break; /* SECTION */
+                    }
+
+                    if (sname[0]) {
+                        printf("    %-20s 0x%08lx %c\n",
+                               sname, (unsigned long)sym_value, stype_c);
+                    }
+                }
+                free(strtab);
+            }
+        }
+
+        free(shstrtab);
+    }
+
+    /* File size */
+    printf("\n  File size: %ld bytes\n", flen);
+
+    fclose(f);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *input_file = NULL;
     const char *output_file = NULL;
@@ -241,10 +677,12 @@ int main(int argc, char **argv) {
     int dump_tokens = 0;
     int verbose = 0;
     int run_mode = 0;
+    int opt_level = 1; /* -O1 default */
+    int dump_opt = 0;
     Target target = TARGET_HOST; /* default: auto-detect */
     const char *linker_script = NULL;
 
-    /* Check for subcommands: init, new, run */
+    /* Check for subcommands: init, new, run, fmt, asm, inspect */
     if (argc > 1) {
         if (strcmp(argv[1], "init") == 0 || strcmp(argv[1], "new") == 0) {
             if (argc < 3) {
@@ -256,6 +694,30 @@ int main(int argc, char **argv) {
         }
         if (strcmp(argv[1], "run") == 0) {
             run_mode = 1;
+        }
+        if (strcmp(argv[1], "fmt") == 0) {
+            if (argc < 3) {
+                fprintf(stderr, "Error: 'fmt' requires a file\n");
+                usage(argv[0]);
+                return 1;
+            }
+            return cmd_fmt(argv[2]);
+        }
+        if (strcmp(argv[1], "asm") == 0) {
+            if (argc < 3) {
+                fprintf(stderr, "Error: 'asm' requires a file\n");
+                usage(argv[0]);
+                return 1;
+            }
+            return cmd_asm(argv[0], argc, argv);
+        }
+        if (strcmp(argv[1], "inspect") == 0) {
+            if (argc < 3) {
+                fprintf(stderr, "Error: 'inspect' requires a file\n");
+                usage(argv[0]);
+                return 1;
+            }
+            return cmd_inspect(argv[2]);
         }
     }
 
@@ -285,6 +747,14 @@ int main(int argc, char **argv) {
             dump_tokens = 1;
         } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
             verbose = 1;
+        } else if (strcmp(argv[i], "-O0") == 0) {
+            opt_level = 0;
+        } else if (strcmp(argv[i], "-O1") == 0) {
+            opt_level = 1;
+        } else if (strcmp(argv[i], "-O2") == 0) {
+            opt_level = 2;
+        } else if (strcmp(argv[i], "--dump-opt") == 0) {
+            dump_opt = 1;
         } else if (argv[i][0] != '-') {
             input_file = argv[i];
         } else {
@@ -428,6 +898,31 @@ int main(int argc, char **argv) {
         free(source);
         arena_destroy(sa_arena);
         return 1;
+    }
+
+    /* Phase 3.5: Optimization */
+    if (opt_level > 0) {
+        if (verbose) printf("Optimizing (-O%d)...\n", opt_level);
+        OptimizerConfig opt_cfg;
+        optimizer_config_init(&opt_cfg);
+        if (opt_level == 1) {
+            /* -O1: basic optimizations only */
+            opt_cfg.constant_folding = true;
+            opt_cfg.dead_code_elimination = true;
+            opt_cfg.inlining = true;
+            opt_cfg.escape_analysis = false;
+            opt_cfg.region_elision = false;
+            opt_cfg.devirtualization = false;
+            opt_cfg.loop_unrolling = false;
+            opt_cfg.memory_fusion = false;
+        }
+        /* -O2: all optimizations (default init) */
+        program = optimize(program, sa_arena, &opt_cfg);
+        if (dump_opt) {
+            printf("=== Optimized AST ===\n");
+            ast_dump(program, 0);
+        }
+        if (verbose) printf("Optimization complete\n");
     }
 
     /* Phase 4: Code generation */
