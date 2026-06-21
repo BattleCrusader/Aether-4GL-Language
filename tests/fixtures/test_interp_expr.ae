@@ -1,8 +1,8 @@
-# test_interp_expr.ae — interpolation with string expressions
+# test_interp_expr.ae — interpolation with numeric expressions
 func main(): u64 {
-    let greeting = "Hello"
-    let name = "World"
-    let msg = "{greeting} {name}"
+    let x: u64 = 40
+    let y: u64 = 2
+    let msg = "sum = {x + y}"
     print(msg)
     return 42
 }

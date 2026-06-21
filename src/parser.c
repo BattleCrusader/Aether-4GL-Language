@@ -1406,7 +1406,7 @@ static Precedence token_precedence(TokenType type) {
         case TOKEN_AMPERSAND: return PREC_BIT_AND;
         case TOKEN_LT_LT: case TOKEN_GT_GT: return PREC_SHIFT;
         case TOKEN_DOT_DOT: case TOKEN_DOT_DOT_EQ: return PREC_RANGE;
-        case TOKEN_PLUS: case TOKEN_MINUS: return PREC_TERM;
+        case TOKEN_PLUS: case TOKEN_MINUS: case TOKEN_PLUS_PLUS: case TOKEN_MINUS_MINUS: return PREC_TERM;
         case TOKEN_STAR: case TOKEN_SLASH: case TOKEN_PERCENT: return PREC_FACTOR;
         default: return PREC_MIN;
     }
@@ -1730,6 +1730,8 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
     switch (token.type) {
         case TOKEN_PLUS: op = BIN_ADD; break;
         case TOKEN_MINUS: op = BIN_SUB; break;
+        case TOKEN_PLUS_PLUS: op = BIN_CONCAT; break;
+        case TOKEN_MINUS_MINUS: op = BIN_CONCAT; break;
         case TOKEN_STAR: op = BIN_MUL; break;
         case TOKEN_SLASH: op = BIN_DIV; break;
         case TOKEN_PERCENT: op = BIN_MOD; break;
@@ -1775,8 +1777,17 @@ AstNode *parse_expr_prec(Parser *p, Precedence min_prec) {
     AstNode *left = parse_prefix(p);
     if (!left) return NULL;
 
-    /* Parse postfix operators (++, --) */
+    /* Parse postfix operators (++, --) — only if NOT followed by an expression start */
     while (parser_check(p, TOKEN_PLUS_PLUS) || parser_check(p, TOKEN_MINUS_MINUS)) {
+        /* Peek at the token after ++/--. If it's an expression start, treat as infix concat.
+           Postfix ++/-- only applies at end of expression (before newline/semicolon/etc). */
+        Token peek = lexer_peek_next(p->lexer);
+        bool is_stmt_end = (peek.type == TOKEN_EOF || peek.type == TOKEN_NEWLINE ||
+            peek.type == TOKEN_SEMICOLON || peek.type == TOKEN_DEDENT ||
+            peek.type == TOKEN_RPAREN || peek.type == TOKEN_RBRACKET ||
+            peek.type == TOKEN_RBRACE || peek.type == TOKEN_COMMA ||
+            peek.type == TOKEN_COLON);
+        if (!is_stmt_end) break;  /* Next token is an expression — treat as infix concat */
         UnaryOp op = parser_match(p, TOKEN_PLUS_PLUS) ? UNARY_INC : UNARY_DEC;
         AstNode *postfix = node_create(p->arena, NODE_UNARY_OP, p->previous.loc);
         postfix->data.unary.op = op;

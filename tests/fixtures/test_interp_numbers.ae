@@ -1,9 +1,7 @@
-# test_interp_numbers.ae — interpolation with numeric values (converted to string)
-# Note: numeric interpolation requires runtime itoa, which is not yet implemented.
-# For now, test that string interpolation with string variables works.
+# test_interp_numbers.ae — interpolation with numeric values
 func main(): u64 {
-    let count_str = "42"
-    let msg = "count = {count_str}"
+    let count: u64 = 42
+    let msg = "count = {count}"
     print(msg)
     return 42
 }

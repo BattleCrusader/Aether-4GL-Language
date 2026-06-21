@@ -279,6 +279,47 @@ static PrimType prim_from_type(AstNode *type) {
     return type->data.type_node.prim;
 }
 
+/* Check if an expression node evaluates to a numeric type (u8-u64, i8-i64, bool, byte) */
+static bool is_numeric_expr(AstNode *node) {
+    if (!node) return false;
+    if (node->type == NODE_LITERAL_INT || node->type == NODE_LITERAL_FLOAT ||
+        node->type == NODE_LITERAL_BOOL || node->type == NODE_LITERAL_CHAR) {
+        return true;
+    }
+    /* Binary ops that produce numeric results (add, sub, mul, etc.) */
+    if (node->type == NODE_BINARY_OP) {
+        BinOp op = node->data.binary.op;
+        if (op == BIN_ADD || op == BIN_SUB || op == BIN_MUL || op == BIN_DIV || op == BIN_MOD ||
+            op == BIN_BIT_AND || op == BIN_BIT_OR || op == BIN_BIT_XOR ||
+            op == BIN_SHL || op == BIN_SHR ||
+            op == BIN_ADD_ASSIGN || op == BIN_SUB_ASSIGN || op == BIN_MUL_ASSIGN || op == BIN_DIV_ASSIGN) {
+            return true;
+        }
+        return false;
+    }
+    /* Unary ops that produce numeric results */
+    if (node->type == NODE_UNARY_OP) {
+        UnaryOp op = node->data.unary.op;
+        if (op == UNARY_NEG || op == UNARY_BIT_NOT || op == UNARY_INC || op == UNARY_DEC) {
+            return true;
+        }
+        return false;
+    }
+    if (node->type == NODE_IDENT && node->data.ident.resolved) {
+        AstNode *decl = node->data.ident.resolved;
+        AstNode *type_node = NULL;
+        if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+        else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+        if (type_node && type_node->type == NODE_TYPE_PRIMITIVE) {
+            PrimType pt = type_node->data.type_node.prim;
+            return pt == PRIM_U8 || pt == PRIM_U16 || pt == PRIM_U32 || pt == PRIM_U64 ||
+                   pt == PRIM_I8 || pt == PRIM_I16 || pt == PRIM_I32 || pt == PRIM_I64 ||
+                   pt == PRIM_BOOL || pt == PRIM_BYTE;
+        }
+    }
+    return false;
+}
+
 /* ================================================================ */
 
 /* ================================================================ */
@@ -810,7 +851,32 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case BIN_RANGE: cg_comment(cg, "range"); cg_inst1(cg, "mov", "rax, rcx"); break;
                 case BIN_CONCAT: {
                     cg_comment(cg, "string concat");
-                    /* rax = left, rcx = right. Push left first (higher address), then right */
+                    /* rax = left, rcx = right */
+                    /* Auto-convert numeric operands to strings.
+                       itoa clobbers rcx (div instruction), so save rcx first. */
+                    bool left_num = is_numeric_expr(node->data.binary.left);
+                    bool right_num = is_numeric_expr(node->data.binary.right);
+                    if (left_num || right_num) {
+                        cg_inst1(cg, "push", "rcx");     /* save right value */
+                    }
+                    if (left_num) {
+                        cg_inst1(cg, "mov", "rdi, rax");
+                        cg_inst(cg, "call __aether_itoa");
+                        /* rax now = string pointer */
+                    }
+                    if (right_num) {
+                        cg_inst1(cg, "push", "rax");     /* save left string */
+                        cg_inst1(cg, "pop", "rdi");      /* rdi = left string (temp) */
+                        cg_inst1(cg, "pop", "rax");      /* rax = right value */
+                        cg_inst1(cg, "push", "rdi");     /* save left string on stack */
+                        cg_inst1(cg, "mov", "rdi, rax"); /* convert right */
+                        cg_inst(cg, "call __aether_itoa");
+                        cg_inst1(cg, "mov", "rcx, rax"); /* rcx = right string */
+                        cg_inst1(cg, "pop", "rax");      /* rax = left string */
+                    } else if (left_num) {
+                        cg_inst1(cg, "pop", "rcx");      /* restore rcx = right (already a string) */
+                    }
+                    /* Now rax = left (string), rcx = right (string) */
                     cg_inst1(cg, "push", "rax");   /* left arg (rbp+24) */
                     cg_inst1(cg, "push", "rcx");   /* right arg (rbp+16) */
                     cg_inst(cg, "call __aether_concat");
@@ -914,17 +980,23 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                         /* Runtime string: evaluate expression, then call write syscall with strlen */
                         cg_comment(cg, "print() runtime string");
                         cg_expr(cg, arg, slots);
+                        /* Auto-convert numeric to string for print() */
+                        if (is_numeric_expr(arg)) {
+                            cg_inst1(cg, "mov", "rdi, rax");
+                            cg_inst(cg, "call __aether_itoa");
+                        }
                         /* rax = string pointer, save it */
                         cg_inst1(cg, "push", "rax");
                         /* Compute strlen */
+                        int sl_id = cg->label_counter++;
                         cg_inst(cg, "xor rcx, rcx");
                         cg_inst(cg, "mov rdi, rax");
-                        cg_write(cg, ".strlen_loop:\n");
-                        cg_write(cg, "    cmp byte [rdi + rcx], 0\n");
-                        cg_write(cg, "    je .strlen_done\n");
-                        cg_write(cg, "    inc rcx\n");
-                        cg_write(cg, "    jmp .strlen_loop\n");
-                        cg_write(cg, ".strlen_done:\n");
+                        cg_write_fmt(cg, ".strlen_loop_%d:\n", sl_id);
+                        cg_write_fmt(cg, "    cmp byte [rdi + rcx], 0\n");
+                        cg_write_fmt(cg, "    je .strlen_done_%d\n", sl_id);
+                        cg_write_fmt(cg, "    inc rcx\n");
+                        cg_write_fmt(cg, "    jmp .strlen_loop_%d\n", sl_id);
+                        cg_write_fmt(cg, ".strlen_done_%d:\n", sl_id);
                         /* rcx = length, pop rsi = string pointer */
                         cg_inst1(cg, "pop", "rsi");
                         cg_inst1(cg, "mov", "rdx, rcx");
@@ -2114,6 +2186,66 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_inst1(cg, "inc", "rcx");
             cg_inst(cg, "jmp LA_concat_memcpy_loop");
             cg_write(cg, "LA_concat_memcpy_done:\n");
+            cg_inst(cg, "ret");
+            cg_write(cg, "\n");
+
+            /* __aether_itoa(rdi: u64) -> rax: ptr — converts u64 to decimal string */
+            cg_write(cg, "; __aether_itoa(rdi: u64) -> rax: ptr\n");
+            cg_write(cg, "; Converts unsigned 64-bit integer to decimal string (allocated)\n");
+            cg_write(cg, "__aether_itoa:\n");
+            cg_inst1(cg, "push", "rbp");
+            cg_inst1(cg, "mov", "rbp, rsp");
+            cg_inst1(cg, "push", "r12");
+            cg_inst1(cg, "push", "r13");
+            cg_inst1(cg, "push", "r14");
+            /* rdi = value. Allocate 21 bytes (max 20 digits + null) */
+            cg_inst1(cg, "mov", "r12, rdi");   /* r12 = value */
+            cg_inst1(cg, "mov", "rdi, 21");
+            cg_inst(cg, "call __aether_alloc");
+            cg_inst1(cg, "mov", "r13, rax");    /* r13 = buffer */
+            /* Handle zero case */
+            cg_inst1(cg, "test", "r12, r12");
+            cg_inst(cg, "jnz LA_itoa_convert");
+            cg_inst(cg, "mov byte [r13], '0'");
+            cg_inst(cg, "mov byte [r13+1], 0");
+            cg_inst1(cg, "mov", "rax, r13");
+            cg_inst1(cg, "pop", "r14");
+            cg_inst1(cg, "pop", "r13");
+            cg_inst1(cg, "pop", "r12");
+            cg_inst1(cg, "mov", "rsp, rbp");
+            cg_inst1(cg, "pop", "rbp");
+            cg_inst(cg, "ret");
+            /* Convert: write digits from end backwards */
+            cg_write(cg, "LA_itoa_convert:\n");
+            cg_inst1(cg, "lea", "r14, [r13+19]");  /* r14 = end of 20-char buffer */
+            cg_inst(cg, "mov byte [r14], 0");        /* null terminator */
+            cg_write(cg, "LA_itoa_loop:\n");
+            cg_inst1(cg, "mov", "rax, r12");
+            cg_inst1(cg, "xor", "rdx, rdx");
+            cg_inst1(cg, "mov", "rcx, 10");
+            cg_inst1(cg, "div", "rcx");              /* rax = quotient, rdx = remainder */
+            cg_inst1(cg, "add", "dl, '0'");          /* convert to ASCII */
+            cg_inst(cg, "mov [r14], dl");
+            cg_inst1(cg, "dec", "r14");
+            cg_inst1(cg, "mov", "r12, rax");
+            cg_inst1(cg, "test", "rax, rax");
+            cg_inst(cg, "jnz LA_itoa_loop");
+            /* r14 points to last char written, advance past it for start */
+            cg_inst1(cg, "inc", "r14");
+            /* Shift string to start of buffer */
+            cg_inst1(cg, "mov", "rdi, r13");         /* dest = buffer start */
+            cg_inst1(cg, "mov", "rsi, r14");         /* src = first digit */
+            /* Compute length */
+            cg_inst1(cg, "lea", "rdx, [r13+19]");
+            cg_inst1(cg, "sub", "rdx, r14");         /* rdx = length */
+            cg_inst(cg, "call LA_concat_memcpy");
+            cg_inst(cg, "mov byte [r13+rdx], 0");    /* null terminate at new position */
+            cg_inst1(cg, "mov", "rax, r13");
+            cg_inst1(cg, "pop", "r14");
+            cg_inst1(cg, "pop", "r13");
+            cg_inst1(cg, "pop", "r12");
+            cg_inst1(cg, "mov", "rsp, rbp");
+            cg_inst1(cg, "pop", "rbp");
             cg_inst(cg, "ret");
             cg_write(cg, "\n");
 

@@ -1,0 +1,9 @@
+# test_interp_num_concat.ae — number ++ string and string ++ number
+func main(): u64 {
+    let n: u64 = 42
+    let a = n ++ " is the answer"
+    print(a)
+    let b = "the answer is " ++ n
+    print(b)
+    return 42
+}

@@ -215,6 +215,15 @@
 - [x] P15.08 — DCE fix: `NODE_EXPR_STMT` handling in `dce_collect` and `dce_remove_dead` to prevent variable removal 🟢
 - [x] P15.09 — Test fixtures: `test_interp_basic`, `test_interp_multi`, `test_interp_expr`, `test_interp_none`, `test_interp_concat`, `test_interp_numbers` 🟢
 - [x] P15.10 — All 33/33 host-native tests passing 🟢
+- [x] P15.11 — `__aether_itoa` runtime: u64-to-decimal-string conversion (allocated) 🟢
+- [x] P15.12 — `is_numeric_expr()` helper: detects numeric literals, idents, binary/unary ops 🟢
+- [x] P15.13 — BIN_CONCAT auto-converts numeric operands to strings via `__aether_itoa` 🟢
+- [x] P15.14 — `print()` auto-converts numeric args to strings 🟢
+- [x] P15.15 — Parser: `++`/`--` disambiguated as infix concat vs postfix increment via peek-ahead 🟢
+- [x] P15.16 — Parser: `TOKEN_PLUS_PLUS`/`TOKEN_MINUS_MINUS` recognized as infix binary ops (BIN_CONCAT) 🟢
+- [x] P15.17 — Duplicate label fix: `.strlen_loop`/`.strlen_done` use unique IDs per call 🟢
+- [x] P15.18 — Test fixtures: `test_interp_numbers` (numeric interpolation), `test_interp_numeric` (num ++ string), `test_interp_num_concat` (both directions), `test_interp_print_num` (print numeric) 🟢
+- [x] P15.19 — All 36/36 host-native tests passing 🟢
 
 ## Phase 16 — OS Memory & Process Management 🔴 NOT STARTED
 - [ ] P16.01 — Virtual memory manager (paging, page faults)
@@ -256,8 +265,8 @@
 13. **Phase 12**: @layout auto-injection — bits, org, padding from attributes ✅
 14. **Phase 13**: Language specification & requirements ✅
 |15. **Phase 14**: OS boot & shell stabilization — triple fault fix, shell I/O, binary loading ✅
-16. **Phase 15**: String interpolation — `{expr}` in strings, BIN_CONCAT, __aether_concat runtime ✅
-17. **Phase 16**: OS memory & process management — paging, multitasking, interrupts
+|16. **Phase 15**: String interpolation — `{expr}` in strings, BIN_CONCAT, __aether_concat runtime, __aether_itoa numeric-to-string, print() numeric support, ++/-- disambiguation ✅
+|17. **Phase 16**: OS memory & process management — paging, multitasking, interrupts
 
 ---
 
