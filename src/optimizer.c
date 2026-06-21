@@ -443,7 +443,6 @@ static void dce_collect(AstNode *node, SymbolTable *st);
 
 static void dce_collect_ident(AstNode *node, SymbolTable *st) {
     if (node->type == NODE_IDENT) {
-        /* StringView: need to null-terminate for strcmp */
         char name_buf[256];
         int len = node->data.ident.name.len < 255 ? node->data.ident.name.len : 255;
         memcpy(name_buf, node->data.ident.name.data, len);
@@ -483,8 +482,32 @@ static void dce_collect(AstNode *node, SymbolTable *st) {
         case NODE_IDENT:
             dce_collect_ident(node, st);
             break;
-        case NODE_BLOCK:
         case NODE_PROGRAM:
+            /* First pass: add all top-level functions to symbol table */
+            for (int i = 0; i < node->data.list.count; i++) {
+                AstNode *decl = node->data.list.items[i];
+                if (decl->type == NODE_FUNC_DECL) {
+                    StringView sv = decl->data.func.name->data.ident.name;
+                    char name_buf[256];
+                    int len = sv.len < 255 ? sv.len : 255;
+                    memcpy(name_buf, sv.data, len);
+                    name_buf[len] = '\0';
+                    bool is_entry = (len == 4 && memcmp(name_buf, "main", 4) == 0) ||
+                                    decl->data.func.is_exported ||
+                                    decl->data.func.is_sys ||
+                                    decl->data.func.entry_addr >= 0;
+                    if (!is_entry) add_symbol(st, name_buf, decl);
+                }
+            }
+            /* Second pass: collect references from all bodies */
+            for (int i = 0; i < node->data.list.count; i++) {
+                AstNode *decl = node->data.list.items[i];
+                if (decl->type == NODE_FUNC_DECL && decl->data.func.body) {
+                    dce_collect(decl->data.func.body, st);
+                }
+            }
+            break;
+        case NODE_BLOCK:
             for (int i = 0; i < node->data.list.count; i++)
                 dce_collect(node->data.list.items[i], st);
             break;
@@ -563,6 +586,52 @@ static AstNode *dce_remove_dead(AstNode *node, SymbolTable *st) {
         case NODE_PROGRAM:
         case NODE_BLOCK: {
             AstNodeList *stmts = &node->data.list;
+            /* For NODE_PROGRAM: first pass — mark all functions as keep by default,
+               then second pass removes unused ones. This handles cross-function references. */
+            if (node->type == NODE_PROGRAM) {
+                int write_idx = 0;
+                for (int i = 0; i < stmts->count; i++) {
+                    AstNode *stmt = stmts->items[i];
+                    bool keep = true;
+                    if (stmt->type == NODE_FUNC_DECL) {
+                        StringView sv = stmt->data.func.name->data.ident.name;
+                        char name_buf[256];
+                        int len = sv.len < 255 ? sv.len : 255;
+                        memcpy(name_buf, sv.data, len);
+                        name_buf[len] = '\0';
+                        bool is_entry = (len == 4 && memcmp(name_buf, "main", 4) == 0) ||
+                                        stmt->data.func.is_exported ||
+                                        stmt->data.func.is_sys ||
+                                        stmt->data.func.entry_addr >= 0;
+                        if (!is_entry) {
+                            int idx = find_symbol(st, name_buf);
+                            if (idx >= 0 && !st->entries[idx].is_used) keep = false;
+                        }
+                    } else if (stmt->type == NODE_LET) {
+                        StringView sv = stmt->data.let_decl.name->data.ident.name;
+                        char name_buf[256];
+                        int len = sv.len < 255 ? sv.len : 255;
+                        memcpy(name_buf, sv.data, len);
+                        name_buf[len] = '\0';
+                        int idx = find_symbol(st, name_buf);
+                        if (idx >= 0 && !st->entries[idx].is_used) {
+                            bool has_side_effects = false;
+                            if (stmt->data.let_decl.value) {
+                                if (stmt->data.let_decl.value->type == NODE_CALL ||
+                                    stmt->data.let_decl.value->type == NODE_ASM_BLOCK ||
+                                    stmt->data.let_decl.value->type == NODE_BINARY_OP) {
+                                    has_side_effects = true;
+                                }
+                            }
+                            if (!has_side_effects) keep = false;
+                        }
+                    }
+                    if (keep) stmts->items[write_idx++] = dce_remove_dead(stmt, st);
+                }
+                stmts->count = write_idx;
+                return node;
+            }
+            /* For NODE_BLOCK: single pass */
             int write_idx = 0;
             for (int i = 0; i < stmts->count; i++) {
                 AstNode *stmt = stmts->items[i];

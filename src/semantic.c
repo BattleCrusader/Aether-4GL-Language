@@ -11,6 +11,7 @@
 /* Forward declaration */
 static uint64_t const_eval_expr(SemanticAnalyzer *sa, AstNode *node, bool *ok);
 static AstNode *scope_lookup(SemanticAnalyzer *sa, const char *name);
+static void scope_declare(SemanticAnalyzer *sa, const char *name, AstNode *decl);
 
 /* Evaluate a constant expression at compile time.
  * Returns the uint64_t value. Sets *ok to false if not constant. */
@@ -242,8 +243,48 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
 
     switch (node->type) {
         case NODE_PROGRAM:
+            /* First pass: declare all top-level names */
             for (int i = 0; i < node->data.list.count; i++) {
-                semantic_visit_node(sa, node->data.list.items[i]);
+                AstNode *decl = node->data.list.items[i];
+                if (decl->type == NODE_FUNC_DECL) {
+                    const char *name = arena_strndup(sa->arena,
+                        decl->data.func.name->data.ident.name.data,
+                        decl->data.func.name->data.ident.name.len);
+                    fprintf(stderr, "  FIRST PASS: declaring func '%s' (decl at %p)\n", name, (void*)decl);
+                    scope_declare(sa, name, decl);
+                } else if (decl->type == NODE_CONST_DECL) {
+                    const char *name = arena_strndup(sa->arena,
+                        decl->data.let_decl.name->data.ident.name.data,
+                        decl->data.let_decl.name->data.ident.name.len);
+                    scope_declare(sa, name, decl);
+                } else if (decl->type == NODE_STRUCT_DECL) {
+                    const char *name = arena_strndup(sa->arena,
+                        decl->data.struct_decl.name->data.ident.name.data,
+                        decl->data.struct_decl.name->data.ident.name.len);
+                    scope_declare(sa, name, decl);
+                } else if (decl->type == NODE_ENUM_DECL) {
+                    const char *name = arena_strndup(sa->arena,
+                        decl->data.enum_decl.name->data.ident.name.data,
+                        decl->data.enum_decl.name->data.ident.name.len);
+                    scope_declare(sa, name, decl);
+                } else if (decl->type == NODE_TRAIT_DECL) {
+                    const char *name = arena_strndup(sa->arena,
+                        decl->data.trait_decl.name->data.ident.name.data,
+                        decl->data.trait_decl.name->data.ident.name.len);
+                    scope_declare(sa, name, decl);
+                } else if (decl->type == NODE_CLASS_DECL) {
+                    const char *name = arena_strndup(sa->arena,
+                        decl->data.struct_decl.name->data.ident.name.data,
+                        decl->data.struct_decl.name->data.ident.name.len);
+                    scope_declare(sa, name, decl);
+                }
+            }
+            /* Second pass: visit bodies (func decls also declare their names again, but that's fine) */
+            for (int i = 0; i < node->data.list.count; i++) {
+                AstNode *decl = node->data.list.items[i];
+                /* Skip IMPORT nodes — they should have been resolved already */
+                if (decl->type == NODE_IMPORT) continue;
+                semantic_visit_node(sa, decl);
             }
             break;
 

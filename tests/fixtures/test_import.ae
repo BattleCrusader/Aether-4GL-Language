@@ -1,0 +1,6 @@
+# test_import.ae — test import functionality
+import "test_lib.ae"
+
+func main(): u64 {
+    return greet()
+}

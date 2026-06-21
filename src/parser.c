@@ -24,6 +24,22 @@ Parser *parser_create(const char *source, size_t length, const char *filename) {
     return p;
 }
 
+Parser *parser_create_with_arena(const char *source, size_t length, const char *filename, Arena *arena) {
+    Parser *p = (Parser *)calloc(1, sizeof(Parser));
+    if (!p) return NULL;
+
+    p->lexer = lexer_create(source, length, filename);
+    if (!p->lexer) { free(p); return NULL; }
+
+    p->arena = arena;  /* Use external arena — caller must NOT call arena_destroy on cleanup */
+    p->has_current = false;
+    p->error_count = 0;
+    p->panic_mode = false;
+    p->current_scope = NULL;
+
+    return p;
+}
+
 void parser_destroy(Parser *p) {
     if (p) {
         lexer_destroy(p->lexer);

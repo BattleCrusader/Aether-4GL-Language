@@ -224,6 +224,12 @@
 - [x] P15.17 — Duplicate label fix: `.strlen_loop`/`.strlen_done` use unique IDs per call 🟢
 - [x] P15.18 — Test fixtures: `test_interp_numbers` (numeric interpolation), `test_interp_numeric` (num + string), `test_interp_num_concat` (both directions), `test_interp_print_num` (print numeric) 🟢
 - [x] P15.19 — All 36/36 host-native tests passing 🟢
+- [x] P15.20 — `import "path.ae"` resolution: reads file, parses, merges decls 🟢
+- [x] P15.21 — `parser_create_with_arena()` for shared arena across imports 🟢
+- [x] P15.22 — Two-pass semantic analysis: declare all names first, then visit bodies 🟢
+- [x] P15.23 — Two-pass DCE: collect all funcs to symbol table, then collect refs from bodies 🟢
+- [x] P15.24 — Two-pass DCE removal: NODE_PROGRAM handled separately from NODE_BLOCK 🟢
+- [x] P15.25 — All 37/37 host-native tests passing 🟢
 
 ## Phase 16 — OS Memory & Process Management 🔴 NOT STARTED
 - [ ] P16.01 — Virtual memory manager (paging, page faults)
@@ -265,7 +271,7 @@
 13. **Phase 12**: @layout auto-injection — bits, org, padding from attributes ✅
 14. **Phase 13**: Language specification & requirements ✅
 |15. **Phase 14**: OS boot & shell stabilization — triple fault fix, shell I/O, binary loading ✅
-|16. **Phase 15**: String interpolation — `{expr}` in strings, BIN_CONCAT, __aether_concat runtime, __aether_itoa numeric-to-string, `+` does concat when either operand is a string, print() numeric support ✅
+|16. **Phase 15**: String interpolation — `{expr}` in strings, BIN_CONCAT, __aether_concat runtime, __aether_itoa numeric-to-string, `+` does concat when either operand is a string, print() numeric support, `import "path.ae"` resolution ✅
 |17. **Phase 16**: OS memory & process management — paging, multitasking, interrupts
 
 ---

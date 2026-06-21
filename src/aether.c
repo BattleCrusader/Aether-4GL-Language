@@ -941,6 +941,131 @@ int main(int argc, char **argv) {
         printf("Parse OK (%d top-level decls)\n", program->data.list.count);
     }
 
+    /* Phase 2.5: Resolve imports — read imported files and merge their declarations */
+    {
+        /* Build a set of already-imported paths to avoid cycles */
+        char **imported_paths = NULL;
+        int imported_count = 0;
+        int imported_cap = 0;
+
+        /* Scan for NODE_IMPORT nodes and resolve them */
+        for (int i = 0; i < program->data.list.count; i++) {
+            AstNode *decl = program->data.list.items[i];
+            if (decl->type != NODE_IMPORT) continue;
+
+            /* Extract path from string literal */
+            StringView sv = decl->data.literal.string_val;
+            const char *path_start = sv.data;
+            size_t path_len = sv.len;
+            if (path_len >= 2 && path_start[0] == '"' && path_start[path_len-1] == '"') {
+                path_start++;
+                path_len -= 2;
+            }
+
+            /* Build full path relative to input file's directory */
+            char import_path[1024];
+            const char *last_slash = strrchr(input_file, '/');
+            if (last_slash) {
+                size_t dir_len = (size_t)(last_slash - input_file);
+                snprintf(import_path, sizeof(import_path), "%.*s/%.*s",
+                    (int)dir_len, input_file, (int)path_len, path_start);
+            } else {
+                snprintf(import_path, sizeof(import_path), "%.*s",
+                    (int)path_len, path_start);
+            }
+
+            /* Check for circular import */
+            bool already = false;
+            for (int j = 0; j < imported_count; j++) {
+                if (strcmp(imported_paths[j], import_path) == 0) { already = true; break; }
+            }
+            if (already) continue;
+
+            /* Track this import */
+            if (imported_count >= imported_cap) {
+                int nc = imported_cap ? imported_cap * 2 : 8;
+                char **na = (char **)realloc(imported_paths, nc * sizeof(char *));
+                if (!na) { fprintf(stderr, "Error: out of memory\n"); return 1; }
+                imported_paths = na;
+                imported_cap = nc;
+            }
+            imported_paths[imported_count] = strdup(import_path);
+            imported_count++;
+
+            if (verbose) printf("Resolving import: %s\n", import_path);
+
+            /* Read the imported file */
+            FILE *ifile = fopen(import_path, "rb");
+            if (!ifile) {
+                fprintf(stderr, "Error: cannot open import '%s'\n", import_path);
+                return 1;
+            }
+            fseek(ifile, 0, SEEK_END);
+            long ilen = ftell(ifile);
+            fseek(ifile, 0, SEEK_SET);
+            char *isrc = (char *)malloc((size_t)ilen + 1);
+            if (!isrc) { fclose(ifile); return 1; }
+            size_t rlen = fread(isrc, 1, (size_t)ilen, ifile);
+            isrc[rlen] = '\0';
+            fclose(ifile);
+
+            /* Parse the imported file using the main parser's arena so nodes persist */
+            Parser *iparser = parser_create_with_arena(isrc, rlen, import_path, parser->arena);
+            AstNode *iprog = parser_parse(iparser);
+            if (iparser->error_count > 0) {
+                fprintf(stderr, "Import '%s' has %d parse errors\n", import_path, iparser->error_count);
+                iparser->arena = NULL;
+                parser_destroy(iparser);
+                free(isrc);
+                return 1;
+            }
+
+            /* Append imported decls to end, then remove the import node */
+            /* Note: can't use node_list_append here because the list's items array
+               was allocated by the arena (bump allocator), and realloc on arena memory is UB.
+               Instead, manually grow with malloc. */
+            int new_count = program->data.list.count + iprog->data.list.count;
+            AstNode **new_items = (AstNode **)malloc(new_count * sizeof(AstNode *));
+            if (!new_items) { fprintf(stderr, "Error: out of memory\n"); return 1; }
+            /* Copy existing items */
+            for (int k = 0; k < program->data.list.count; k++) {
+                new_items[k] = program->data.list.items[k];
+            }
+            /* Append imported decls */
+            int write_idx = program->data.list.count;
+            for (int j = 0; j < iprog->data.list.count; j++) {
+                AstNode *idecl = iprog->data.list.items[j];
+                if (idecl->type == NODE_IMPORT) continue;
+                new_items[write_idx++] = idecl;
+            }
+            /* Free old items if they were malloc'd (not arena) */
+            /* Don't free arena-allocated memory — it's a bump allocator */
+            /* if (program->data.list.items) free(program->data.list.items); */
+            program->data.list.items = new_items;
+            program->data.list.count = write_idx;
+            program->data.list.cap = new_count;
+
+            /* Remove the import node by shifting everything after it left */
+            for (int k = i; k < program->data.list.count - 1; k++) {
+                program->data.list.items[k] = program->data.list.items[k + 1];
+            }
+            program->data.list.count--;
+            i--;  /* re-check this index */
+
+            iparser->arena = NULL;
+            parser_destroy(iparser);
+            /* Keep isrc alive — StringView fields in imported AST nodes point into it.
+               It will be freed when the main source is freed at the end of main(). */
+            /* free(isrc); */
+
+            if (verbose) printf("Import resolved: %s (program now has %d decls)\n",
+                import_path, program->data.list.count);
+        }
+
+        for (int i = 0; i < imported_count; i++) free(imported_paths[i]);
+        free(imported_paths);
+    }
+
     /* Phase 3: Semantic analysis */
     Arena *sa_arena = arena_create();
     SemanticAnalyzer *sa = semantic_create(sa_arena);
@@ -975,7 +1100,20 @@ int main(int argc, char **argv) {
             printf("=== Optimized AST ===\n");
             ast_dump(program, 0);
         }
-        if (verbose) printf("Optimization complete\n");
+        if (verbose) printf("Optimization complete (%d decls)\n", program->data.list.count);
+    }
+    if (verbose) printf("After opt: %d decls\n", program->data.list.count);
+    if (verbose) {
+        printf("  Decls after opt:\n");
+        for (int di = 0; di < program->data.list.count; di++) {
+            AstNode *d = program->data.list.items[di];
+            printf("    [%d] type=%d", di, (int)d->type);
+            if (d->type == NODE_FUNC_DECL && d->data.func.name) {
+                printf(" name=%.*s", (int)d->data.func.name->data.ident.name.len,
+                    d->data.func.name->data.ident.name.data);
+            }
+            printf("\n");
+        }
     }
 
     /* Phase 4: Code generation */

@@ -1,0 +1,4 @@
+# test_lib.ae — test library for import
+func greet(): u64 {
+    return 42
+}

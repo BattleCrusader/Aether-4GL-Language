@@ -1,7 +1,7 @@
 # Aether Language Specification
 
-**Version**: 0.5 (Comprehensive)
-**Status**: Living Document — Updated 2026-06-21
+**Version**: 0.6 (Comprehensive)
+**Status**: Living Document — Updated 2026-06-22
 
 ---
 
@@ -153,6 +153,26 @@ Range:          ..
 Pattern:        |   ..=
 ```
 
+**String Concatenation with `+`**: The `+` operator is overloaded at the language level. When either operand is a string, `+` performs string concatenation instead of numeric addition. This is detected at codegen time by the `is_string_expr()` helper.
+
+```aether
+let s = "hello " + "world"      // "hello world" (concat)
+let s = "value: " + 42          // "value: 42" (auto-converted via __aether_itoa)
+let s = 42 + " is the answer"   // "42 is the answer" (auto-converted)
+let n = 42 + 1                  // 43 (numeric addition — both operands are numbers)
+```
+
+The `is_string_expr()` helper detects:
+- String literals (`NODE_LITERAL_STRING`)
+- `BIN_CONCAT` chains (interpolation results)
+- Typed identifiers with `PRIM_STRING` type
+- Untyped identifiers whose initializer is a string expression
+
+When string concat is detected, the codegen:
+1. Checks if either operand is numeric and auto-converts via `__aether_itoa`
+2. Pushes both operands and calls `__aether_concat`
+3. Returns the new string pointer in `rax`
+
 ### 3.5 Literals
 
 ```aether
@@ -169,6 +189,13 @@ Pattern:        |   ..=
 // String literals
 "hello, world"
 "escaped: \n \t \\ \" \x41"
+
+// String interpolation — expressions in {} are evaluated and converted to strings
+let name = "World"
+let msg = "Hello {name}!"       // "Hello World!"
+let n: u64 = 42
+let s = "count = {n}"           // "count = 42" (auto-converted via __aether_itoa)
+let sum = "total: {x + y}"      // expressions work too
 
 // Multi-line strings
 """
@@ -188,7 +215,49 @@ false
 none
 ```
 
-### 3.6 Indentation
+### 3.6 String Interpolation
+
+String interpolation is a first-class language feature, not a library function. When the parser encounters `{expr}` inside a string literal, it:
+
+1. Splits the string at the `{` boundary
+2. Parses the expression between `{` and `}` as a sub-expression
+3. Builds a left-associative chain of `BIN_CONCAT` operations
+4. At codegen time, each `BIN_CONCAT` emits a `call __aether_concat`
+
+**Numeric-to-string auto-conversion**: If an interpolated expression evaluates to a numeric type (u8-u64, i8-i64, bool, byte), the codegen automatically inserts a `call __aether_itoa` before the concat. This is detected by the `is_numeric_expr()` helper which checks:
+- Literal types (`NODE_LITERAL_INT`, `NODE_LITERAL_FLOAT`, `NODE_LITERAL_BOOL`, `NODE_LITERAL_CHAR`)
+- Binary ops that produce numeric results (add, sub, mul, div, bitwise, shifts)
+- Unary ops that produce numeric results (neg, bit_not, inc, dec)
+- Typed identifiers (resolved to declarations with primitive numeric types)
+
+```aether
+let name = "World"
+let msg = "Hello {name}!"       # BIN_CONCAT("Hello ", BIN_CONCAT(name, "!"))
+
+let n: u64 = 42
+let s = "value: {n}"            # BIN_CONCAT("value: ", __aether_itoa(n))
+
+let x: u64 = 40
+let y: u64 = 2
+let sum = "{x + y}"             # BIN_CONCAT("", __aether_itoa(x + y))
+```
+
+**Runtime**: The `__aether_concat(left: ptr, right: ptr) -> rax: ptr` function:
+1. Computes strlen of both strings
+2. Allocates a buffer via `__aether_alloc` (bump allocator)
+3. Copies both strings into the buffer
+4. Returns the new string pointer
+
+The `__aether_itoa(rdi: u64) -> rax: ptr` function:
+1. Allocates 21 bytes (max 20 digits + null)
+2. Handles zero case (returns "0")
+3. Writes digits from end backwards using repeated div by 10
+4. Shifts the result to the start of the buffer
+5. Returns the string pointer
+
+**Note**: `__aether_itoa` clobbers `rcx` (uses `div rcx`), so callers must save `rcx` before calling it.
+
+### 3.7 Indentation
 
 Aether uses significant indentation (4 spaces) for block structure, similar to Python:
 
@@ -1339,7 +1408,49 @@ module serial {
 }
 ```
 
-### 18.5 Binary Entry Points
+### 18.5 File Imports
+
+Aether supports file-level imports via the `import` keyword. Imports are resolved at compile time — the compiler reads the imported file, parses it, and merges its declarations into the current compilation unit.
+
+```aether
+// Import a library file relative to the current source
+import "libaether.ae"
+
+// Now use functions from the imported file
+func main(): u64 {
+    puts("Hello from Aether!")
+    exit_bin()
+    return 0
+}
+```
+
+**How imports work:**
+
+1. The parser creates `NODE_IMPORT` AST nodes for each `import "path.ae"` statement
+2. After parsing, the compiler scans for `NODE_IMPORT` nodes and resolves them:
+   - Builds the full path relative to the importing file's directory
+   - Reads the imported file from disk
+   - Parses it using `parser_create_with_arena()` (shares the main parser's arena so AST nodes persist)
+   - Merges the imported declarations into the main program's declaration list
+   - Removes the `NODE_IMPORT` node from the list
+3. The imported source buffer is kept alive because `StringView` fields in the AST point into it
+4. Circular imports are detected and skipped (tracked by path)
+
+**Semantic analysis** uses a two-pass approach to handle forward references across files:
+1. First pass: declares all top-level names (functions, consts, structs, enums, traits, classes)
+2. Second pass: visits function bodies and resolves identifiers
+
+**Dead Code Elimination (DCE)** also uses a two-pass approach:
+1. First pass: adds all top-level functions to the symbol table
+2. Second pass: collects references from all function bodies
+3. Removal pass: only removes functions that are neither entry points nor referenced
+
+**Limitations:**
+- Only file-level imports are supported (no module-level or selective imports)
+- Imported files must use relative paths (resolved from the importing file's directory)
+- The `import` keyword currently requires a string literal path (not a bare module name)
+
+### 18.6 Binary Entry Points
 
 ```aether
 @entry(0x2000000)

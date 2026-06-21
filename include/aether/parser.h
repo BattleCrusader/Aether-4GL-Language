@@ -47,6 +47,7 @@ typedef struct Parser {
 
 /* Create a parser */
 Parser *parser_create(const char *source, size_t length, const char *filename);
+Parser *parser_create_with_arena(const char *source, size_t length, const char *filename, Arena *arena);
 
 /* Destroy a parser */
 void parser_destroy(Parser *p);
