@@ -35,6 +35,8 @@ AstNode *node_func_decl(Arena *a, Location loc, AstNode *name, bool is_pub, bool
         node->data.func.has_layout = false;
         node->data.func.layout_start = 0;
         node->data.func.layout_max = 0;
+        node->data.func.layout_bits = 0;
+        node->data.func.layout_signature = 0;
         node->data.func.layout_file = (StringView){0};
     }
     return node;

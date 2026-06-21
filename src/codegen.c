@@ -302,6 +302,8 @@ Codegen *codegen_create(Arena *a) {
     cg->has_layout = false;
     cg->layout_start = 0;
     cg->layout_max = 0;
+    cg->layout_bits = 0;
+    cg->layout_signature = 0;
     cg->layout_file = NULL;
     cg->linker_script = NULL;
     return cg;
@@ -1427,8 +1429,11 @@ static void cg_func(Codegen *cg, AstNode *func) {
         func->data.func.name->data.ident.name.data);
 
     cg_write_fmt(cg, "; function %s (frame=%d)\n", fn_label, frame_size);
-    cg_write_fmt(cg, "global %s\n", fn_label);
-    cg_write_fmt(cg, "%s:\n", fn_label);
+    /* For @layout functions, skip label and prologue — the asm block is the entire output */
+    if (!func->data.func.has_layout) {
+        cg_write_fmt(cg, "global %s\n", fn_label);
+        cg_write_fmt(cg, "%s:\n", fn_label);
+    }
 
     /* Prologue — skip for @layout functions (flat binary boot sectors, etc.) */
     if (!func->data.func.has_layout) {
@@ -1587,6 +1592,8 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     cg->has_layout = false;
     cg->layout_start = 0;
     cg->layout_max = 0;
+    cg->layout_bits = 0;
+    cg->layout_signature = 0;
     cg->layout_file = NULL;
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *node = program->data.list.items[i];
@@ -1607,6 +1614,8 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                 cg->has_layout = true;
                 cg->layout_start = (int64_t)node->data.func.layout_start;
                 cg->layout_max = (int64_t)node->data.func.layout_max;
+                cg->layout_bits = node->data.func.layout_bits;
+                cg->layout_signature = node->data.func.layout_signature;
                 if (node->data.func.layout_file.len > 0) {
                     cg->layout_file = arena_strndup(cg->arena,
                         node->data.func.layout_file.data,
@@ -1628,7 +1637,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "default rel\n\n");
     }
 
-    /* Emit const declarations as NASM equ directives */
+    /* Emit const declarations as NASM equ directives — only for non-layout targets */
     if (!cg->has_layout) {
         for (int i = 0; i < program->data.list.count; i++) {
             AstNode *node = program->data.list.items[i];
@@ -1645,13 +1654,18 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "\n");
     }
 
-    /* If @layout is set, use [org N] instead of ELF sections */
+    /* If @layout is set, emit bits, org, and auto-padding */
     if (cg->has_layout) {
-        cg_write(cg, "bits 64\n");
+        /* Emit bits directive from @layout(bits=N), default 64 */
+        int bits = cg->layout_bits;
+        if (bits == 0) bits = 64;
+        cg_write_fmt(cg, "bits %d\n", bits);
+        /* Emit org from @layout(start=N) */
+        if (cg->layout_start > 0) {
+            cg_write_fmt(cg, "[org 0x%lx]\n", (unsigned long)cg->layout_start);
+        }
         cg_write_fmt(cg, "; Layout: start=0x%lx, max=%ld bytes\n",
             (unsigned long)cg->layout_start, (unsigned long)cg->layout_max);
-        cg_write_fmt(cg, "[org 0x%lx]\n", (unsigned long)cg->layout_start);
-        /* Section .text is not emitted for flat binary layout */
     } else {
         cg_write(cg, "section .text\n\n");
     }
@@ -1847,8 +1861,17 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_func(cg, node);
             /* If this function has @layout, emit padding to exactly fill max bytes */
             if (node->data.func.has_layout && cg->layout_max > 0) {
-                cg_write_fmt(cg, "; @layout padding to %ld bytes\n", (unsigned long)cg->layout_max);
-                cg_write_fmt(cg, "times %ld-($-$$) db 0\n", (unsigned long)cg->layout_max);
+                if (cg->layout_signature != 0) {
+                    /* Emit signature at max-2, then pad to max */
+                    cg_write_fmt(cg, "; @layout padding to %ld bytes (with signature 0x%x)\n",
+                        (unsigned long)cg->layout_max, cg->layout_signature);
+                    cg_write_fmt(cg, "times %ld-($-$$) db 0\n",
+                        (unsigned long)(cg->layout_max - 2));
+                    cg_write_fmt(cg, "dw 0x%x\n", cg->layout_signature);
+                } else {
+                    cg_write_fmt(cg, "; @layout padding to %ld bytes\n", (unsigned long)cg->layout_max);
+                    cg_write_fmt(cg, "times %ld-($-$$) db 0\n", (unsigned long)cg->layout_max);
+                }
                 cg_write(cg, "\n");
             }
         }

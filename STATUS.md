@@ -172,6 +172,20 @@
 - [x] P11.05 — Aether OS kernel rewritten in Aether (main.ae) instead of C 🟢
 - [x] P11.06 — OS Makefile uses `aether --target kernel` instead of gcc/clang 🟢
 
+## Phase 12 — @layout Auto-Injection 🟢 COMPLETE
+- [x] P12.01 — `@layout(bits=N)` parameter parsing and storage in AST 🟢
+- [x] P12.02 — `bits N` directive auto-emitted from @layout(bits=N), default 64 🟢
+- [x] P12.03 — `[org 0x...]` auto-emitted from @layout(start=N) 🟢
+- [x] P12.04 — `times max-($-$$) db 0` auto-padding from @layout(max=N) 🟢
+- [x] P12.05 — Removed redundant `bits`, `org`, and padding from asm blocks 🟢
+- [x] P12.06 — Clean debug output, no stderr noise 🟢
+
+## Phase 13 — Language Specification & Requirements 🟢 COMPLETE
+- [x] P13.01 — Comprehensive REQUIREMENTS.md with all 28 feature areas 🟢
+- [x] P13.02 — Language specification document with code snippets 🟢
+- [x] P13.03 — OS pipeline mapping for every compiler feature 🟢
+- [x] P13.04 — STATUS.md updated with new phases 🟢
+
 ---
 
 ## Legend

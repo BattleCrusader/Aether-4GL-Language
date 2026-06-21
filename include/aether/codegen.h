@@ -46,6 +46,8 @@ typedef struct {
     bool has_layout;
     int64_t layout_start;    /* [org N] origin */
     int64_t layout_max;      /* max binary size, pad/error if exceeded */
+    int layout_bits;         /* bits mode: 16, 32, or 64; 0=default(64) */
+    int layout_signature;    /* boot signature word (e.g. 0xAA55), 0=none */
     const char *layout_file; /* output filename, NULL = use normal pipeline */
     /* User-supplied linker script path, NULL = auto-generate */
     const char *linker_script;

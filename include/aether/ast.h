@@ -174,6 +174,8 @@ typedef struct {
     bool has_layout;        /* true if @layout attribute is set */
     uint64_t layout_start;  /* start address from @layout(start=N) */
     uint64_t layout_max;    /* max size from @layout(max=N) */
+    int layout_bits;        /* bits mode from @layout(bits=N): 16, 32, or 64; 0=default(64) */
+    int layout_signature;   /* boot signature word from @layout(signature=N), 0=none */
     StringView layout_file; /* output filename from @layout(file="name") */
     AstNodeList pre_conditions;  /* pre(expr) contract expressions */
     AstNodeList post_conditions; /* post(expr) contract expressions */
@@ -397,11 +399,13 @@ typedef struct {
 typedef struct {
     StringView name;        /* attribute name (e.g. "export", "entry") */
     int64_t int_value;      /* for numeric payloads like @entry(addr), -1 if not set */
-    /* @layout(start=N, max=M, file="name") params */
+    /* @layout(start=N, max=M, bits=N, signature=N, file="name") params */
     bool has_layout_start;
     int64_t layout_start;
     bool has_layout_max;
     int64_t layout_max;
+    int layout_bits;         /* 16, 32, or 64; default 64 */
+    int layout_signature;    /* boot signature word (e.g. 0xAA55), 0=none */
     StringView layout_file; /* empty if not set */
     /* @module_abi(version=N) params */
     bool has_module_abi;

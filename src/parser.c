@@ -179,6 +179,8 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     func->data.func.has_layout = true;
                     func->data.func.layout_start = (uint64_t)last_attr->data.attr.layout_start;
                     func->data.func.layout_max = (uint64_t)last_attr->data.attr.layout_max;
+                    func->data.func.layout_bits = last_attr->data.attr.layout_bits;
+                    func->data.func.layout_signature = last_attr->data.attr.layout_signature;
                     func->data.func.layout_file = last_attr->data.attr.layout_file;
                 } else if (strcmp(aname, "kernel_layout") == 0) {
                     func->data.func.is_kernel_layout = true;
@@ -1269,6 +1271,8 @@ AstNode *parse_attribute(Parser *p) {
         attr->data.attr.int_value = -1;
         attr->data.attr.has_layout_start = false;
         attr->data.attr.has_layout_max = false;
+        attr->data.attr.layout_bits = 0;  /* 0 = default 64 */
+        attr->data.attr.layout_signature = 0;  /* 0 = no signature */
         attr->data.attr.layout_file = (StringView){0};
         attr->data.attr.has_module_abi = false;
         attr->data.attr.module_abi_version = -1;
@@ -1307,6 +1311,10 @@ AstNode *parse_attribute(Parser *p) {
                             } else if (klen == 3 && strncmp(key.data, "max", 3) == 0) {
                                 attr->data.attr.has_layout_max = true;
                                 attr->data.attr.layout_max = (int64_t)val;
+                            } else if (klen == 4 && strncmp(key.data, "bits", 4) == 0) {
+                                attr->data.attr.layout_bits = (int)val;
+                            } else if (klen == 9 && strncmp(key.data, "signature", 9) == 0) {
+                                attr->data.attr.layout_signature = (int)val;
                             } else if (klen == 7 && strncmp(key.data, "version", 7) == 0) {
                                 attr->data.attr.has_module_abi = true;
                                 attr->data.attr.module_abi_version = (int64_t)val;
