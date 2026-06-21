@@ -43,7 +43,7 @@
 - [x] String literal processing (strip quotes, decode escapes) 🟢
 - [x] `aether run <file.ae>` — compile + execute in one step 🟢
 - [x] Host-native test runner — `make test-host` (13/13 passing) 🟢
-- [ ] `aether.toml` target configuration
+- [ ] P02.11 — `aether.toml` target configuration
 
 ## Phase 3 — Memory Management 🟢 COMPLETE
 - [x] P03.01 — `defer` — scope-exit execution (LIFO order, return-safe) 🟢
@@ -180,7 +180,7 @@
 - [x] P12.06 — Clean debug output, no stderr noise 🟢
 
 ## Phase 13 — Language Specification & Requirements 🟢 COMPLETE
-- [x] P13.01 — Comprehensive REQUIREMENTS.md with all 28 feature areas 🟢
+- [x] P13.01 — Comprehensive REQUIREMENTS.md with all 29 feature areas 🟢
 - [x] P13.02 — Language specification document with code snippets 🟢
 - [x] P13.03 — OS pipeline mapping for every compiler feature 🟢
 - [x] P13.04 — STATUS.md updated with new phases 🟢
@@ -196,15 +196,15 @@
 - [x] P14.08 — Add inline command handlers: help, ls, echo, reboot, shutdown, clear, mem 🟢
 - [x] P14.09 — Add shutdown command with ACPI/QEMU/Bochs methods 🟢
 - [x] P14.10 — Clean up debug scaffolding (C kernel, NASM test kernels) 🟢
-- [ ] P14.11 — Wire up command registration (help, ls, echo, reboot binaries)
-- [ ] P14.12 — Implement ATA PIO disk read for binary loading
-- [ ] P14.13 — Implement ELF64 binary loader in kernel
-- [ ] P14.14 — Implement boot filesystem (AetherFS) read support
-- [ ] P14.15 — Implement `fs_read` for disk-backed files
-- [ ] P14.16 — Implement `fs_readdir` for directory listing
-- [ ] P14.17 — Phase 14 Verification & Cleanup
+- [x] P14.11 — Wire up command registration (help, ls, echo, reboot binaries) 🟢
+- [x] P14.12 — Implement ATA PIO disk read for binary loading 🟢
+- [x] P14.13 — Implement ELF64 binary loader in kernel 🟢
+- [x] P14.14 — Implement boot filesystem (AetherFS) read support 🟢
+- [x] P14.15 — Implement `fs_read` for disk-backed files 🟢
+- [x] P14.16 — Implement `fs_readdir` for directory listing 🟢
+- [x] P14.17 — Phase 14 Verification & Cleanup 🟢
 
-## Phase 15 — String Interpolation 🟢 COMPLETE
+## Phase 15 — String Interpolation & Imports 🟢 COMPLETE
 - [x] P15.01 — Parser: scan string literals for `{expr}` patterns and build BIN_CONCAT chains 🟢
 - [x] P15.02 — Codegen: BIN_CONCAT case emits `push` args + `call __aether_concat` 🟢
 - [x] P15.03 — Runtime: `__aether_concat` helper computes strlen, allocates buffer, copies strings 🟢
@@ -212,8 +212,8 @@
 - [x] P15.05 — DCE fix: keep `let` assignments with BIN_CONCAT initializers 🟢
 - [x] P15.06 — `print()` handles runtime strings via strlen + write syscall 🟢
 - [x] P15.07 — Host-native build and test: `"Hello {name}!"` produces correct output 🟢
-- [x] P15.08 — DCE fix: `NODE_EXPR_STMT` handling in `dce_collect` and `dce_remove_dead` to prevent variable removal 🟢
-- [x] P15.09 — Test fixtures: `test_interp_basic`, `test_interp_multi`, `test_interp_expr`, `test_interp_none`, `test_interp_concat`, `test_interp_numbers` 🟢
+- [x] P15.08 — DCE fix: `NODE_EXPR_STMT` handling in `dce_collect` and `dce_remove_dead` 🟢
+- [x] P15.09 — Test fixtures: interpolation tests (basic, multi, expr, none, concat, numbers) 🟢
 - [x] P15.10 — All 33/33 host-native tests passing 🟢
 - [x] P15.11 — `__aether_itoa` runtime: u64-to-decimal-string conversion (allocated) 🟢
 - [x] P15.12 — `is_numeric_expr()` helper: detects numeric literals, idents, binary/unary ops 🟢
@@ -222,7 +222,7 @@
 - [x] P15.15 — `+` operator does string concat when either operand is a string (like Python/JS) 🟢
 - [x] P15.16 — `is_string_expr()` helper: detects string literals, BIN_CONCAT chains, typed/untyped string idents 🟢
 - [x] P15.17 — Duplicate label fix: `.strlen_loop`/`.strlen_done` use unique IDs per call 🟢
-- [x] P15.18 — Test fixtures: `test_interp_numbers` (numeric interpolation), `test_interp_numeric` (num + string), `test_interp_num_concat` (both directions), `test_interp_print_num` (print numeric) 🟢
+- [x] P15.18 — Test fixtures: numeric interpolation, num+string, both directions, print numeric 🟢
 - [x] P15.19 — All 36/36 host-native tests passing 🟢
 - [x] P15.20 — `import "path.ae"` resolution: reads file, parses, merges decls 🟢
 - [x] P15.21 — `parser_create_with_arena()` for shared arena across imports 🟢
@@ -239,6 +239,36 @@
 - [ ] P16.05 — Module loading and registry
 - [ ] P16.06 — User mode switching
 - [ ] P16.07 — Phase 16 Verification & Cleanup
+
+## Phase 17 — Concurrency & Fibers 🔴 NOT STARTED
+- [ ] P17.01 — `spawn` keyword parsing and codegen
+- [ ] P17.02 — `Chan<T>` channel type
+- [ ] P17.03 — `Mutex` synchronization primitive
+- [ ] P17.04 — Fiber scheduler runtime
+- [ ] P17.05 — Cooperative multitasking with explicit yield
+- [ ] P17.06 — Per-fiber stack allocation
+- [ ] P17.07 — Phase 17 Verification & Cleanup
+
+## Phase 18 — Advanced OS Integration 🔴 NOT STARTED
+- [ ] P18.01 — `bootchain` declarative boot chain generation
+- [ ] P18.02 — `interrupt` handler generation (frame save/restore, EOI, stack switching)
+- [ ] P18.03 — `@metadata` self-documenting binary format (ELF note sections)
+- [ ] P18.04 — `@requires` capability tracking and verification
+- [ ] P18.05 — `@units` compile-time physical unit checking
+- [ ] P18.06 — Phase 18 Verification & Cleanup
+
+## Phase 19 — Goal-Oriented I/O & Query Fusion 🔴 NOT STARTED
+- [ ] P19.01 — `from path read Type` goal-oriented I/O syntax
+- [ ] P19.02 — Compiler generates optimal read path based on target
+- [ ] P19.03 — Query fusion: chain operations fused into single loop
+- [ ] P19.04 — Pattern-based metaprogramming (match on types)
+- [ ] P19.05 — Phase 19 Verification & Cleanup
+
+## Phase 20 — Protocol Generation & Hardware Configuration 🔴 NOT STARTED
+- [ ] P20.01 — `protocol` declarative hardware interface generation
+- [ ] P20.02 — Automatic bit-banging code from protocol declarations
+- [ ] P20.03 — `#run` compile-time hardware detection and code emission
+- [ ] P20.04 — Phase 20 Verification & Cleanup
 
 ---
 
@@ -270,9 +300,13 @@
 12. **Phase 11**: Kernel codegen fixes — const→equ, no Linux syscalls in freestanding, Aether kernel ✅
 13. **Phase 12**: @layout auto-injection — bits, org, padding from attributes ✅
 14. **Phase 13**: Language specification & requirements ✅
-|15. **Phase 14**: OS boot & shell stabilization — triple fault fix, shell I/O, binary loading ✅
-|16. **Phase 15**: String interpolation — `{expr}` in strings, BIN_CONCAT, __aether_concat runtime, __aether_itoa numeric-to-string, `+` does concat when either operand is a string, print() numeric support, `import "path.ae"` resolution ✅
-|17. **Phase 16**: OS memory & process management — paging, multitasking, interrupts
+15. **Phase 14**: OS boot & shell stabilization — triple fault fix, shell I/O, binary loading ✅
+16. **Phase 15**: String interpolation & imports — `{expr}` in strings, BIN_CONCAT, `__aether_concat`, `__aether_itoa`, `+` concat, `import "path.ae"` ✅
+17. **Phase 16**: OS memory & process management — paging, multitasking, interrupts
+18. **Phase 17**: Concurrency & fibers — spawn, channels, mutex, scheduler
+19. **Phase 18**: Advanced OS integration — bootchain, interrupt handlers, metadata, capabilities, units
+20. **Phase 19**: Goal-oriented I/O & query fusion — declarative reads, fused loops, pattern metaprogramming
+21. **Phase 20**: Protocol generation & hardware configuration — declarative hardware, bit-banging, compile-time detection
 
 ---
 
@@ -289,3 +323,6 @@
 - **Indentation**: Significant (Python-style), 4 spaces
 - **Host native**: Multi-backend codegen; host syscall ABI instead of 0x5000 table; `aether run` for one-step compile+execute
 - **Boot triple fault fix**: `cli` must be emitted before calling kernel from boot.ae — no IDT is set up, so any interrupt causes GPF → double fault → triple fault
+- **`__aether_itoa` clobbers rcx**: Callers must save `rcx` before calling itoa
+- **NASM 64-bit mode scale factors**: Only 1,2,4,8 allowed — `*32` and `*8+4` are invalid and must be replaced with shift+add sequences
+- **`+` operator**: Does string concat when either operand is a string (detected at codegen time by `is_string_expr()`), numeric addition when both are numbers

@@ -1,6 +1,6 @@
 # Aether Language Specification
 
-**Version**: 0.6 (Comprehensive)
+**Version**: 1.0 (Comprehensive)
 **Status**: Living Document — Updated 2026-06-22
 
 ---
@@ -31,6 +31,10 @@
 22. [Build System](#22-build-system)
 23. [Compiler Targets](#23-compiler-targets)
 24. [Think Outside the Box: Unique Aether Innovations](#24-think-outside-the-box-unique-aether-innovations)
+25. [Concurrency and Fibers](#25-concurrency-and-fibers)
+26. [Advanced OS Integration](#26-advanced-os-integration)
+27. [Goal-Oriented I/O and Query Fusion](#27-goal-oriented-io-and-query-fusion)
+28. [Protocol Generation and Hardware Configuration](#28-protocol-generation-and-hardware-configuration)
 
 ---
 
@@ -1926,6 +1930,226 @@ interrupt keyboard at(0x21) {
 
 ---
 
+---
+
+## 25. Concurrency and Fibers
+
+### 25.1 Spawn
+
+```aether
+func worker(id: u64) {
+    print("Worker {id} started")
+}
+
+spawn worker(1)
+spawn worker(2)
+```
+
+### 25.2 Synchronization Primitives
+
+```aether
+var lock: Mutex
+lock.acquire()
+// critical section
+lock.release()
+```
+
+### 25.3 Channels
+
+```aether
+let ch: Chan<u64>
+ch.send(42)
+let val = ch.recv()
+```
+
+### 25.4 Fiber Scheduler Support
+
+The compiler generates code compatible with the Aether OS fiber scheduler:
+
+- Cooperative multitasking with explicit yield
+- No preemption, no timer interrupts needed
+- Per-fiber stack allocation
+- Yield points at blocking I/O, timer waits, and explicit `yield` calls
+
+---
+
+## 26. Advanced OS Integration
+
+### 26.1 Automatic Boot Chain Generation
+
+```aether
+// Describe the boot chain declaratively
+bootchain {
+    stage1: @layout(start=0x7C00, max=512)
+    stage2: @layout(start=0x7E00, max=16384)
+    kernel: @layout(start=0x1000000)
+}
+
+// Compiler generates:
+// 1. Stage1 MBR with correct INT 13h parameters
+// 2. Stage2 loader with correct sector counts
+// 3. Kernel entry point at correct address
+// 4. Disk image with correct layout
+```
+
+### 26.2 Automatic Interrupt Handler Generation
+
+```aether
+// Declare interrupt handlers declaratively
+interrupt timer at(0x20) {
+    // Compiler generates:
+    // 1. Correct interrupt frame save/restore
+    // 2. EOI signaling
+    // 3. Stack switching if needed
+    tick_count += 1
+}
+
+interrupt keyboard at(0x21) {
+    let scancode = inb(0x60)
+    handle_key(scancode)
+}
+```
+
+### 26.3 Self-Documenting Binary Format
+
+```aether
+@metadata {
+    author = "Aether Team"
+    description = "Kernel main binary"
+    license = "MIT"
+    required_abi = "1.0"
+}
+```
+
+The compiler embeds this as an ELF note section. The OS can query it without loading the binary.
+
+### 26.4 Capability-Based Security
+
+```aether
+// Functions declare what capabilities they need
+@requires(io, mem)
+func write_disk(sector: u64, data: ref [u8]) {
+    // Compiler verifies caller has io and mem capabilities
+}
+
+// Capabilities are tracked at compile time
+func safe_path() {
+    // Error: write_disk requires io capability
+    // write_disk(0, data)
+}
+```
+
+### 26.5 Compile-Time Unit Checking
+
+```aether
+// The compiler tracks physical units at compile time
+@units(meters)
+func distance(v: f64, t: f64): f64 {
+    return v * t  // m/s * s = m ✓
+}
+
+@units(meters_per_second)
+func speed(d: f64, t: f64): f64 {
+    return d / t  // m / s = m/s ✓
+}
+
+// Compile error: can't add meters to seconds
+// let bad = distance(10, 5) + speed(10, 5)
+```
+
+---
+
+## 27. Goal-Oriented I/O and Query Fusion
+
+### 27.1 Goal-Oriented I/O
+
+Instead of describing *how* to read a file, describe *what* you want:
+
+```aether
+// The compiler generates the optimal read path:
+// - Boot-time: raw ATA PIO reads
+// - Userspace: AetherFS syscalls
+// - In-memory FS: direct pointer access
+let config = from "/etc/aether.cfg" read Config
+```
+
+### 27.2 Query-Style Data Transformations
+
+Chain operations on collections — the compiler fuses them into a single loop with no intermediate allocations:
+
+```aether
+let active_users = db.users
+    .filter(|u| u.active)
+    .map(|u| (u.name, u.email))
+    .sort(|u| u.0)
+    .collect()
+```
+
+This compiles to a single fused loop. No temporary arrays, no allocation overhead.
+
+### 27.3 Pattern-Based Metaprogramming
+
+Instead of C++ templates or macros, Aether uses pattern matching on types:
+
+```aether
+impl<T> trait Hashable {
+    func hash(self: ref T): u64 {
+        match T {
+            case u64 => self
+            case [u8] => hash_bytes(self)
+            case string => hash_str(self)
+            case struct { ...fields } => {
+                let mut h = 0
+                for field in fields { h ^= field.hash() }
+                h
+            }
+        }
+    }
+}
+```
+
+---
+
+## 28. Protocol Generation and Hardware Configuration
+
+### 28.1 Automatic Protocol Generation
+
+Define hardware protocols declaratively:
+
+```aether
+protocol I2C {
+    scl pin = 5
+    sda pin = 6
+    speed = 100000
+
+    func start() {
+        asm {
+            // Compiler generates optimal bit-banging code
+            // based on pin assignments and speed
+        }
+    }
+
+    func write(byte data) {
+        // Compiler generates the I2C protocol sequence
+    }
+}
+```
+
+### 28.2 Compile-Time Hardware Configuration
+
+```aether
+// Detect hardware at compile time and generate optimized code
+#run {
+    if target_arch() == "x86_64" {
+        emit("func flush_tlb() { asm { mov cr3, cr3 } }")
+    } elif target_arch() == "arm64" {
+        emit("func flush_tlb() { asm { dsb ish; tlbi vmalle1is; dsb ish; isb } }")
+    }
+}
+```
+
+---
+
 ## Appendix A: Reserved Words
 
 ```
@@ -1972,4 +2196,4 @@ Source (.ae)
 
 ---
 
-*End of Aether Language Specification v0.5*
+*End of Aether Language Specification v1.0*
