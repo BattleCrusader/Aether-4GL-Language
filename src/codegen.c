@@ -1513,7 +1513,7 @@ static void cg_func(Codegen *cg, AstNode *func) {
     if (func->data.func.body && func->data.func.body->type == NODE_RETURN) {
         body_has_return = 1;
     }
-    /* Also check if body is a block whose last statement is a return */
+    /* Also check if body is a block whose last statement is a return or asm block */
     if (func->data.func.body && func->data.func.body->type == NODE_BLOCK) {
         AstNodeList *stmts = &func->data.func.body->data.list;
         if (stmts->count > 0) {
@@ -1527,10 +1527,8 @@ static void cg_func(Codegen *cg, AstNode *func) {
                 const char *p = asm_text.data;
                 const char *end = p + asm_text.len;
                 while (p < end) {
-                    /* Check for 'ret' as a word on its own line */
-                    if ((p == asm_text.data || *(p-1) == '\n') &&
-                        end - p >= 3 && p[0] == 'r' && p[1] == 'e' && p[2] == 't' &&
-                        (end - p == 3 || p[3] == '\n' || p[3] == ' ' || p[3] == '\t')) {
+                    if (p[0] == 'r' && p[1] == 'e' && p[2] == 't' &&
+                        (end - p == 3 || p[3] == '\n' || p[3] == ' ' || p[3] == '\t' || p[3] == '\r')) {
                         body_has_return = 1;
                         break;
                     }
@@ -1547,9 +1545,8 @@ static void cg_func(Codegen *cg, AstNode *func) {
             const char *p = asm_text.data;
             const char *end = p + asm_text.len;
             while (p < end) {
-                if ((p == asm_text.data || *(p-1) == '\n') &&
-                    end - p >= 3 && p[0] == 'r' && p[1] == 'e' && p[2] == 't' &&
-                    (end - p == 3 || p[3] == '\n' || p[3] == ' ' || p[3] == '\t')) {
+                if (p[0] == 'r' && p[1] == 'e' && p[2] == 't' &&
+                    (end - p == 3 || p[3] == '\n' || p[3] == ' ' || p[3] == '\t' || p[3] == '\r')) {
                     body_has_return = 1;
                     break;
                 }
