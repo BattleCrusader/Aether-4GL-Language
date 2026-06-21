@@ -1898,7 +1898,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         }
     }
 
-    /* Generate each function */
+    /* Generate each function and top-level asm block */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *node = program->data.list.items[i];
         if (node->type == NODE_FUNC_DECL) {
@@ -1907,7 +1907,6 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             /* If this function has @layout, emit padding to exactly fill max bytes */
             if (node->data.func.has_layout && cg->layout_max > 0) {
                 if (cg->layout_signature != 0) {
-                    /* Emit signature at max-2, then pad to max */
                     cg_write_fmt(cg, "; @layout padding to %ld bytes (with signature 0x%x)\n",
                         (unsigned long)cg->layout_max, cg->layout_signature);
                     cg_write_fmt(cg, "times %ld-($-$$) db 0\n",
@@ -1918,6 +1917,27 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                     cg_write_fmt(cg, "times %ld-($-$$) db 0\n", (unsigned long)cg->layout_max);
                 }
                 cg_write(cg, "\n");
+            }
+        } else if (node->type == NODE_ASM_BLOCK) {
+            /* Top-level asm block — emit directly without function wrapping */
+            if (node->data.asm_block.text) {
+                StringView asm_text = node->data.asm_block.text->data.literal.string_val;
+                if (asm_text.len > 0) {
+                    cg_write(cg, "; top-level asm block\n");
+                    const char *p = asm_text.data;
+                    const char *end = p + asm_text.len;
+                    while (p < end) {
+                        const char *line_start = p;
+                        while (p < end && *p != '\n') p++;
+                        if (p > line_start) {
+                            cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                        } else {
+                            cg_write(cg, "\n");
+                        }
+                        if (p < end) p++;
+                    }
+                    cg_write(cg, "; end top-level asm block\n");
+                }
             }
         }
     }

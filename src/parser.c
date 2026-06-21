@@ -277,6 +277,36 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             }
         }
         node_list_append(decls, mod);
+    } else if (parser_match(p, TOKEN_KW_ASM)) {
+        /* Top-level asm block — parse as raw assembly, not inside a function */
+        /* Capture the raw text between { and } */
+        if (parser_match(p, TOKEN_LBRACE)) {
+            const char *asm_start = p->lexer->tok->start;
+            int depth = 1;
+            while (depth > 0 && !parser_check(p, TOKEN_EOF)) {
+                if (parser_check(p, TOKEN_LBRACE)) depth++;
+                if (parser_check(p, TOKEN_RBRACE)) depth--;
+                if (depth > 0) parser_advance(p);
+            }
+            const char *asm_end = p->lexer->tok->start;
+            if (asm_end > asm_start) {
+                /* Trim trailing whitespace/brace */
+                while (asm_end > asm_start && (asm_end[-1] == ' ' || asm_end[-1] == '\t' ||
+                       asm_end[-1] == '\n' || asm_end[-1] == '\r' || asm_end[-1] == '}'))
+                    asm_end--;
+            }
+            AstNode *node = node_create(p->arena, NODE_ASM_BLOCK, LOCATION(p->lexer->tok->filename, 0, 0, 0));
+            if (asm_end > asm_start) {
+                StringView sv;
+                sv.data = asm_start;
+                sv.len = (size_t)(asm_end - asm_start);
+                node->data.asm_block.text = node_string_literal(p->arena, NO_LOCATION, sv);
+            }
+            node_list_append(decls, node);
+            parser_expect(p, TOKEN_RBRACE, "top-level asm block");
+        } else {
+            parser_error(p, p->current, "expected '{' after 'asm' at top level");
+        }
     } else if (parser_match(p, TOKEN_KW_TRAIT)) {
         /* trait Name { method_signatures } */
         if (parser_check(p, TOKEN_IDENT)) {

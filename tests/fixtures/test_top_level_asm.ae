@@ -1,0 +1,26 @@
+# test_top_level_asm.ae — Top-level asm block test
+# Tests that asm { } at file level emits section directives correctly
+# and that extern declarations are hoisted properly
+
+asm {
+    section .bss
+test_bss_var: resq 1
+    section .data
+test_data_var: db "hello", 0
+    section .text
+}
+
+func main(): u64 {
+    asm {
+        extern __bss_start
+        extern __bss_end
+    }
+    asm {
+        mov rdi, __bss_start
+        mov rcx, __bss_end
+        sub rcx, rdi
+        xor al, al
+        rep stosb
+    }
+    return 42
+}

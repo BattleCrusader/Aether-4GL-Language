@@ -1229,6 +1229,65 @@ The compiler translates this to:
 - **ARM64 target**: Translated to ARM64 equivalents
 - **RISC-V target**: Translated to RISC-V equivalents
 
+### 17.5 Top-Level asm Blocks
+
+At file level (outside any function), `asm { }` emits raw assembly text directly into the output without any function wrapping. This is used for declaring BSS/data sections, global symbols, and other NASM directives that must appear at file scope.
+
+```aether
+# Top-level asm block — emits section directives at file level
+asm {
+    section .bss
+cmd_names:    resq 16
+cmd_handlers: resq 16
+cmd_count:    resq 1
+    section .data
+help_text:    db "Available commands: help, ls, echo", 0
+    section .text
+}
+```
+
+Top-level asm blocks are emitted in declaration order, before any function code. They are useful for:
+- Declaring BSS variables with `resb`/`resq`/`resw`/`resd`
+- Declaring data tables with `db`/`dw`/`dd`/`dq`
+- Defining global symbols that functions reference
+- Emitting NASM directives like `align`, `section`, `global`, `extern`
+
+### 17.6 Extern Hoisting
+
+The compiler automatically hoists `extern` declarations from asm blocks to the top of the output file. NASM requires `extern` at file level, not inside function bodies.
+
+```aether
+func main(): u64 {
+    asm {
+        extern __bss_start
+        extern __bss_end
+    }
+    asm {
+        mov rdi, __bss_start
+        mov rcx, __bss_end
+        sub rcx, rdi
+        xor al, al
+        rep stosb
+    }
+}
+```
+
+The compiler emits:
+```nasm
+; Extern declarations (hoisted from asm blocks)
+        extern __bss_start
+        extern __bss_end
+
+section .text
+...
+main:
+        mov rdi, __bss_start
+        mov rcx, __bss_end
+        sub rcx, rdi
+        xor al, al
+        rep stosb
+```
+
 ---
 
 ## 18. Aether OS Integration
