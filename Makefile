@@ -12,6 +12,11 @@ BINDIR     ?= $(PREFIX)/bin
 LIBDIR     ?= $(PREFIX)/lib/aether
 MANDIR     ?= $(PREFIX)/share/man/man1
 
+# Local install paths (no sudo needed)
+LOCAL_PREFIX ?= $(HOME)/.local
+LOCAL_BINDIR ?= $(LOCAL_PREFIX)/bin
+LOCAL_LIBDIR ?= $(LOCAL_PREFIX)/lib/aether
+
 CORE_SRCS = \
 	src/arena.c \
 	src/vector.c \
@@ -32,7 +37,7 @@ CORE_SRCS = \
 
 CORE_OBJS = $(CORE_SRCS:src/%.c=$(BUILD_DIR)/%.o)
 
-.PHONY: all clean test tokenizer parser-test aether-cli install uninstall
+.PHONY: all clean test tokenizer parser-test aether-cli install uninstall install-local
 
 all: tokenizer parser-test aether-cli
 
@@ -206,6 +211,32 @@ install: aether-cli
 	@echo "To use: aether --help"
 	@echo "To compile: aether build source.ae"
 	@echo "To run:    aether run source.ae"
+
+# Install locally to ~/.local (no sudo needed)
+install-local: aether-cli
+	@echo "Installing Aether compiler locally..."
+	install -d $(LOCAL_BINDIR)
+	install -m 755 $(BUILD_DIR)/aether $(LOCAL_BINDIR)/aether
+	@echo "  -> $(LOCAL_BINDIR)/aether"
+	@echo "Installing standard library..."
+	install -d $(LOCAL_LIBDIR)
+	for f in std/*.ae; do \
+		install -m 644 $$f $(LOCAL_LIBDIR)/$$(basename $$f); \
+		echo "  -> $(LOCAL_LIBDIR)/$$(basename $$f)"; \
+	done
+	@echo "Installing header files..."
+	install -d $(LOCAL_LIBDIR)/include
+	for f in include/aether/*.h; do \
+		install -m 644 $$f $(LOCAL_LIBDIR)/include/$$(basename $$f); \
+		echo "  -> $(LOCAL_LIBDIR)/include/$$(basename $$f)"; \
+	done
+	@echo ""
+	@echo "Aether compiler installed locally."
+	@echo "  Binary:  $(LOCAL_BINDIR)/aether"
+	@echo "  Stdlib:  $(LOCAL_LIBDIR)/"
+	@echo ""
+	@echo "Make sure $(LOCAL_BINDIR) is in your PATH."
+	@echo "To use: aether --help"
 
 # Uninstall the aether compiler and standard library
 uninstall:
