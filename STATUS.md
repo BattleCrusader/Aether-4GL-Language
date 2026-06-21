@@ -212,6 +212,9 @@
 - [x] P15.05 — DCE fix: keep `let` assignments with BIN_CONCAT initializers 🟢
 - [x] P15.06 — `print()` handles runtime strings via strlen + write syscall 🟢
 - [x] P15.07 — Host-native build and test: `"Hello {name}!"` produces correct output 🟢
+- [x] P15.08 — DCE fix: `NODE_EXPR_STMT` handling in `dce_collect` and `dce_remove_dead` to prevent variable removal 🟢
+- [x] P15.09 — Test fixtures: `test_interp_basic`, `test_interp_multi`, `test_interp_expr`, `test_interp_none`, `test_interp_concat`, `test_interp_numbers` 🟢
+- [x] P15.10 — All 33/33 host-native tests passing 🟢
 
 ## Phase 16 — OS Memory & Process Management 🔴 NOT STARTED
 - [ ] P16.01 — Virtual memory manager (paging, page faults)

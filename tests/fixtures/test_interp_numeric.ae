@@ -1,0 +1,10 @@
+# test_interp_numeric.ae — interpolation with numeric values (known limitation)
+# NOTE: Numeric-to-string conversion in interpolation is not yet implemented.
+# This test verifies the compiler handles it gracefully (compile-only check).
+# Currently expected to segfault at runtime — skip in test-host.
+func main(): u64 {
+    let count: u64 = 42
+    let msg = "count = {count}"
+    print(msg)
+    return 42
+}

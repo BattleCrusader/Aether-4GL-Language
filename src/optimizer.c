@@ -536,6 +536,9 @@ static void dce_collect(AstNode *node, SymbolTable *st) {
         case NODE_THROW:
             if (node->data.throw_node.value) dce_collect(node->data.throw_node.value, st);
             break;
+        case NODE_EXPR_STMT:
+            if (node->data.call.callee) dce_collect(node->data.call.callee, st);
+            break;
         case NODE_DEFER:
             dce_collect(node->data.defer_node.body, st);
             break;
@@ -623,6 +626,10 @@ static AstNode *dce_remove_dead(AstNode *node, SymbolTable *st) {
                 case NODE_FOR:
                     node->data.for_node.iterable = dce_remove_dead(node->data.for_node.iterable, st);
                     node->data.for_node.body = dce_remove_dead(node->data.for_node.body, st);
+                    break;
+                case NODE_EXPR_STMT:
+                    if (node->data.call.callee)
+                        node->data.call.callee = dce_remove_dead(node->data.call.callee, st);
                     break;
                 default:
                     break;

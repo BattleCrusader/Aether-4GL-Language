@@ -1,0 +1,8 @@
+# test_interp_expr.ae — interpolation with string expressions
+func main(): u64 {
+    let greeting = "Hello"
+    let name = "World"
+    let msg = "{greeting} {name}"
+    print(msg)
+    return 42
+}

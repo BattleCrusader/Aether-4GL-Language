@@ -1,0 +1,9 @@
+# test_interp_multi.ae — multiple interpolations in one string
+func main(): u64 {
+    let a = "hello"
+    let b = "world"
+    let c = "!"
+    let msg = "{a} {b}{c}"
+    print(msg)
+    return 42
+}

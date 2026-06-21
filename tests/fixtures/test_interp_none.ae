@@ -1,0 +1,6 @@
+# test_interp_none.ae — no interpolation (plain string, should still work)
+func main(): u64 {
+    let msg = "Hello World"
+    print(msg)
+    return 42
+}
