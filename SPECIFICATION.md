@@ -1143,19 +1143,42 @@ func render_dynamic(items: [ref dyn Drawable]) {
 
 ### 17.1 Basic Inline Assembly
 
-Full NASM syntax is a first-class citizen. Variables from Aether code are accessible by name.
+Full NASM syntax is a first-class citizen. The asm block text is emitted verbatim into the generated assembly. Aether function parameters are **not** automatically substituted — use SysV ABI registers directly (rdi=arg1, rsi=arg2, rdx=arg3, rcx=arg4, r8=arg5, r9=arg6).
 
 ```aether
 func outb(port: u16, value: byte) {
     asm {
-        mov dx, port
-        mov al, value
+        mov dx, rdi
+        mov al, sil
         out dx, al
     }
 }
 ```
 
-### 17.2 Assembly with Output Bindings
+### 17.2 Const Values in Assembly
+
+`const` declarations are emitted as NASM `equ` directives, making them accessible from inline asm blocks:
+
+```aether
+const COM1_DATA = 0x3F8
+const LSR_THR_EMPTY = 0x20
+
+func serial_putc(c: byte) {
+    asm {
+        mov dx, COM1_DATA
+        mov al, dil
+        out dx, al
+    }
+}
+```
+
+This generates:
+```nasm
+COM1_DATA equ 0x3F8
+LSR_THR_EMPTY equ 0x20
+```
+
+### 17.4 Assembly with Output Bindings
 
 Use `asm: (outputs) { body }` to bind assembly results to Aether variables.
 

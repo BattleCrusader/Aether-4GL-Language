@@ -1062,6 +1062,14 @@ Run with `aether test`. Tests compile to standalone ELF binaries that report pas
 - [x] P10.09 — Cross-compilation toolchain detection 🟢
 - [x] P10.10 — Integration with `aether.toml` for multi-arch builds 🟢
 
+### Phase 11 — Kernel Codegen Fixes 🟢 COMPLETE
+- [x] P11.01 — Emit `const` declarations as NASM `equ` directives for asm block access 🟢
+- [x] P11.02 — Kernel/freestanding `_start` emits `hlt` instead of Linux `exit` syscall 🟢
+- [x] P11.03 — `print()` builtin is a no-op on freestanding targets (kernel uses serial) 🟢
+- [x] P11.04 — Bump allocator (mmap) only emitted for host targets, not kernel 🟢
+- [x] P11.05 — Aether OS kernel rewritten in Aether (main.ae) instead of C 🟢
+- [x] P11.06 — OS Makefile uses `aether --target kernel` instead of gcc/clang 🟢
+
 ---
 
 ## 12. Non-Goals

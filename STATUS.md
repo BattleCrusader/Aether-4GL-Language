@@ -15,6 +15,7 @@
 | 8 — Multi-Target Assembler | 🔴 NOT STARTED | NASM → ARM64/RISC-V translation |
 | 9 — Optimization & Polish | 🔴 NOT STARTED | Constant folding, DCE, inlining, `aether fmt`, `aether asm`, `aether inspect` |
 | 10 — Universal Binary | 🔴 NOT STARTED | Multi-arch ELF with CPU detection trampoline |
+| 11 — Kernel Codegen Fixes | 🟢 COMPLETE | Const→NASM equ, no Linux syscalls in freestanding, print() no-op on kernel |
 
 ## Project Location
 
