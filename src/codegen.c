@@ -1628,6 +1628,23 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "default rel\n\n");
     }
 
+    /* Emit const declarations as NASM equ directives */
+    if (!cg->has_layout) {
+        for (int i = 0; i < program->data.list.count; i++) {
+            AstNode *node = program->data.list.items[i];
+            if (node->type == NODE_CONST_DECL) {
+                AstNode *val = node->data.let_decl.value;
+                if (val && val->type == NODE_LITERAL_INT) {
+                    StringView name = node->data.let_decl.name->data.ident.name;
+                    cg_write_fmt(cg, "%.*s equ %llu\n",
+                        (int)name.len, name.data,
+                        (unsigned long long)val->data.literal.int_val);
+                }
+            }
+        }
+        cg_write(cg, "\n");
+    }
+
     /* If @layout is set, use [org N] instead of ELF sections */
     if (cg->has_layout) {
         cg_write(cg, "bits 64\n");
