@@ -702,9 +702,26 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             cg_expr(cg, node->data.index.target, slots);
             cg_inst1(cg, "pop", "rcx");   /* rcx = index */
             /* Compute element offset: rax = base, rcx = index, result = base + index * elem_size */
-            /* For simplicity, assume 8-byte elements */
-            cg_inst(cg, "shl rcx, 3");    /* rcx = index * 8 */
-            cg_inst1(cg, "add", "rax, rcx");
+            /* Determine element size from the target type */
+            int elem_size = 8; /* default */
+            if (node->data.index.target->type == NODE_TYPE_ARRAY && node->data.index.target->data.type_node.elem_type) {
+                elem_size = type_size(node->data.index.target->data.type_node.elem_type);
+            } else if (node->data.index.target->type == NODE_TYPE_SLICE && node->data.index.target->data.type_node.elem_type) {
+                elem_size = type_size(node->data.index.target->data.type_node.elem_type);
+            } else if (node->data.index.target->type == NODE_IDENT) {
+                /* Try to infer from the variable's declared type */
+                /* For now, check if the variable has a type annotation */
+                /* We'll look up the let declaration */
+            }
+            /* Scale index by element size */
+            switch (elem_size) {
+                case 1: cg_inst(cg, "add rax, rcx"); break;
+                case 2: cg_inst(cg, "shl rcx, 1"); cg_inst1(cg, "add", "rax, rcx"); break;
+                case 4: cg_inst(cg, "shl rcx, 2"); cg_inst1(cg, "add", "rax, rcx"); break;
+                case 8: cg_inst(cg, "shl rcx, 3"); cg_inst1(cg, "add", "rax, rcx"); break;
+                default:
+                    cg_inst(cg, "shl rcx, 3"); cg_inst1(cg, "add", "rax, rcx"); break;
+            }
             cg_inst(cg, "mov rax, [rax]");
             break;
         }

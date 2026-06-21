@@ -927,7 +927,8 @@ AstNode *parse_statement(Parser *p) {
 
         if (parser_match(p, TOKEN_LBRACE)) {
             /* Record the source position right after opening brace */
-            const char *asm_start = p->lexer->tok->pos;
+            /* Use the { token's end position (text.data + text.len) */
+            const char *asm_start = p->previous.text.data + p->previous.text.len;
             const char *asm_end = asm_start;
             int brace_depth = 1;
             /* Track line/col of the opening brace for error reporting */
@@ -1227,8 +1228,8 @@ static AstNode *parse_type_base(Parser *p) {
     /* [T] or [T; N] */
     if (parser_match(p, TOKEN_LBRACKET)) {
         AstNode *elem = parse_type(p);
-        if (parser_match(p, TOKEN_COMMA)) {
-            /* Fixed-size array: [T; N] */
+        if (parser_match(p, TOKEN_COMMA) || parser_match(p, TOKEN_SEMICOLON)) {
+            /* Fixed-size array: [T; N] — accepts both ; and , as separator */
             Token size = p->current; parser_advance(p);
             AstNode *t = node_create(p->arena, NODE_TYPE_ARRAY, p->previous.loc);
             t->data.type_node.elem_type = elem;
