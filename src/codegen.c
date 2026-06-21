@@ -847,12 +847,15 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                             cg_write_fmt(cg, "    mov rdx, %d\n", plen);
                             cg_inst1(cg, "mov", "rax, 0x2000004");
                             cg_inst(cg, "syscall");
-                        } else {
+                        } else if (cg->target == TARGET_ELF64_HOST) {
                             cg_inst1(cg, "mov", "rdi, 1");
                             cg_write_fmt(cg, "    lea rsi, [rel %s]\n", label);
                             cg_write_fmt(cg, "    mov rdx, %d\n", plen);
                             cg_inst1(cg, "mov", "rax, 1");
                             cg_inst(cg, "syscall");
+                        } else {
+                            /* Freestanding: print() is a no-op (kernel uses serial) */
+                            cg_comment(cg, "freestanding: print() is a no-op");
                         }
                         cg_inst1(cg, "xor", "rax, rax");
                     } else {
@@ -1670,7 +1673,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                 cg_inst(cg, "hlt");
                 cg_write(cg, "\n");
             }
-            /* For freestanding: linker script handles ENTRY(func_name) — no wrapper needed */
+            /* For freestanding/kernel/module/binary: linker script handles ENTRY(func_name) — no wrapper needed */
         } else {
             /* Default entry point: wrapper calls main(), then exits */
             const char *entry;
@@ -1692,11 +1695,14 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                 cg_inst1(cg, "mov", "rdi, rax");
                 cg_inst1(cg, "mov", "rax, 0x2000001");
                 cg_inst(cg, "syscall");
-            } else {
+            } else if (cg->target == TARGET_ELF64_HOST) {
                 cg_comment(cg, "Linux exit(rdi = rax)");
                 cg_inst1(cg, "mov", "rdi, rax");
                 cg_inst1(cg, "mov", "rax, 60");
                 cg_inst(cg, "syscall");
+            } else {
+                cg_comment(cg, "freestanding: just hlt after main returns");
+                cg_inst(cg, "hlt");
             }
             cg_inst(cg, "hlt");
             cg_write(cg, "\n");
