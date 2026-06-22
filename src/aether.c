@@ -26,7 +26,8 @@
 #include <errno.h>
 
 static void usage(const char *prog) {
-    fprintf(stderr, "Aether Compiler v0.4 (Phase 9 — Optimization & Polish)\n");
+    fprintf(stderr, "Aether Compiler v0.5 (commit %s, branch %s)\n",
+        GIT_HASH, GIT_BRANCH);
     fprintf(stderr, "Usage:\n");
     fprintf(stderr, "  %s [options] <file.ae>\n", prog);
     fprintf(stderr, "  %s init|new <project-name>\n", prog);
@@ -50,6 +51,7 @@ static void usage(const char *prog) {
     fprintf(stderr, "  -S                       Stop after assembly (emit .asm)\n");
     fprintf(stderr, "  --dump-ast               Print AST and exit\n");
     fprintf(stderr, "  --dump-tokens            Print tokens and exit\n");
+    fprintf(stderr, "  --version                Print version and exit\n");
     fprintf(stderr, "  -v, --verbose            Verbose output\n");
 }
 
@@ -717,8 +719,12 @@ int main(int argc, char **argv) {
     Target target = TARGET_HOST; /* default: auto-detect */
     const char *linker_script = NULL;
 
-    /* Check for subcommands: init, new, run, fmt, asm, inspect */
+    /* Check for subcommands: init, new, run, fmt, asm, inspect, version */
     if (argc > 1) {
+        if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0) {
+            printf("Aether Compiler v0.5 (commit %s, branch %s)\n", GIT_HASH, GIT_BRANCH);
+            return 0;
+        }
         if (strcmp(argv[1], "init") == 0 || strcmp(argv[1], "new") == 0) {
             if (argc < 3) {
                 fprintf(stderr, "Error: 'init' requires a project name\n");

@@ -3,6 +3,9 @@ HOST_CFLAGS = -std=c11 -Wall -Wextra -g -O0 -Iinclude -D_GNU_SOURCE \
 	-DLD='"x86_64-elf-ld"' \
 	-DSEGFAULT_HELPER='"$(CURDIR)/build/segfault_helper.o"'
 
+GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
 BUILD_DIR = build
 SRC_DIR = src
 TEST_DIR = tests
@@ -71,7 +74,7 @@ $(BUILD_DIR)/test_asm: $(CORE_OBJS) $(BUILD_DIR)/test_asm.o
 
 $(BUILD_DIR)/aether.o: $(AETHER_MAIN_SRC)
 	@mkdir -p $(@D)
-	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
+	$(HOST_CC) $(HOST_CFLAGS) -DGIT_HASH='"$(GIT_HASH)"' -DGIT_BRANCH='"$(GIT_BRANCH)"' -c $< -o $@
 
 $(BUILD_DIR)/aether: $(CORE_OBJS) $(BUILD_DIR)/aether.o
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $^
