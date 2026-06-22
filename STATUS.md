@@ -64,7 +64,7 @@
 - [x] P04.07 — `if let` pattern binding for optionals 🟢
 - [x] P04.08 — Phase 4 Verification (16/16 + 14/14 unit, 13/13 native, both targets) 🟢
 
-## Phase 5 — Advanced Language Features 🟡 HOLD (try/catch proper rewrite in progress)
+## Phase 5 — Advanced Language Features 🟢 COMPLETE
 - [x] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen 🟢
 - [x] P05.02 — Custom error types (enum-based error hierarchy) 🟢
 - [x] P05.03 — Deterministic exceptions (tagged union return, no unwinding tables) 🟢
@@ -74,7 +74,7 @@
 - [x] P05.07 — **`finally` blocks** 🟢
 - [x] P05.08 — **Catch-all (`catch _`)** 🟢
 - [x] P05.09 — **Error value binding in catch variables** 🟢
-- [ ] P05.10 — **Segfault handling (IDT-based for kernel, signal-based for host)** 🔴
+- [x] P05.10 — **Segfault handling (IDT-based for kernel, sigsetjmp/siglongjmp for host)** 🟢
 - [x] P05.11 — **Nested try/catch verification** 🟢
 - [x] P05.12 — **Test suite (try/catch, throw, propagation, finally, segfault, nested)** 🟢
 - [x] P05.13 — Compile-time execution: `#run { ... }` blocks 🟢

@@ -1038,14 +1038,45 @@ try {
 ```
 
 **For host-native targets:**
-Uses `sigaction` for SIGSEGV + `sigsetjmp`/`siglongjmp`:
-```
+Uses `sigaction` for SIGSEGV/SIGBUS + `sigsetjmp`/`siglongjmp` via a C helper:
+
+The compiler emits a call to `aether_setJmpBuf()` before the try body. This C function calls `sigsetjmp(buf, 0)` (no signal mask save — combined with `SA_NODEFER` in sigaction to prevent re-entrancy). On first call, it returns 0 and the try body executes. If a hardware fault occurs, the signal handler prints a stacktrace and calls `siglongjmp()`, which makes `aether_setJmpBuf()` return non-zero. The generated assembly checks this return value and jumps to the catch handler.
+
+```aether
 try {
-    sigsetjmp(buf, 1)  ; set jump point
-    [body]
-} catch Segfault {
-    ; siglongjmp lands here
+    let ptr: *u64 = 0
+    let val = *ptr  # SIGSEGV!
+} catch _ {
+    print("caught segfault - null pointer dereference")
 }
+```
+
+Generated codegen:
+```asm
+; sigsetjmp for hardware fault catch
+lea rdi, [rel __aether_segfault_jmpbuf]
+call aether_setJmpBuf
+test eax, eax
+jnz .catch_label    ; segfault caught, jump to catch
+
+; Clear error tag
+xor rdx, rdx
+
+; Try body
+[body code]
+
+; Clear segfault jmpbuf
+call aether_clearJmpBuf
+
+; Check error tag (rdx = 0 success, 1 = error)
+test rdx, rdx
+jnz .catch_label
+jmp .end
+
+.catch_label:
+[catch handler code]
+
+.end:
 ```
 
 ### 10.7 Zero-Cost Error Context (`?` operator)

@@ -1507,26 +1507,33 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
              * - throw walks the cleanup table (innermost first) before jumping
              * - finally blocks execute regardless of success/failure
              * - catch-all (_) matches any error
-             * - Unmatched errors propagate (re-throw) */
+             * - Unmatched errors propagate (re-throw)
+             * - For host targets: sigsetjmp/siglongjmp catches hardware faults
+             *   (segfaults, bus errors) and redirects to the catch handler */
             int catch_label = cg_new_label(cg);
             int end_label = cg_new_label(cg);
             int finally_label = cg_new_label(cg);
+            int segfault_check_label = cg_new_label(cg);
             bool has_finally = (node->data.try_node.finally_body != NULL);
             cg_comment(cg, "try begin");
 
             /* Save current cleanup depth so we can restore it after the try */
             int saved_cleanup_depth = cg->cleanup_depth;
 
-            /* For host targets: set fault return address and save stack frame
-             * so hardware faults inside the try body redirect to the catch
-             * handler with a clean stack. */
+            /* For host targets: set up sigsetjmp to catch hardware faults */
             bool isHost = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
             if (isHost) {
-                cg_comment(cg, "set fault return address and save stack frame");
-                cg_write_fmt(cg, "    lea rax, [rel .L%x]\n", catch_label);
-                cg_inst(cg, "mov [rel __aether_faultReturnAddr], rax");
-                cg_inst(cg, "mov [rel __aether_faultSavedRsp], rsp");
-                cg_inst(cg, "mov [rel __aether_faultSavedRbp], rbp");
+                cg_comment(cg, "sigsetjmp for hardware fault catch");
+                if (cg->target == TARGET_MACHO64) {
+                    cg_inst(cg, "lea rdi, [rel __aether_segfault_jmpbuf]");
+                    cg_inst(cg, "call _aether_setJmpBuf");
+                } else {
+                    cg_inst(cg, "lea rdi, [rel __aether_segfault_jmpbuf]");
+                    cg_inst(cg, "call aether_setJmpBuf");
+                }
+                /* Check return value: 0 = first call (normal), non-zero = siglongjmp (segfault caught) */
+                cg_inst(cg, "test eax, eax");
+                cg_write_fmt(cg, "    jnz .L%x\n", catch_label);
             }
 
             /* Clear error tag before try body */
@@ -1538,8 +1545,12 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
             /* Clear segfault jump buffer (no longer in try block) */
             if (isHost) {
-                cg_comment(cg, "clear fault return address");
-                cg_inst(cg, "mov qword [rel __aether_faultReturnAddr], 0");
+                cg_comment(cg, "clear segfault jmpbuf");
+                if (cg->target == TARGET_MACHO64) {
+                    cg_inst(cg, "call _aether_clearJmpBuf");
+                } else {
+                    cg_inst(cg, "call aether_clearJmpBuf");
+                }
             }
 
             /* Check error tag (rdx = 0 success, 1 = error) */
@@ -2021,9 +2032,13 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         if (cg->target == TARGET_MACHO64) {
             cg_write(cg, "extern _aether_initSegfault\n");
             cg_write(cg, "extern _aether_printStacktrace\n");
+            cg_write(cg, "extern _aether_setJmpBuf\n");
+            cg_write(cg, "extern _aether_clearJmpBuf\n");
         } else {
             cg_write(cg, "extern aether_initSegfault\n");
             cg_write(cg, "extern aether_printStacktrace\n");
+            cg_write(cg, "extern aether_setJmpBuf\n");
+            cg_write(cg, "extern aether_clearJmpBuf\n");
         }
     }
     cg_write(cg, "\n");
@@ -2250,10 +2265,6 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_write(cg, "__aether_region_end: resq 1\n");
             /* Segfault jump buffer — set by try blocks for hardware fault catch */
             cg_write(cg, "__aether_segfault_jmpbuf: resb 200\n");
-            /* Fault return address and saved stack frame — set by try blocks */
-            cg_write(cg, "__aether_faultReturnAddr: resq 1\n");
-            cg_write(cg, "__aether_faultSavedRsp: resq 1\n");
-            cg_write(cg, "__aether_faultSavedRbp: resq 1\n");
             if (cg->target == TARGET_BINARY) {
                 cg_write(cg, "__aether_heap_buf:  resb 256\n");
             }

@@ -33,8 +33,10 @@ CORE_SRCS = \
 	src/asm_backend_arm64.c \
 	src/asm_backend_riscv64.c \
 	src/universal.c \
-	src/optimizer.c \
-	src/aether.c
+	src/optimizer.c
+
+# aether.o has main() — linked separately so test executables don't get duplicate main
+AETHER_MAIN_SRC = src/aether.c
 
 # Segfault helper — compiled separately, linked into host-native binaries
 SEGFAULT_HELPER_SRC = src/segfault_helper.c
@@ -66,7 +68,7 @@ $(BUILD_DIR)/test_parser: $(CORE_OBJS) $(BUILD_DIR)/test_parser.o
 $(BUILD_DIR)/test_asm: $(CORE_OBJS) $(BUILD_DIR)/test_asm.o
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $^
 
-$(BUILD_DIR)/aether.o: src/aether.c
+$(BUILD_DIR)/aether.o: $(AETHER_MAIN_SRC)
 	@mkdir -p $(@D)
 	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
 
