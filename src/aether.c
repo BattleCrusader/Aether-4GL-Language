@@ -786,6 +786,7 @@ int main(int argc, char **argv) {
 
     /* Parse args */
     int argi = (run_mode) ? 2 : 1;
+    int run_args_start = 0;  /* index of first program arg in argv */
     for (int i = argi; i < argc; i++) {
         if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
             if (i + 1 < argc) output_file = argv[++i];
@@ -824,7 +825,12 @@ int main(int argc, char **argv) {
             usage(argv[0]);
             return 0;
         } else if (argv[i][0] != '-') {
-            input_file = argv[i];
+            if (run_mode && input_file) {
+                /* In run mode, extra non-flag args are program arguments */
+                if (run_args_start == 0) run_args_start = i;
+            } else {
+                input_file = argv[i];
+            }
         } else {
             fprintf(stderr, "Unknown option: %s\n", argv[i]);
             usage(argv[0]);
@@ -870,23 +876,34 @@ int main(int argc, char **argv) {
     /* Default output name */
     if (!output_file) {
         if (target == TARGET_HOST || target == TARGET_MACHO64 || target == TARGET_ELF64_HOST) {
-            /* Write to /tmp/ so binaries don't pollute source tree */
+            /* Write to /tmp/kernel/ so binaries don't pollute source tree */
             const char *fname = strrchr(input_file, '/');
             fname = fname ? fname + 1 : input_file;
             const char *dot = strrchr(fname, '.');
             if (dot && strcmp(dot, ".ae") == 0) {
                 size_t base_len = (size_t)(dot - fname);
                 char buf[1024];
-                int n = snprintf(buf, sizeof(buf), "/tmp/%.*s", (int)base_len, fname);
+                int n = snprintf(buf, sizeof(buf), "/tmp/kernel/%.*s", (int)base_len, fname);
                 if (n > 0 && n < (int)sizeof(buf)) {
                     output_file = (const char *)malloc((size_t)n + 1);
                     if (output_file) memcpy((char *)output_file, buf, (size_t)n + 1);
                 }
             } else {
-                output_file = "/tmp/aether.out";
+                output_file = "/tmp/kernel/aether.out";
             }
         } else {
             output_file = "a.out";
+        }
+    }
+
+    /* Ensure output directory exists */
+    if (output_file && output_file[0] == '/') {
+        char dir_copy[1024];
+        snprintf(dir_copy, sizeof(dir_copy), "%s", output_file);
+        char *slash = strrchr(dir_copy, '/');
+        if (slash) {
+            *slash = '\0';
+            mkdir_p(dir_copy);
         }
     }
 
@@ -1148,11 +1165,11 @@ int main(int argc, char **argv) {
     if (stop_after_asm) {
         snprintf(asm_file, sizeof(asm_file), "%s", output_file);
     } else {
-        /* Use /tmp/ for intermediate files */
+        /* Use /tmp/kernel/ for intermediate files */
         unsigned long hash = 5381;
         for (const char *p = input_file; *p; p++)
             hash = ((hash << 5) + hash) + (unsigned char)*p;
-        snprintf(asm_file, sizeof(asm_file), "/tmp/aether_%lx.asm", hash);
+        snprintf(asm_file, sizeof(asm_file), "/tmp/kernel/aether_%lx.asm", hash);
     }
 
     /* Write .asm file */
@@ -1203,6 +1220,13 @@ int main(int argc, char **argv) {
         if (verbose) printf("Running: %s\n", output_file);
         char cmd[4096];
         snprintf(cmd, sizeof(cmd), "%s", output_file);
+        /* Forward any extra args after the source file to the binary */
+        if (run_args_start > 0) {
+            for (int i = run_args_start; i < argc; i++) {
+                size_t cur = strlen(cmd);
+                snprintf(cmd + cur, sizeof(cmd) - cur, " %s", argv[i]);
+            }
+        }
         int ret = system(cmd);
         /* system() returns wait status — extract actual exit code */
         int exit_code = -1;

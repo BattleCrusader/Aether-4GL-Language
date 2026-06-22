@@ -9,6 +9,21 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <sys/stat.h>
+
+/* Create directory (mkdir -p equivalent) */
+static int mkdir_p(const char *path) {
+    char tmp[1024];
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            mkdir(tmp, 0755);
+            *p = '/';
+        }
+    }
+    return mkdir(tmp, 0755);
+}
 
 #define INITIAL_CAP 65536
 
@@ -1124,9 +1139,11 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                         }
                         /* rax = string pointer, save it */
                         cg_inst1(cg, "push", "rax");
-                        /* Compute strlen */
+                        /* Compute strlen — handle null pointer */
                         int sl_id = cg->label_counter++;
                         cg_inst(cg, "xor rcx, rcx");
+                        cg_inst(cg, "test rax, rax");
+                        cg_write_fmt(cg, "    jz .strlen_done_%d\n", sl_id);
                         cg_inst(cg, "mov rdi, rax");
                         cg_write_fmt(cg, ".strlen_loop_%d:\n", sl_id);
                         cg_write_fmt(cg, "    cmp byte [rdi + rcx], 0\n");
@@ -2269,7 +2286,25 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_write_fmt(cg, "global %s\n", entry);
             cg_write_fmt(cg, "%s:\n", entry);
             cg_inst1(cg, "mov", "rbp, rsp");
-            /* Only init segfault handler for host targets (has segfault_helper.o) */
+            cg_comment(cg, "read args from registers (SysV ABI: rdi=argc, rsi=argv)");
+            cg_inst(cg, "cmp rdi, 1");         /* argc > 1? */
+            cg_inst(cg, "jle .main_no_arg");
+            cg_inst(cg, "mov r15, [rsi+8]");   /* r15 = argv[1] (callee-saved) */
+            cg_comment(cg, "strlen(argv[1])");
+            cg_inst(cg, "xor rcx, rcx");
+            cg_write(cg, ".main_strlen:\n");
+            cg_inst(cg, "cmp byte [r15+rcx], 0");
+            cg_inst(cg, "je .main_strlen_done");
+            cg_inst1(cg, "inc", "rcx");
+            cg_inst(cg, "jmp .main_strlen");
+            cg_write(cg, ".main_strlen_done:\n");
+            cg_inst1(cg, "mov", "r14, rcx");   /* r14 = strlen (callee-saved) */
+            cg_inst(cg, "jmp .main_call");
+            cg_write(cg, ".main_no_arg:\n");
+            cg_inst(cg, "xor r15, r15");       /* r15 = 0 */
+            cg_inst(cg, "xor r14, r14");       /* r14 = 0 */
+            cg_write(cg, ".main_call:\n");
+            /* Safe to init segfault handler now */
             if (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST) {
                 cg_comment(cg, "init segfault handler");
                 if (cg->target == TARGET_MACHO64) {
@@ -2278,7 +2313,9 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                     cg_inst(cg, "call aether_initSegfault");
                 }
             }
-            cg_comment(cg, "call main()");
+            cg_comment(cg, "restore args from callee-saved regs");
+            cg_inst1(cg, "mov", "rdi, r15");   /* rdi = argv[1] or 0 */
+            cg_inst1(cg, "mov", "rsi, r14");   /* rsi = strlen or 0 */
             cg_inst(cg, "call main");
 
             if (is_macho) {
@@ -2443,24 +2480,36 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                [rbp+24] = left arg (pushed first by caller) */
             cg_inst(cg, "mov r12, [rbp+24]");  /* r12 = left ptr */
             cg_inst(cg, "mov r13, [rbp+16]");  /* r13 = right ptr */
-            /* strlen(left) */
+            /* strlen(left) — handle null pointer */
+            cg_inst(cg, "test r12, r12");
+            cg_inst(cg, "jz LA_concat_left_null");
             cg_inst1(cg, "xor", "rcx, rcx");
             cg_write(cg, "LA_concat_strlen_left:\n");
             cg_inst(cg, "cmp byte [r12+rcx], 0");
-            cg_inst(cg, "jz LA_concat_left_done");
+            cg_inst(cg, "jz LA_concat_left_strlen_done");
             cg_inst1(cg, "inc", "rcx");
             cg_inst(cg, "jmp LA_concat_strlen_left");
-            cg_write(cg, "LA_concat_left_done:\n");
+            cg_write(cg, "LA_concat_left_strlen_done:\n");
             cg_inst1(cg, "mov", "r14, rcx");  /* r14 = left_len */
-            /* strlen(right) */
+            cg_inst(cg, "jmp LA_concat_right_start");
+            cg_write(cg, "LA_concat_left_null:\n");
+            cg_inst1(cg, "xor", "r14, r14");  /* r14 = 0 */
+            cg_write(cg, "LA_concat_right_start:\n");
+            /* strlen(right) — handle null pointer */
+            cg_inst(cg, "test r13, r13");
+            cg_inst(cg, "jz LA_concat_right_null");
             cg_inst1(cg, "xor", "rcx, rcx");
             cg_write(cg, "LA_concat_strlen_right:\n");
             cg_inst(cg, "cmp byte [r13+rcx], 0");
-            cg_inst(cg, "jz LA_concat_right_done");
+            cg_inst(cg, "jz LA_concat_right_strlen_done");
             cg_inst1(cg, "inc", "rcx");
             cg_inst(cg, "jmp LA_concat_strlen_right");
-            cg_write(cg, "LA_concat_right_done:\n");
-            cg_inst1(cg, "mov", "r15, rcx");  /* r15 = right_len (callee-saved, survives calls) */
+            cg_write(cg, "LA_concat_right_strlen_done:\n");
+            cg_inst1(cg, "mov", "r15, rcx");  /* r15 = right_len */
+            cg_inst(cg, "jmp LA_concat_both_done");
+            cg_write(cg, "LA_concat_right_null:\n");
+            cg_inst1(cg, "xor", "r15, r15");  /* r15 = 0 */
+            cg_write(cg, "LA_concat_both_done:\n");
             /* total = left_len + right_len + 1 */
             cg_inst1(cg, "lea", "rdi, [r14+r15+1]");
             cg_inst(cg, "call __aether_alloc");
@@ -2470,13 +2519,19 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_inst(cg, "mov rsi, [rbp+24]");  /* src = left ptr (re-read from stack args) */
             cg_inst1(cg, "mov", "rdi, r12");  /* dest = buffer */
             cg_inst1(cg, "mov", "rdx, r14");  /* count = left_len */
+            cg_inst(cg, "test rdx, rdx");
+            cg_inst(cg, "jz LA_concat_skip_left");
             cg_inst(cg, "call LA_concat_memcpy");
+            cg_write(cg, "LA_concat_skip_left:\n");
             /* Advance past left */
             cg_inst1(cg, "add", "rdi, r14");
             /* Copy right string */
             cg_inst1(cg, "mov", "rsi, r13");  /* src = right ptr */
             cg_inst1(cg, "mov", "rdx, r15");  /* count = right_len */
+            cg_inst(cg, "test rdx, rdx");
+            cg_inst(cg, "jz LA_concat_skip_right");
             cg_inst(cg, "call LA_concat_memcpy");
+            cg_write(cg, "LA_concat_skip_right:\n");
             /* Null-terminate */
             cg_inst(cg, "mov byte [rdi+r15], 0");
             /* Return buffer ptr in rax */
@@ -2701,6 +2756,9 @@ static void cg_defer_clear(Codegen *cg) {
  * ================================================================ */
 
 int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file) {
+    /* Ensure /tmp/kernel/ exists */
+    mkdir_p("/tmp/kernel");
+
     /* Universal binary targets: compile for multiple architectures and merge */
     if (cg->target == TARGET_UNIVERSAL || cg->target == TARGET_UNIVERSAL_ALL) {
         /* Read the generated x86_64 NASM */
@@ -2840,12 +2898,12 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
     switch (cg->target) {
         case TARGET_MACHO64:
             nasm_format = "macho64";
-            snprintf(obj_file, sizeof(obj_file), "/tmp/aether_host.o");
+            snprintf(obj_file, sizeof(obj_file), "/tmp/kernel/aether_host.o");
             link_cmd_prefix = "clang -arch x86_64 -e _aether_entry";
             break;
         case TARGET_ELF64_HOST:
             nasm_format = "elf64";
-            snprintf(obj_file, sizeof(obj_file), "/tmp/aether_host.o");
+            snprintf(obj_file, sizeof(obj_file), "/tmp/kernel/aether_host.o");
             link_cmd_prefix = "ld -o";
             break;
         case TARGET_BOOT:
@@ -2856,13 +2914,13 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
             break;
         case TARGET_KERNEL:
             nasm_format = "elf64";
-            snprintf(obj_file, sizeof(obj_file), "/tmp/aether_kernel.o");
+            snprintf(obj_file, sizeof(obj_file), "/tmp/kernel/aether_kernel.o");
             /* Use custom linker script if provided, otherwise auto-generate */
             if (cg->linker_script) {
                 snprintf(ld_cmd_buf, sizeof(ld_cmd_buf), LD " -T %s -o", cg->linker_script);
                 link_cmd_prefix = ld_cmd_buf;
             } else {
-                FILE *ldf = fopen("/tmp/aether_ld.ld", "w");
+                FILE *ldf = fopen("/tmp/kernel/aether_ld.ld", "w");
                 if (ldf) {
                     fprintf(ldf, "OUTPUT_FORMAT(elf64-x86-64)\nENTRY(_start)\nSECTIONS {\n");
                     fprintf(ldf, "  . = 0x1000000;\n");
@@ -2873,20 +2931,20 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
                     fprintf(ldf, "  /DISCARD/ : { *(.comment) *(.note.*) *(.eh_frame) *(.eh_frame_hdr) }\n}\n");
                     fclose(ldf);
                 }
-                link_cmd_prefix = LD " -T /tmp/aether_ld.ld -o";
+                link_cmd_prefix = LD " -T /tmp/kernel/aether_ld.ld -o";
             }
             break;
         case TARGET_MODULE:
             nasm_format = "elf64";
-            snprintf(obj_file, sizeof(obj_file), "/tmp/aether_module.o");
+            snprintf(obj_file, sizeof(obj_file), "/tmp/kernel/aether_module.o");
             link_cmd_prefix = "";
             break;
         case TARGET_BINARY:
             nasm_format = "elf64";
-            snprintf(obj_file, sizeof(obj_file), "/tmp/aether_binary.o");
+            snprintf(obj_file, sizeof(obj_file), "/tmp/kernel/aether_binary.o");
             /* Write linker script for Aether OS binary at 0x2000000 */
             {
-                FILE *ldf = fopen("/tmp/aether_binary.ld", "w");
+                FILE *ldf = fopen("/tmp/kernel/aether_binary.ld", "w");
                 if (ldf) {
                     uint64_t load_addr = (cg->entry_addr > 0) ? (uint64_t)cg->entry_addr : 0x2000000;
                     const char *entry_name = cg->entry_func ? cg->entry_func : "_start";
@@ -2899,18 +2957,18 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
                     fclose(ldf);
                 }
             }
-            link_cmd_prefix = LD " -T /tmp/aether_binary.ld -o";
+            link_cmd_prefix = LD " -T /tmp/kernel/aether_binary.ld -o";
             break;
         default:
             /* Freestanding — use external LD variable */
             nasm_format = "elf64";
-            snprintf(obj_file, sizeof(obj_file), "/tmp/aether_host.o");
+            snprintf(obj_file, sizeof(obj_file), "/tmp/kernel/aether_host.o");
             /* Write linker script inline (or use user-supplied one) */
             if (cg->linker_script) {
                 snprintf(ld_cmd_buf, sizeof(ld_cmd_buf), LD " -T %s -o", cg->linker_script);
                 link_cmd_prefix = ld_cmd_buf;
             } else {
-                FILE *ldf = fopen("/tmp/aether_ld.ld", "w");
+                FILE *ldf = fopen("/tmp/kernel/aether_ld.ld", "w");
                 if (ldf) {
                     /* Use @entry address if set, otherwise default to 0x400000 */
                     uint64_t load_addr = (cg->entry_addr > 0) ? (uint64_t)cg->entry_addr : 0x400000;
@@ -2924,7 +2982,7 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
                     fprintf(ldf, "  .bss : { *(.bss) *(.bss.*) *(COMMON) }\n}\n");
                     fclose(ldf);
                 }
-                link_cmd_prefix = LD " -T /tmp/aether_ld.ld -o";
+                link_cmd_prefix = LD " -T /tmp/kernel/aether_ld.ld -o";
             }
             break;
     }
@@ -2984,6 +3042,6 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
 
     /* Cleanup object file and linker script */
     remove(obj_file);
-    remove("/tmp/aether_ld.ld");
+    remove("/tmp/kernel/aether_ld.ld");
     return 0;
 }

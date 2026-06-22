@@ -13,7 +13,7 @@
 - **Test**: `make test` (unit) + `make test-host` (native .ae fixtures)
 - **Install**: `sudo make install` or `make install-local`
 - **Source**: `/Volumes/Backup/Development/Project_Aether/compiler/`
-- **Branch**: `feature/P14.00-string-interpolation` (active development)
+- **Branch**: `feature/P05.10-segfault-handling` (active development)
 
 ---
 
@@ -219,7 +219,7 @@ Source (.ae)
 |----------|---------|-------|
 | `__aether_alloc(rdi: size)` | Bump allocator | mmap-backed on host, no-op on kernel |
 | `__aether_free(rdi: ptr)` | No-op free | Bump allocator doesn't free individually |
-| `__aether_concat(left, right)` | String concatenation | Allocates + copies both strings |
+| `__aether_concat(left, right)` | String concatenation | Allocates + copies both strings. Handles null pointers (treats as empty string). |
 | `__aether_itoa(rdi: u64)` | u64 to decimal string | Allocates 21 bytes, **clobbers rcx** |
 | `LA_concat_memcpy(dest, src, count)` | Byte copy helper | Used by concat |
 
@@ -248,6 +248,10 @@ Source (.ae)
 9. **Two-pass semantic analysis**: First pass declares all top-level names. Second pass visits function bodies. This handles forward references across files.
 
 10. **String interpolation builds BIN_CONCAT chains**: `"Hello {name}!"` becomes `BIN_CONCAT("Hello ", BIN_CONCAT(name, "!"))`. Numeric expressions are auto-converted via `__aether_itoa`.
+
+11. **`_aether_entry` receives args in registers (SysV ABI)**: On Mach-O, `LC_MAIN` calls the entry point as a C function: `rdi=argc, rsi=argv`. The entry wrapper reads `[rsi+8]` for `argv[1]`, not from the raw stack. The segfault handler init (`_aether_initSegfault`) clobbers caller-saved registers (`rdi`, `rsi`), so args must be saved in callee-saved registers (`r14`, `r15`) before calling it.
+
+12. **`__aether_concat` and `print()` must handle null string pointers**: When `main(inputString: string)` receives no args, `rdi=0, rsi=0`. The concat helper and print built-in must test for null before dereferencing. Null is treated as an empty string (len=0, no copy).
 
 ---
 

@@ -139,7 +139,9 @@ TEST_FIXTURES = \
 	tests/fixtures/test_interp_print_num.ae \
 	tests/fixtures/test_import.ae \
 	tests/fixtures/test_asm_comment.ae \
-	tests/fixtures/test_segfault.ae
+	tests/fixtures/test_segfault.ae \
+	tests/fixtures/test_args.ae \
+	tests/fixtures/test_null_concat.ae
 
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \
@@ -172,7 +174,7 @@ test-host: aether-cli
 			printf "FAIL (compile)\n"; \
 			continue; \
 		fi; \
-		/tmp/$$name 2>/dev/null >/dev/null; \
+		/tmp/kernel/$$name 2>/dev/null >/dev/null; \
 		got=$$?; \
 		if [ "$$got" = "$$expected" ]; then \
 			printf "PASS (exit %d)\n" $$got; \
@@ -194,7 +196,7 @@ test-layout: aether-cli
 		total=$$((total + 1)); \
 		expected=$$1; shift; \
 		name=$$(basename $$fixture .ae); \
-		out="/tmp/$$name.bin"; \
+		out="/tmp/kernel/$$name.bin"; \
 		printf "  TEST: %s ... " $$name; \
 		./$(BUILD_DIR)/aether --target x86_64-freestanding $$fixture -o $$out 2>/dev/null >/dev/null; \
 		if [ $$? -ne 0 ]; then \
@@ -279,3 +281,4 @@ uninstall:
 
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -rf /tmp/kernel
