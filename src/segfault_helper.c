@@ -1,8 +1,16 @@
 /* segfault_helper.c — Hardware fault handling for Aether host targets
  *
  * Uses sigsetjmp/siglongjmp for reliable segfault-to-catch redirection.
- * Stacktrace uses dladdr() on the faulting RIP from ucontext to report
- * the function name and offset where the crash occurred.
+ * Stacktrace uses dladdr() on the faulting RIP from ucontext, plus
+ * walks the __aether_source_map table to report source line/col.
+ *
+ * Source map format (emitted by codegen.c):
+ *   __aether_source_map:
+ *     dq Lsrc_N    ; instruction address in .text
+ *     dd line, col
+ *     ... (repeated per statement)
+ *     dq 0         ; sentinel
+ *     dd 0, 0
  */
 #include <signal.h>
 #include <setjmp.h>
@@ -16,6 +24,36 @@
 
 /* Active jump buffer — set by try blocks, cleared after */
 static sigjmp_buf *volatile gActiveJmpBuf = NULL;
+
+/* Source map entry — 16 bytes: dq addr, dd line, dd col */
+typedef struct {
+    uint64_t addr;
+    uint32_t line;
+    uint32_t col;
+} SourceMapEntry;
+
+/* External source map table — emitted by codegen in .rodata */
+extern SourceMapEntry aether_source_map[];
+
+/* Walk the source map table to find the source location for a given RIP.
+ * Finds the closest entry with addr <= rip (table is sorted by address).
+ * Returns 1 if found, 0 if not. */
+static int lookupSourceLocation(uint64_t rip, uint32_t *outLine, uint32_t *outCol) {
+    SourceMapEntry *best = NULL;
+    for (int i = 0; aether_source_map[i].addr != 0; i++) {
+        if (aether_source_map[i].addr <= rip) {
+            best = &aether_source_map[i];
+        } else {
+            break;  /* sorted by address — no need to continue */
+        }
+    }
+    if (best) {
+        *outLine = best->line;
+        *outCol = best->col;
+        return 1;
+    }
+    return 0;
+}
 
 /* Signal handler */
 static void segfaultHandler(int sig, siginfo_t *info, void *ucontext) {
@@ -62,6 +100,16 @@ static void segfaultHandler(int sig, siginfo_t *info, void *ucontext) {
                 faultRip);
         }
         write(2, buf, (size_t)(n > 0 && n < (int)sizeof(buf) ? n : 0));
+    }
+
+    /* Look up source location from the source map table */
+    {
+        uint32_t srcLine = 0, srcCol = 0;
+        if (lookupSourceLocation(faultRip, &srcLine, &srcCol)) {
+            char buf[512];
+            int n = snprintf(buf, sizeof(buf), "  Source: line %u, col %u\n", srcLine, srcCol);
+            write(2, buf, (size_t)(n > 0 && n < (int)sizeof(buf) ? n : 0));
+        }
     }
 
     /* Print backtrace from current context */

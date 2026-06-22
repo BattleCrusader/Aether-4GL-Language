@@ -27,6 +27,7 @@ typedef enum {
 } Target;
 
 typedef struct AutoDrop AutoDrop;
+typedef struct SrcLocEntry SrcLocEntry;
 
 typedef struct {
     Arena *arena;
@@ -52,6 +53,7 @@ typedef struct {
     /* User-supplied linker script path, NULL = auto-generate */
     const char *linker_script;
     int cleanup_depth;       /* current scope cleanup depth for try/catch unwinding */
+    SrcLocEntry *src_loc_list;  /* linked list of source location entries for segfault handler */
 } Codegen;
 
 Codegen *codegen_create(Arena *a);
