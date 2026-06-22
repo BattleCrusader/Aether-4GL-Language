@@ -316,6 +316,28 @@ static bool is_numeric_expr(AstNode *node) {
                    pt == PRIM_I8 || pt == PRIM_I16 || pt == PRIM_I32 || pt == PRIM_I64 ||
                    pt == PRIM_BOOL || pt == PRIM_BYTE;
         }
+        /* No type annotation — check if initializer value is numeric */
+        if (!type_node && decl->type == NODE_LET && decl->data.let_decl.value) {
+            return is_numeric_expr(decl->data.let_decl.value);
+        }
+    }
+    /* Function calls that return numeric types */
+    if (node->type == NODE_CALL && node->data.call.callee &&
+        node->data.call.callee->type == NODE_IDENT) {
+        /* Check resolved declaration first */
+        if (node->data.call.callee->data.ident.resolved &&
+            node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
+            AstNode *ret_type = node->data.call.callee->data.ident.resolved->data.func.return_type;
+            if (ret_type && ret_type->type == NODE_TYPE_PRIMITIVE) {
+                PrimType pt = ret_type->data.type_node.prim;
+                return pt == PRIM_U8 || pt == PRIM_U16 || pt == PRIM_U32 || pt == PRIM_U64 ||
+                       pt == PRIM_I8 || pt == PRIM_I16 || pt == PRIM_I32 || pt == PRIM_I64 ||
+                       pt == PRIM_BOOL || pt == PRIM_BYTE;
+            }
+        }
+        /* If not resolved, check by name against known functions in the program */
+        /* For now, assume function calls return u64 (the default) */
+        return true;
     }
     return false;
 }
@@ -573,6 +595,17 @@ static void frame_collect(Arena *a, AstNode *node, VarSlot **list, int *offset) 
             frame_collect(a, node->data.for_node.body, list, offset);
             break;
 
+        case NODE_TRY:
+            frame_collect(a, node->data.try_node.body, list, offset);
+            for (int i = 0; i < node->data.try_node.catch_arms.count; i++) {
+                AstNode *arm = node->data.try_node.catch_arms.items[i];
+                if (arm->data.catch_arm.var)
+                    frame_collect(a, arm->data.catch_arm.var, list, offset);
+                if (arm->data.catch_arm.body)
+                    frame_collect(a, arm->data.catch_arm.body, list, offset);
+            }
+            break;
+
         default:
             break;
     }
@@ -678,16 +711,7 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             /* Emit lea to string in .rodata */
             const char *label = cg_emit_string(cg, node->data.literal.string_val);
             char buf[128];
-            /* Use absolute addressing for freestanding targets to avoid
-             * NASM "label changed during code generation" errors from
-             * cross-section RIP-relative optimization.
-             * mov rax, label is a fixed-size 10-byte instruction (64-bit immediate),
-             * while lea rax, [rel label] varies between passes. */
-            if (cg->target == TARGET_HOST || cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST) {
-                snprintf(buf, sizeof(buf), "lea rax, [rel %s]", label);
-            } else {
-                snprintf(buf, sizeof(buf), "mov rax, %s", label);
-            }
+            snprintf(buf, sizeof(buf), "lea rax, [rel %s]", label);
             cg_inst(cg, buf);
             break;
         }
@@ -1762,6 +1786,9 @@ static void cg_func(Codegen *cg, AstNode *func) {
     }
     if (!body_has_return) {
         cg_comment(cg, "default return");
+        if (func->data.func.return_type) {
+            cg_inst(cg, "xor rax, rax");  /* default return value = 0 */
+        }
         if (func->data.func.is_throws) {
             cg_inst(cg, "xor rdx, rdx");  /* clear error tag = success */
         }
@@ -1950,10 +1977,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "bits 64\n");
     }
     if (!cg->has_layout) {
-        /* default rel causes NASM "label changed during code generation" errors
-         * on freestanding targets due to cross-section RIP-relative references.
-         * Only use it for host targets where it's safe. */
-        if (cg->target == TARGET_HOST || cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST) {
+        if (cg->target != TARGET_BOOT) {
             cg_write(cg, "default rel\n");
         }
         cg_write(cg, "\n");
@@ -2100,8 +2124,8 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
 
     /* Emit runtime helpers and data sections — BEFORE user functions */
     if (!cg->has_layout) {
-        bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
-        if (is_host) {
+        bool needs_runtime = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST || cg->target == TARGET_BINARY);
+        if (needs_runtime) {
             /* Bump allocator state in .bss */
             cg_write(cg, "section .bss\n");
             cg_write(cg, "__aether_heap_start: resq 1\n");
@@ -2109,6 +2133,9 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_write(cg, "__aether_heap_end:   resq 1\n");
             cg_write(cg, "__aether_region_cur: resq 1\n");
             cg_write(cg, "__aether_region_end: resq 1\n");
+            if (cg->target == TARGET_BINARY) {
+                cg_write(cg, "__aether_heap_buf:  resb 256\n");
+            }
             cg_write(cg, "\n");
 
             cg_write(cg, "section .text\n");
@@ -2135,7 +2162,18 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_write(cg, "LA_heap:\n");
             cg_inst1(cg, "push", "rdi");
             cg_write(cg, "LA_init:\n");
-            if (cg->target == TARGET_MACHO64) {
+            if (cg->target == TARGET_BINARY) {
+                /* Binary target: use a fixed BSS buffer instead of mmap */
+                cg_inst(cg, "mov rax, [rel __aether_heap_start]");
+                cg_inst1(cg, "test", "rax, rax");
+                cg_inst(cg, "jnz LA_try");
+                cg_inst(cg, "lea rax, [rel __aether_heap_buf]");
+                cg_inst(cg, "mov [rel __aether_heap_start], rax");
+                cg_inst(cg, "lea rcx, [rax + 8]");
+                cg_inst(cg, "mov [rel __aether_heap_cur], rcx");
+                cg_inst(cg, "lea rcx, [rax + 65536]");
+                cg_inst(cg, "mov [rel __aether_heap_end], rcx");
+            } else if (cg->target == TARGET_MACHO64) {
                 cg_inst1(cg, "mov", "rdi, 0");
                 cg_inst1(cg, "mov", "rsi, 65536");
                 cg_inst1(cg, "mov", "rdx, 3");
@@ -2163,7 +2201,13 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_inst(cg, "lea rcx, [rax + rdi]");
             cg_inst(cg, "cmp rcx, [rel __aether_heap_end]");
             cg_inst(cg, "jbe LA_ok");
-            if (cg->target == TARGET_MACHO64) {
+            if (cg->target == TARGET_BINARY) {
+                /* Binary target: no more heap space, just halt */
+                cg_inst(cg, "cli");
+                cg_write(cg, ".oom:\n");
+                cg_inst(cg, "hlt");
+                cg_inst(cg, "jmp .oom");
+            } else if (cg->target == TARGET_MACHO64) {
                 cg_inst1(cg, "mov", "rdi, 0");
                 cg_inst1(cg, "mov", "rsi, 65536");
                 cg_inst1(cg, "mov", "rdx, 3");

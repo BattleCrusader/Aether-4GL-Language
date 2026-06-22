@@ -67,7 +67,6 @@ const KeywordEntry KEYWORDS[] = {
     {"export",   TOKEN_KW_EXPORT},
     {"entry",    TOKEN_KW_ENTRY},
     {"layout",   TOKEN_KW_LAYOUT},
-    {"test",     TOKEN_KW_TEST},
     {"run",      TOKEN_KW_RUN},
     {"prop",     TOKEN_KW_PROP},
     {"inline",   TOKEN_KW_INLINE},
@@ -86,8 +85,6 @@ const char *token_type_name(TokenType type) {
         case TOKEN_EOF: return "EOF";
         case TOKEN_ERROR: return "ERROR";
         case TOKEN_INVALID: return "INVALID";
-        case TOKEN_INDENT: return "INDENT";
-        case TOKEN_DEDENT: return "DEDENT";
         case TOKEN_NEWLINE: return "NEWLINE";
         case TOKEN_IDENT: return "IDENT";
         case TOKEN_INT_LITERAL: return "INT";
@@ -152,7 +149,6 @@ const char *token_type_name(TokenType type) {
         case TOKEN_KW_EXPORT: return "export";
         case TOKEN_KW_ENTRY: return "entry";
         case TOKEN_KW_LAYOUT: return "layout";
-        case TOKEN_KW_TEST: return "test";
         case TOKEN_KW_RUN: return "run";
         case TOKEN_KW_PROP: return "prop";
         case TOKEN_KW_INLINE: return "inline";
@@ -269,17 +265,6 @@ Tokenizer *tokenizer_create(const char *source, size_t length, const char *filen
     t->line = 1;
     t->col = 1;
 
-    /* Indent stack starts with level 0 (top-level) */
-    t->indent_cap = 64;
-    t->indent_stack = (int *)malloc(sizeof(int) * t->indent_cap);
-    t->indent_stack[0] = 0;
-    t->indent_depth = 0;
-
-    /* Pending token buffer */
-    t->pending_cap = 16;
-    t->pending = (Token *)malloc(sizeof(Token) * t->pending_cap);
-    t->pending_count = 0;
-
     t->had_error = false;
     t->error_msg[0] = '\0';
 
@@ -288,94 +273,7 @@ Tokenizer *tokenizer_create(const char *source, size_t length, const char *filen
 
 void tokenizer_destroy(Tokenizer *t) {
     if (t) {
-        free(t->indent_stack);
-        free(t->pending);
         free(t);
-    }
-}
-
-/* ================================================================
- * Indentation engine
- * ================================================================ */
-
-static int count_indent(const char *line_start, const char *line_end) {
-    int spaces = 0;
-    const char *p = line_start;
-    while (p < line_end && *p == ' ') {
-        spaces++;
-        p++;
-    }
-    /* Tabs are not allowed */
-    if (p < line_end && *p == '\t') {
-        return -1;  /* signal tab error */
-    }
-    return spaces;
-}
-
-/* Queue a token for later emission */
-static void queue_token(Tokenizer *t, Token tok) {
-    if (t->pending_count >= t->pending_cap) {
-        t->pending_cap *= 2;
-        t->pending = (Token *)realloc(t->pending, sizeof(Token) * t->pending_cap);
-    }
-    t->pending[t->pending_count++] = tok;
-}
-
-/* Dequeue next pending token. Returns true if one was available. */
-static bool dequeue_token(Tokenizer *t, Token *out) {
-    if (t->pending_count > 0) {
-        *out = t->pending[0];
-        /* Shift remaining tokens */
-        memmove(t->pending, t->pending + 1, sizeof(Token) * (t->pending_count - 1));
-        t->pending_count--;
-        return true;
-    }
-    return false;
-}
-
-/* Handle indentation at the start of a new line */
-static void handle_indent(Tokenizer *t, const char *line_start, const char *line_content) {
-    int spaces = count_indent(line_start, line_content);
-    
-    if (spaces < 0) {
-        /* Tab error */
-        queue_token(t, error_token(t, "Tabs are not allowed for indentation. Use spaces."));
-        return;
-    }
-
-    /* Blank/empty line — no indent change */
-    if (line_content >= t->end || *line_content == '\n') {
-        return;
-    }
-
-    int current_indent = t->indent_stack[t->indent_depth];
-
-    if (spaces > current_indent) {
-        /* Push new indent level */
-        t->indent_depth++;
-        if (t->indent_depth >= t->indent_cap) {
-            t->indent_cap *= 2;
-            t->indent_stack = (int *)realloc(t->indent_stack, sizeof(int) * t->indent_cap);
-        }
-        t->indent_stack[t->indent_depth] = spaces;
-        queue_token(t, make_token(t, TOKEN_INDENT));
-    } else if (spaces < current_indent) {
-        /* Pop back to matching indent level */
-        while (t->indent_depth > 0 && spaces < t->indent_stack[t->indent_depth]) {
-            t->indent_depth--;
-            queue_token(t, make_token(t, TOKEN_DEDENT));
-        }
-        if (spaces != t->indent_stack[t->indent_depth]) {
-            queue_token(t, error_token(t, "Indentation doesn't match any outer level"));
-        }
-    }
-}
-
-/* Emit any remaining dedents at EOF */
-static void emit_final_dedents(Tokenizer *t) {
-    while (t->indent_depth > 0) {
-        t->indent_depth--;
-        queue_token(t, make_token(t, TOKEN_DEDENT));
     }
 }
 
@@ -647,85 +545,16 @@ static Token scan_char(Tokenizer *t) {
  * ================================================================ */
 
 Token tokenizer_next(Tokenizer *t) {
-    /* First, check pending queue */
-    Token pending;
-    if (dequeue_token(t, &pending)) {
-        return pending;
-    }
-
     /* Main scan loop */
     while (t->pos < t->end) {
         t->start = t->pos;
-        
-        /* Check if we're at the start of a new line (after \n or at start of file) */
-        if (t->col == 1) {
-            /* Record the beginning of this line for indentation */
-            const char *line_start = t->pos;
-            
-            /* Skip whitespace at line start */
-            skip_whitespace_inline(t);
-            
-            /* If we hit a newline, blank line — skip */
-            if (t->pos < t->end && *t->pos == '\n') {
-                t->pos++;
-                t->line++;
-                t->col = 1;
-                continue;
-            }
-            
-            /* If EOF after whitespace on last line, done */
-            if (t->pos >= t->end) {
-                emit_final_dedents(t);
-                Token eof_pending;
-                if (dequeue_token(t, &eof_pending)) return eof_pending;
-                return make_token(t, TOKEN_EOF);
-            }
-            
-            /* Comment at line start? Process indentation then handle comment */
-            if (*t->pos == '#') {
-                /* Check for #run (compile-time execution) — not a comment */
-                if (t->pos + 3 < t->end &&
-                    t->pos[1] == 'r' && t->pos[2] == 'u' && t->pos[3] == 'n' &&
-                    (t->pos + 4 >= t->end || !is_ident_continue(t->pos[4]))) {
-                    /* #run — process indentation first, then emit # token */
-                    handle_indent(t, line_start, t->pos);
-                    if (dequeue_token(t, &pending)) return pending;
-                    t->start = t->pos;
-                    t->pos++; t->col++;
-                    Token tok;
-                    tok.type = TOKEN_HASH;
-                    tok.loc = (Location){t->filename, t->line, t->col - 1, 1};
-                    tok.text = SV("#");
-                    return tok;
-                }
-                if (t->pos + 1 < t->end && t->pos[1] == '{') {
-                    /* Block comment — treat as no indent change (like blank line) */
-                    t->pos += 2;
-                    t->col += 2;
-                    Token result = scan_block_comment(t);
-                    if (result.type != TOKEN_EOF && dequeue_token(t, &pending)) return pending;
-                    return result;
-                } else {
-                    /* Line comment — skip entire line */
-                    skip_line(t);
-                    continue;
-                }
-            }
-            
-            /* Process indentation */
-            handle_indent(t, line_start, t->pos);
-            
-            /* Check for pending tokens from indent handling */
-            if (dequeue_token(t, &pending)) {
-                /* We need to return this pending token, but also save our position
-                   so the next call resumes at the right spot */
-                /* Return the indentation token; next call will process the line's content */
-                return pending;
-            }
-        }
 
-        /* Skip inline whitespace */
-        skip_whitespace_inline(t);
+        /* Skip whitespace (spaces and tabs) */
+        while (t->pos < t->end && (*t->pos == ' ' || *t->pos == '\t')) {
+            if (*t->pos == '\t') t->col += 4;
+            else t->col++;
+            t->pos++;
+        }
         if (t->pos >= t->end) break;
         t->start = t->pos;
 
@@ -736,7 +565,6 @@ Token tokenizer_next(Tokenizer *t) {
             t->pos++;
             t->line++;
             t->col = 1;
-            /* Check if we need to go through indentation on next call */
             return make_token(t, TOKEN_NEWLINE);
         }
 
@@ -812,7 +640,7 @@ Token tokenizer_next(Tokenizer *t) {
                     if (next == '>') { t->pos++; t->col++; return make_token(t, TOKEN_GT_GT); }
                     return make_token(t, TOKEN_GT);
                 case '&': if (next == '&') { t->pos++; t->col++; return make_token(t, TOKEN_AND_AND); } return make_token(t, TOKEN_AMPERSAND);
-                case '|': if (next == '|') { t->pos++; t->col++; return make_token(t, TOKEN_PIPE_PIPE); } return make_token(t, TOKEN_PIPE);
+                case '|': if (next == '||') { t->pos++; t->col++; return make_token(t, TOKEN_PIPE_PIPE); } return make_token(t, TOKEN_PIPE);
                 case '-': if (next == '>') { t->pos++; t->col++; return make_token(t, TOKEN_ARROW); } 
                           if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_MINUS_EQ); } 
                           if (next == '-') { t->pos++; t->col++; return make_token(t, TOKEN_MINUS_MINUS); } 
@@ -842,21 +670,18 @@ Token tokenizer_next(Tokenizer *t) {
             case ']': return make_token(t, TOKEN_RBRACKET);
             case '{': return make_token(t, TOKEN_LBRACE);
             case '}': return make_token(t, TOKEN_RBRACE);
-            case ':': return make_token(t, TOKEN_COLON);
             case ',': return make_token(t, TOKEN_COMMA);
-            case '@': return make_token(t, TOKEN_AT);
+            case ';': return make_token(t, TOKEN_SEMICOLON);
+            case '?': return make_token(t, TOKEN_QUESTION);
             case '~': return make_token(t, TOKEN_TILDE);
             case '^': return make_token(t, TOKEN_CARET);
             case '%': return make_token(t, TOKEN_PERCENT);
-            case ';': return make_token(t, TOKEN_SEMICOLON);
-            case '?': return make_token(t, TOKEN_QUESTION);
-            default: return error_token(t, "Unexpected character");
+            case '@': return make_token(t, TOKEN_AT);
+            default:
+                return error_token(t, "Unexpected character");
         }
     }
 
-    /* EOF — emit any final dedents */
-    emit_final_dedents(t);
-    if (dequeue_token(t, &pending)) return pending;
     return make_token(t, TOKEN_EOF);
 }
 

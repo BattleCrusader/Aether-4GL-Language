@@ -283,17 +283,6 @@ static int cmd_fmt(const char *path) {
         }
         prev_newline = 0;
 
-        /* Handle indentation */
-        if (tok.type == TOKEN_INDENT) {
-            indent++;
-            continue;
-        }
-        if (tok.type == TOKEN_DEDENT) {
-            indent--;
-            if (indent < 0) indent = 0;
-            continue;
-        }
-
         /* Add indentation at line start */
         if (at_line_start) {
             for (int i = 0; i < indent; i++) {

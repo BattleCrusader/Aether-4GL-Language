@@ -314,6 +314,35 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                 semantic_visit_node(sa, node->data.func.body);
             }
 
+            /* Check: if function has a return type, body must end with a return */
+            if (node->data.func.return_type && node->data.func.body) {
+                bool has_return = false;
+                if (node->data.func.body->type == NODE_RETURN) {
+                    has_return = true;
+                } else if (node->data.func.body->type == NODE_ASM_BLOCK) {
+                    /* asm block body counts as having a return (compiler adds epilogue) */
+                    has_return = true;
+                } else if (node->data.func.body->type == NODE_BLOCK) {
+                    AstNodeList *stmts = &node->data.func.body->data.list;
+                    if (stmts->count > 0) {
+                        AstNode *last = stmts->items[stmts->count - 1];
+                        if (last->type == NODE_RETURN) {
+                            has_return = true;
+                        }
+                        /* asm block counts as having a return (compiler adds epilogue) */
+                        if (last->type == NODE_ASM_BLOCK) {
+                            has_return = true;
+                        }
+                    }
+                }
+                if (!has_return) {
+                    fprintf(stderr, "Error: function '%.*s' has return type but no return statement\n",
+                        (int)node->data.func.name->data.ident.name.len,
+                        node->data.func.name->data.ident.name.data);
+                    sa->error_count++;
+                }
+            }
+
             scope_exit(sa);
             break;
         }
@@ -330,13 +359,17 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             const char *name = arena_strndup(sa->arena,
                 node->data.let_decl.name->data.ident.name.data,
                 node->data.let_decl.name->data.ident.name.len);
+
+            /* Visit value BEFORE declaring the name, so the initializer
+               can reference the function with the same name (e.g. let test = test()) */
+            if (node->data.let_decl.value) {
+                semantic_visit_expr(sa, node->data.let_decl.value);
+            }
+
             scope_declare(sa, name, node);
 
             if (node->data.let_decl.type) {
                 semantic_visit_node(sa, node->data.let_decl.type);
-            }
-            if (node->data.let_decl.value) {
-                semantic_visit_expr(sa, node->data.let_decl.value);
             }
             break;
         }
