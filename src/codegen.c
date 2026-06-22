@@ -28,6 +28,16 @@ struct AutoDrop {
     AutoDrop *next;
 };
 
+/* Source location entry — tracked during codegen, emitted as a table at the end */
+typedef struct SrcLocEntry SrcLocEntry;
+struct SrcLocEntry {
+    int label_num;       /* _aether_src_<label_num> in .text */
+    int line;
+    int col;
+    const char *file;    /* source file name */
+    SrcLocEntry *next;
+};
+
 /* Process a raw string literal token value into actual bytes.
  * Strips surrounding quotes, processes escape sequences.
  * Returns the number of bytes written to out_buf (max max_len). */
@@ -506,6 +516,19 @@ static void cg_warn(Codegen *cg, AstNode *node, const char *msg) {
         node->loc.line, node->loc.col, msg);
 }
 
+/* Emit a source location entry for the segfault handler.
+ * Emits a table entry: dq $ (current address, linker-resolved), dd line, dd col
+ * Only emits for host targets (has segfault handler). */
+static void cg_source_loc(Codegen *cg, AstNode *node) {
+    if (!node) return;
+    if (cg->target != TARGET_MACHO64 && cg->target != TARGET_ELF64_HOST) return;
+    int line = node->loc.line;
+    int col = node->loc.col;
+    if (line <= 0) return;
+    cg_write_fmt(cg, "  dq $\n");
+    cg_write_fmt(cg, "  dd %d, %d\n", line, col);
+}
+
 /* Emit load from stack slot with correct register width */
 static void cg_load_var(Codegen *cg, int offset, int actual_size) {
     char buf[64];
@@ -960,8 +983,8 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     }
                     break;
                 /* Logical (short-circuit emulated) */
-                case BIN_AND: cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jz .Lfalse"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
-                case BIN_OR:  cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jnz .Ltrue"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
+                case BIN_AND: cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jz L_false"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
+                case BIN_OR:  cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jnz L_true"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
                 case BIN_RANGE: cg_comment(cg, "range"); cg_inst1(cg, "mov", "rax, rcx"); break;
                 case BIN_CONCAT: {
                     cg_comment(cg, "string concat");
@@ -1228,7 +1251,7 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             cg_comment(cg, "lambda");
             int lambda_id = cg_new_label(cg);
             char fn_name[64];
-            snprintf(fn_name, sizeof(fn_name), ".Llambda_%x", lambda_id);
+            snprintf(fn_name, sizeof(fn_name), "L_lambda_%x", lambda_id);
 
             /* Emit the lambda function body (will be placed in .text) */
             /* For now, just return 0 as placeholder — full lambda codegen deferred */
@@ -1252,6 +1275,31 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots);
 
 static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
     if (!node) return;
+
+    /* Emit source location label for segfault handler (host targets only).
+     * The label is in .text so its address is the instruction address.
+     * Track it for the source map table emitted at the end. */
+    if (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST) {
+        if (node->loc.line > 0) {
+            cg->label_counter++;
+            cg_write_fmt(cg, "_aether_src_%d:\n", cg->label_counter);
+            /* Track this entry for the source map table */
+            SrcLocEntry *e = (SrcLocEntry *)arena_alloc(cg->arena, sizeof(SrcLocEntry));
+            e->label_num = cg->label_counter;
+            e->line = node->loc.line;
+            e->col = node->loc.col;
+            e->file = node->loc.file ? node->loc.file : "?";
+            e->next = NULL;
+            /* Append to linked list */
+            if (!cg->src_loc_list) {
+                cg->src_loc_list = e;
+            } else {
+                SrcLocEntry *last = cg->src_loc_list;
+                while (last->next) last = last->next;
+                last->next = e;
+            }
+        }
+    }
 
     switch (node->type) {
         case NODE_RETURN: {
@@ -1331,11 +1379,11 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                 cg_inst(cg, "mov rcx, rax");
                 cg_inst(cg, "and rcx, 0xFF");
                 cg_inst1(cg, "test", "rcx, rcx");
-                cg_write_fmt(cg, "    jz .L%x\n", end_lbl);
+                cg_write_fmt(cg, "    jz L_%x\n", end_lbl);
                 /* Tag is some (1) — run body */
                 if (node->data.if_node.then_block)
                     cg_stmt(cg, node->data.if_node.then_block, slots);
-                cg_write_fmt(cg, ".L%x:\n", end_lbl);
+                cg_write_fmt(cg, "L_%x:\n", end_lbl);
                 break;
             }
 
@@ -1344,13 +1392,13 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
             cg_expr(cg, node->data.if_node.condition, slots);
             cg_inst1(cg, "test", "rax, rax");
-            cg_write_fmt(cg, "    jz .L%x\n", else_label);
+            cg_write_fmt(cg, "    jz L_%x\n", else_label);
 
             if (node->data.if_node.then_block)
                 cg_stmt(cg, node->data.if_node.then_block, slots);
 
-            cg_write_fmt(cg, "    jmp .L%x\n", end_label);
-            cg_write_fmt(cg, ".L%x:\n", else_label);
+            cg_write_fmt(cg, "    jmp L_%x\n", end_label);
+            cg_write_fmt(cg, "L_%x:\n", else_label);
 
             /* elif chain */
             if (node->data.if_node.elif_chain)
@@ -1359,21 +1407,21 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             if (node->data.if_node.else_block)
                 cg_stmt(cg, node->data.if_node.else_block, slots);
 
-            cg_write_fmt(cg, ".L%x:\n", end_label);
+            cg_write_fmt(cg, "L_%x:\n", end_label);
             break;
         }
 
         case NODE_WHILE: {
             int start_label = cg_new_label(cg);
             int end_label = cg_new_label(cg);
-            cg_write_fmt(cg, ".L%x:\n", start_label);
+            cg_write_fmt(cg, "L_%x:\n", start_label);
             cg_expr(cg, node->data.while_node.condition, slots);
             cg_inst1(cg, "test", "rax, rax");
-            cg_write_fmt(cg, "    jz .L%x\n", end_label);
+            cg_write_fmt(cg, "    jz L_%x\n", end_label);
             if (node->data.while_node.body)
                 cg_stmt(cg, node->data.while_node.body, slots);
-            cg_write_fmt(cg, "    jmp .L%x\n", start_label);
-            cg_write_fmt(cg, ".L%x:\n", end_label);
+            cg_write_fmt(cg, "    jmp L_%x\n", start_label);
+            cg_write_fmt(cg, "L_%x:\n", end_label);
             break;
         }
 
@@ -1393,11 +1441,11 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     cg_expr(cg, range->data.binary.left, slots);
                     cg_inst1(cg, "mov", "rcx, rax");
 
-                    cg_write_fmt(cg, ".L%x:\n", start_label);
+                    cg_write_fmt(cg, "L_%x:\n", start_label);
                     /* Compare counter with end */
                     cg_expr(cg, range->data.binary.right, slots);
                     cg_inst1(cg, "cmp", "rcx, rax");
-                    cg_write_fmt(cg, "    jge .L%x\n", end_label);
+                    cg_write_fmt(cg, "    jge L_%x\n", end_label);
 
                     /* If there's a loop variable, store counter to it */
                     if (node->data.for_node.var) {
@@ -1412,8 +1460,8 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
                     /* Increment counter */
                     cg_inst1(cg, "inc", "rcx");
-                    cg_write_fmt(cg, "    jmp .L%x\n", start_label);
-                    cg_write_fmt(cg, ".L%x:\n", end_label);
+                    cg_write_fmt(cg, "    jmp L_%x\n", start_label);
+                    cg_write_fmt(cg, "L_%x:\n", end_label);
                 }
             }
             break;
@@ -1443,17 +1491,17 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     char tmp[64];
                     snprintf(tmp, sizeof(tmp), "cmp rax, %s", val_buf);
                     cg_inst(cg, tmp);
-                    cg_write_fmt(cg, "    jne .L%x\n", next_label);
+                    cg_write_fmt(cg, "    jne L_%x\n", next_label);
                 }
 
                 if (!is_wildcard) {
                     /* Emit arm body */
                     if (arm->data.match_arm.body)
                         cg_expr(cg, arm->data.match_arm.body, slots);
-                    cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+                    cg_write_fmt(cg, "    jmp L_%x\n", end_label);
                 }
 
-                cg_write_fmt(cg, ".L%x:\n", next_label);
+                cg_write_fmt(cg, "L_%x:\n", next_label);
                 if (i == node->data.match_node.arms.count - 1) {
                     /* Last arm (wildcard or default) */
                     if (arm->data.match_arm.body)
@@ -1461,7 +1509,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                 }
             }
 
-            cg_write_fmt(cg, ".L%x:\n", end_label);
+            cg_write_fmt(cg, "L_%x:\n", end_label);
             cg_inst1(cg, "add", "rsp, 8");  /* pop matched value */
             break;
         }
@@ -1488,7 +1536,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             if (node->data.region_node.body)
                 cg_stmt(cg, node->data.region_node.body, slots);
             /* Region teardown: restore rsp */
-            cg_write_fmt(cg, ".L%x:\n", end_lbl);
+            cg_write_fmt(cg, "L_%x:\n", end_lbl);
             cg_inst(cg, "mov rsp, r15");
             cg_inst(cg, "xor rax, rax");
             cg_inst(cg, "mov [rel __aether_region_cur], rax");
@@ -1533,7 +1581,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                 }
                 /* Check return value: 0 = first call (normal), non-zero = siglongjmp (segfault caught) */
                 cg_inst(cg, "test eax, eax");
-                cg_write_fmt(cg, "    jnz .L%x\n", catch_label);
+                cg_write_fmt(cg, "    jnz L_%x\n", catch_label);
             }
 
             /* Clear error tag before try body */
@@ -1555,16 +1603,16 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
             /* Check error tag (rdx = 0 success, 1 = error) */
             cg_inst(cg, "test rdx, rdx");
-            cg_write_fmt(cg, "    jnz .L%x\n", catch_label);
+            cg_write_fmt(cg, "    jnz L_%x\n", catch_label);
             /* Success path: jump to finally (or end if no finally) */
             if (has_finally) {
-                cg_write_fmt(cg, "    jmp .L%x\n", finally_label);
+                cg_write_fmt(cg, "    jmp L_%x\n", finally_label);
             } else {
-                cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+                cg_write_fmt(cg, "    jmp L_%x\n", end_label);
             }
 
             /* Catch handlers */
-            cg_write_fmt(cg, ".L%x:\n", catch_label);
+            cg_write_fmt(cg, "L_%x:\n", catch_label);
             cg_comment(cg, "catch handlers");
 
             /* Walk cleanup table for this try block */
@@ -1603,7 +1651,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                         char buf[64];
                         snprintf(buf, sizeof(buf), "cmp rax, %d", disc_val);
                         cg_inst(cg, buf);
-                        cg_write_fmt(cg, "    jne .L%x\n", next_arm);
+                        cg_write_fmt(cg, "    jne L_%x\n", next_arm);
                     }
                 }
 
@@ -1630,12 +1678,12 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                 cg_inst(cg, "xor rdx, rdx");
 
                 if (has_finally) {
-                    cg_write_fmt(cg, "    jmp .L%x\n", finally_label);
+                    cg_write_fmt(cg, "    jmp L_%x\n", finally_label);
                 } else {
-                    cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+                    cg_write_fmt(cg, "    jmp L_%x\n", end_label);
                 }
 
-                cg_write_fmt(cg, ".L%x:\n", next_arm);
+                cg_write_fmt(cg, "L_%x:\n", next_arm);
             }
 
             /* No catch matched — re-throw (propagate error to caller) */
@@ -1650,13 +1698,13 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
             /* Finally block */
             if (has_finally) {
-                cg_write_fmt(cg, ".L%x:\n", finally_label);
+                cg_write_fmt(cg, "L_%x:\n", finally_label);
                 cg_comment(cg, "finally");
                 if (node->data.try_node.finally_body)
                     cg_stmt(cg, node->data.try_node.finally_body, slots);
             }
 
-            cg_write_fmt(cg, ".L%x:\n", end_label);
+            cg_write_fmt(cg, "L_%x:\n", end_label);
             cg_comment(cg, "try end");
 
             cg->cleanup_depth = saved_cleanup_depth;
@@ -1828,13 +1876,13 @@ static void cg_func(Codegen *cg, AstNode *func) {
             int end_label = cg_new_label(cg);
             cg_expr(cg, func->data.func.pre_conditions.items[i], slots);
             cg_inst(cg, "test rax, rax");
-            cg_write_fmt(cg, "    jnz .L%x\n", end_label);
-            cg_write_fmt(cg, ".L%x:\n", fail_label);
+            cg_write_fmt(cg, "    jnz L_%x\n", end_label);
+            cg_write_fmt(cg, "L_%x:\n", fail_label);
             cg_comment(cg, "pre-condition failed — panic");
             cg_inst(cg, "mov rdi, 1");  /* exit code 1 */
             cg_inst(cg, "mov rax, 0x2000001");  /* macOS exit */
             cg_inst(cg, "syscall");
-            cg_write_fmt(cg, ".L%x:\n", end_label);
+            cg_write_fmt(cg, "L_%x:\n", end_label);
         }
     }
 
@@ -1909,13 +1957,13 @@ static void cg_func(Codegen *cg, AstNode *func) {
             int end_label = cg_new_label(cg);
             cg_expr(cg, func->data.func.post_conditions.items[i], slots);
             cg_inst(cg, "test rax, rax");
-            cg_write_fmt(cg, "    jnz .L%x\n", end_label);
-            cg_write_fmt(cg, ".L%x:\n", fail_label);
+            cg_write_fmt(cg, "    jnz L_%x\n", end_label);
+            cg_write_fmt(cg, "L_%x:\n", fail_label);
             cg_comment(cg, "post-condition failed — panic");
             cg_inst(cg, "mov rdi, 1");
             cg_inst(cg, "mov rax, 0x2000001");
             cg_inst(cg, "syscall");
-            cg_write_fmt(cg, ".L%x:\n", end_label);
+            cg_write_fmt(cg, "L_%x:\n", end_label);
         }
         cg_inst(cg, "pop rax");  /* restore return value */
     }
@@ -2547,6 +2595,35 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         }
     }
 
+    /* Emit source map table for segfault handler (host targets only) */
+    if (!cg->has_layout && cg->src_loc_list) {
+        cg_write(cg, "section .rodata align=8\n");
+        if (cg->target == TARGET_MACHO64) {
+            cg_write(cg, "global _aether_source_map\n");
+            cg_write(cg, "_aether_source_map:\n");
+        } else {
+            cg_write(cg, "global aether_source_map\n");
+            cg_write(cg, "aether_source_map:\n");
+        }
+        int file_id = 0;
+        for (SrcLocEntry *e = cg->src_loc_list; e; e = e->next) {
+            cg_write_fmt(cg, "  dq _aether_src_%d\n", e->label_num);
+            cg_write_fmt(cg, "  dq Lfile_%d\n", file_id);
+            cg_write_fmt(cg, "  dd %d, %d\n", e->line, e->col);
+            file_id++;
+        }
+        cg_write(cg, "  dq 0, 0\n");  /* sentinel */
+        cg_write(cg, "  dd 0, 0\n");
+        cg_write(cg, "\n");
+        /* Emit file name strings */
+        file_id = 0;
+        for (SrcLocEntry *e = cg->src_loc_list; e; e = e->next) {
+            cg_write_fmt(cg, "Lfile_%d: db \"%s\", 0\n", file_id, e->file);
+            file_id++;
+        }
+        cg_write(cg, "\n");
+    }
+
     /* Emit string table — uses the label stored in each StringEntry */
     if (!cg->has_layout) {
         cg_write(cg, "section .rodata\n");
@@ -2886,9 +2963,9 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
 
     /* Step 3: Link */
     if (cg->target == TARGET_MACHO64) {
-        snprintf(cmd, sizeof(cmd), "%s -o %s %s build/segfault_helper.o", link_cmd_prefix, output_file, obj_file);
+        snprintf(cmd, sizeof(cmd), "%s -o %s %s " SEGFAULT_HELPER, link_cmd_prefix, output_file, obj_file);
     } else if (link_cmd_prefix && link_cmd_prefix[0] != '\0') {
-        snprintf(cmd, sizeof(cmd), "%s %s %s build/segfault_helper.o", link_cmd_prefix, output_file, obj_file);
+        snprintf(cmd, sizeof(cmd), "%s %s %s " SEGFAULT_HELPER, link_cmd_prefix, output_file, obj_file);
     } else {
         /* No linker step needed (module targets) */
         /* Just copy object to output */
