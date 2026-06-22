@@ -1143,6 +1143,29 @@ jmp .end
 .end:
 ```
 
+The compiler also emits a **source map table** (`aether_source_map`) in `.rodata` that maps instruction addresses to source file/line/col. Before each statement, a label (`_aether_src_N`) is emitted in `.text`. At the end of codegen, a table in `.rodata` references these labels with their file name, line, and column. The segfault handler walks this table to report the exact crash location:
+
+```
+=== AETHER HARDWARE FAULT ===
+Signal: 11, Fault address: 0x0
+  Source: tests/fixtures/test_segfault.ae:8:12
+```
+
+The source map table format:
+```asm
+section .rodata align=8
+aether_source_map:
+  dq _aether_src_1     ; instruction address in .text
+  dq Lfile_0           ; pointer to file name string
+  dd 8, 12             ; line, col
+  dq _aether_src_2
+  dq Lfile_1
+  dd 10, 5
+  ...
+  dq 0, 0              ; sentinel
+  dd 0, 0
+```
+
 ---
 
 ## 12. Compile-Time Execution

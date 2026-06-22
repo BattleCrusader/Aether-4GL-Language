@@ -74,7 +74,7 @@
 - [x] P05.07 — **`finally` blocks** 🟢
 - [x] P05.08 — **Catch-all (`catch _`)** 🟢
 - [x] P05.09 — **Error value binding in catch variables** 🟢
-- [x] P05.10 — **Segfault handling (IDT-based for kernel, sigsetjmp/siglongjmp for host)** 🟢
+- [x] P05.10 — **Segfault handling (sigsetjmp/siglongjmp for host, source map table for line/col)** 🟢
 - [x] P05.11 — **Nested try/catch verification** 🟢
 - [x] P05.12 — **Test suite (try/catch, throw, propagation, finally, segfault, nested)** 🟢
 - [x] P05.13 — Compile-time execution: `#run { ... }` blocks 🟢
