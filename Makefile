@@ -33,7 +33,12 @@ CORE_SRCS = \
 	src/asm_backend_arm64.c \
 	src/asm_backend_riscv64.c \
 	src/universal.c \
-	src/optimizer.c
+	src/optimizer.c \
+	src/aether.c
+
+# Segfault helper — compiled separately, linked into host-native binaries
+SEGFAULT_HELPER_SRC = src/segfault_helper.c
+SEGFAULT_HELPER_OBJ = build/segfault_helper.o
 
 CORE_OBJS = $(CORE_SRCS:src/%.c=$(BUILD_DIR)/%.o)
 
@@ -122,7 +127,8 @@ TEST_FIXTURES = \
 	tests/fixtures/test_interp_num_concat.ae \
 	tests/fixtures/test_interp_print_num.ae \
 	tests/fixtures/test_import.ae \
-	tests/fixtures/test_asm_comment.ae
+	tests/fixtures/test_asm_comment.ae \
+	tests/fixtures/test_segfault.ae
 
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \

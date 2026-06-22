@@ -64,19 +64,19 @@
 - [x] P04.07 — `if let` pattern binding for optionals 🟢
 - [x] P04.08 — Phase 4 Verification (16/16 + 14/14 unit, 13/13 native, both targets) 🟢
 
-## Phase 5 — Advanced Language Features 🟡 HOLD (try/catch needs proper rewrite)
+## Phase 5 — Advanced Language Features 🟡 HOLD (try/catch proper rewrite in progress)
 - [x] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen 🟢
 - [x] P05.02 — Custom error types (enum-based error hierarchy) 🟢
 - [x] P05.03 — Deterministic exceptions (tagged union return, no unwinding tables) 🟢
 - [x] P05.04 — Zero-cost happy path for exceptions 🟢
-- [ ] P05.05 — **Proper stack unwinding with destructor calls in try body** 🔴
-- [ ] P05.06 — **Error propagation through `throws` function calls** 🔴
-- [ ] P05.07 — **`finally` blocks** 🔴
-- [ ] P05.08 — **Catch-all (`catch _`)** 🔴
-- [ ] P05.09 — **Error value binding in catch variables** 🔴
+- [x] P05.05 — **Proper stack unwinding with destructor calls in try body** 🟢
+- [x] P05.06 — **Error propagation through `throws` function calls** 🟢
+- [x] P05.07 — **`finally` blocks** 🟢
+- [x] P05.08 — **Catch-all (`catch _`)** 🟢
+- [x] P05.09 — **Error value binding in catch variables** 🟢
 - [ ] P05.10 — **Segfault handling (IDT-based for kernel, signal-based for host)** 🔴
-- [ ] P05.11 — **Nested try/catch verification** 🔴
-- [ ] P05.12 — **Test suite (try/catch, throw, propagation, finally, segfault, nested)** 🔴
+- [x] P05.11 — **Nested try/catch verification** 🟢
+- [x] P05.12 — **Test suite (try/catch, throw, propagation, finally, segfault, nested)** 🟢
 - [x] P05.13 — Compile-time execution: `#run { ... }` blocks 🟢
 - [x] P05.14 — Compile-time constant evaluation 🟢
 - [x] P05.15 — Contract programming: `pre(expr)` and `post(expr)` on functions 🟢
@@ -311,7 +311,7 @@
 3. **Phase 2**: Host-native output ✅
 4. **Phase 3**: Memory management — defer, heap, regions, optionals ✅
 5. **Phase 4**: OOP and type system — classes, traits, generics ✅
-6. **Phase 5**: Advanced language features — exceptions (proper unwinding, propagation, finally, catch-all, segfault handling), compile-time, contracts, closures, monomorphization, dynamic dispatch 🟡 HOLD (try/catch needs proper rewrite)
+6. **Phase 5**: Advanced language features — exceptions (proper unwinding, propagation, finally, catch-all, segfault handling), compile-time, contracts, closures, monomorphization, dynamic dispatch 🟡 HOLD (try/catch rewrite in progress — segfault handling remaining)
 7. **Phase 6**: Aether OS integration — sys func, module, attributes, stdlib ✅
 8. **Phase 7**: Self-hosting — compiler compiles itself
 9. **Phase 8**: Multi-target assembler — NASM → ARM64/RISC-V translation ✅

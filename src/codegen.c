@@ -1517,12 +1517,30 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             /* Save current cleanup depth so we can restore it after the try */
             int saved_cleanup_depth = cg->cleanup_depth;
 
+            /* For host targets: set fault return address and save stack frame
+             * so hardware faults inside the try body redirect to the catch
+             * handler with a clean stack. */
+            bool isHost = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
+            if (isHost) {
+                cg_comment(cg, "set fault return address and save stack frame");
+                cg_write_fmt(cg, "    lea rax, [rel .L%x]\n", catch_label);
+                cg_inst(cg, "mov [rel __aether_faultReturnAddr], rax");
+                cg_inst(cg, "mov [rel __aether_faultSavedRsp], rsp");
+                cg_inst(cg, "mov [rel __aether_faultSavedRbp], rbp");
+            }
+
             /* Clear error tag before try body */
             cg_inst(cg, "xor rdx, rdx");
 
             /* Emit try body */
             if (node->data.try_node.body)
                 cg_stmt(cg, node->data.try_node.body, slots);
+
+            /* Clear segfault jump buffer (no longer in try block) */
+            if (isHost) {
+                cg_comment(cg, "clear fault return address");
+                cg_inst(cg, "mov qword [rel __aether_faultReturnAddr], 0");
+            }
 
             /* Check error tag (rdx = 0 success, 1 = error) */
             cg_inst(cg, "test rdx, rdx");
@@ -1994,6 +2012,20 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             collect_externs_from_block(cg, node->data.func.body);
         }
     }
+    /* For host targets: declare extern C helper functions */
+    if (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST) {
+        cg_write(cg, "; C helper functions (from segfault_helper.o)\n");
+        /* Mach-O: C compiler prepends _ to symbols, NASM does NOT for Mach-O.
+         * So C function aether_initSegfault → object _aether_initSegfault.
+         * NASM extern _aether_initSegfault → object _aether_initSegfault. ✓ */
+        if (cg->target == TARGET_MACHO64) {
+            cg_write(cg, "extern _aether_initSegfault\n");
+            cg_write(cg, "extern _aether_printStacktrace\n");
+        } else {
+            cg_write(cg, "extern aether_initSegfault\n");
+            cg_write(cg, "extern aether_printStacktrace\n");
+        }
+    }
     cg_write(cg, "\n");
 
     /* Build struct layouts from top-level declarations */
@@ -2174,6 +2206,12 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_write_fmt(cg, "global %s\n", entry);
             cg_write_fmt(cg, "%s:\n", entry);
             cg_inst1(cg, "mov", "rbp, rsp");
+            cg_comment(cg, "init segfault handler");
+            if (cg->target == TARGET_MACHO64) {
+                cg_inst(cg, "call _aether_initSegfault");
+            } else {
+                cg_inst(cg, "call aether_initSegfault");
+            }
             cg_comment(cg, "call main()");
             cg_inst(cg, "call main");
 
@@ -2210,6 +2248,12 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_write(cg, "__aether_heap_end:   resq 1\n");
             cg_write(cg, "__aether_region_cur: resq 1\n");
             cg_write(cg, "__aether_region_end: resq 1\n");
+            /* Segfault jump buffer — set by try blocks for hardware fault catch */
+            cg_write(cg, "__aether_segfault_jmpbuf: resb 200\n");
+            /* Fault return address and saved stack frame — set by try blocks */
+            cg_write(cg, "__aether_faultReturnAddr: resq 1\n");
+            cg_write(cg, "__aether_faultSavedRsp: resq 1\n");
+            cg_write(cg, "__aether_faultSavedRbp: resq 1\n");
             if (cg->target == TARGET_BINARY) {
                 cg_write(cg, "__aether_heap_buf:  resb 256\n");
             }
@@ -2706,7 +2750,7 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         case TARGET_MACHO64:
             nasm_format = "macho64";
             snprintf(obj_file, sizeof(obj_file), "/tmp/aether_host.o");
-            link_cmd_prefix = "clang -arch x86_64 -nostdlib -static -e _aether_entry";
+            link_cmd_prefix = "clang -arch x86_64 -e _aether_entry";
             break;
         case TARGET_ELF64_HOST:
             nasm_format = "elf64";
@@ -2831,9 +2875,9 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
 
     /* Step 3: Link */
     if (cg->target == TARGET_MACHO64) {
-        snprintf(cmd, sizeof(cmd), "%s -o %s %s", link_cmd_prefix, output_file, obj_file);
+        snprintf(cmd, sizeof(cmd), "%s -o %s %s build/segfault_helper.o", link_cmd_prefix, output_file, obj_file);
     } else if (link_cmd_prefix && link_cmd_prefix[0] != '\0') {
-        snprintf(cmd, sizeof(cmd), "%s %s %s", link_cmd_prefix, output_file, obj_file);
+        snprintf(cmd, sizeof(cmd), "%s %s %s build/segfault_helper.o", link_cmd_prefix, output_file, obj_file);
     } else {
         /* No linker step needed (module targets) */
         /* Just copy object to output */
