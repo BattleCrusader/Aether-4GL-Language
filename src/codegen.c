@@ -2886,9 +2886,9 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
 
     /* Step 3: Link */
     if (cg->target == TARGET_MACHO64) {
-        snprintf(cmd, sizeof(cmd), "%s -o %s %s build/segfault_helper.o", link_cmd_prefix, output_file, obj_file);
+        snprintf(cmd, sizeof(cmd), "%s -o %s %s " SEGFAULT_HELPER, link_cmd_prefix, output_file, obj_file);
     } else if (link_cmd_prefix && link_cmd_prefix[0] != '\0') {
-        snprintf(cmd, sizeof(cmd), "%s %s %s build/segfault_helper.o", link_cmd_prefix, output_file, obj_file);
+        snprintf(cmd, sizeof(cmd), "%s %s %s " SEGFAULT_HELPER, link_cmd_prefix, output_file, obj_file);
     } else {
         /* No linker step needed (module targets) */
         /* Just copy object to output */

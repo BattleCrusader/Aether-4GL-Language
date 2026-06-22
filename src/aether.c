@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <errno.h>
 
 static void usage(const char *prog) {
@@ -1178,10 +1179,17 @@ int main(int argc, char **argv) {
         char cmd[4096];
         snprintf(cmd, sizeof(cmd), "%s", output_file);
         int ret = system(cmd);
-        if (ret != 0) {
-            fprintf(stderr, "Program exited with code %d\n", ret);
+        /* system() returns wait status — extract actual exit code */
+        int exit_code = -1;
+        if (WIFEXITED(ret)) {
+            exit_code = WEXITSTATUS(ret);
         }
-        return ret;
+        if (exit_code != 0) {
+            fprintf(stderr, "Program exited with code %d\n", exit_code);
+        }
+        /* Clean up the temp binary immediately after running */
+        remove(output_file);
+        return exit_code;
     }
 
     return 0;
