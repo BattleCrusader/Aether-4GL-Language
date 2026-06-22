@@ -64,22 +64,30 @@
 - [x] P04.07 — `if let` pattern binding for optionals 🟢
 - [x] P04.08 — Phase 4 Verification (16/16 + 14/14 unit, 13/13 native, both targets) 🟢
 
-## Phase 5 — Advanced Language Features 🟢 COMPLETE
+## Phase 5 — Advanced Language Features 🟡 HOLD (try/catch needs proper rewrite)
 - [x] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen 🟢
 - [x] P05.02 — Custom error types (enum-based error hierarchy) 🟢
 - [x] P05.03 — Deterministic exceptions (tagged union return, no unwinding tables) 🟢
 - [x] P05.04 — Zero-cost happy path for exceptions 🟢
-- [x] P05.05 — Compile-time execution: `#run { ... }` blocks 🟢
-- [x] P05.06 — Compile-time constant evaluation 🟢
-- [x] P05.07 — Contract programming: `pre(expr)` and `post(expr)` on functions 🟢
-- [x] P05.08 — Debug-build runtime contract checking 🟢
-- [x] P05.09 — Release-build contract elimination (optimizer hints) 🟢
-- [x] P05.10 — Closures and lambdas: `|args| expr` 🟢
-- [x] P05.11 — Properties: `get`/`set` syntactic sugar 🟢
-- [x] P05.12 — Operator overloading 🟢
-- [x] P05.13 — Generics monomorphization 🟢
-- [x] P05.14 — Dynamic dispatch (`dyn Trait` — fat pointer + vtable) 🟢
-- [x] P05.15 — Semantic enforcement of access modifiers at module boundaries 🟢
+- [ ] P05.05 — **Proper stack unwinding with destructor calls in try body** 🔴
+- [ ] P05.06 — **Error propagation through `throws` function calls** 🔴
+- [ ] P05.07 — **`finally` blocks** 🔴
+- [ ] P05.08 — **Catch-all (`catch _`)** 🔴
+- [ ] P05.09 — **Error value binding in catch variables** 🔴
+- [ ] P05.10 — **Segfault handling (IDT-based for kernel, signal-based for host)** 🔴
+- [ ] P05.11 — **Nested try/catch verification** 🔴
+- [ ] P05.12 — **Test suite (try/catch, throw, propagation, finally, segfault, nested)** 🔴
+- [x] P05.13 — Compile-time execution: `#run { ... }` blocks 🟢
+- [x] P05.14 — Compile-time constant evaluation 🟢
+- [x] P05.15 — Contract programming: `pre(expr)` and `post(expr)` on functions 🟢
+- [x] P05.16 — Debug-build runtime contract checking 🟢
+- [x] P05.17 — Release-build contract elimination (optimizer hints) 🟢
+- [x] P05.18 — Closures and lambdas: `|args| expr` 🟢
+- [x] P05.19 — Properties: `get`/`set` syntactic sugar 🟢
+- [x] P05.20 — Operator overloading 🟢
+- [x] P05.21 — Generics monomorphization 🟢
+- [x] P05.22 — Dynamic dispatch (`dyn Trait` — fat pointer + vtable) 🟢
+- [x] P05.23 — Semantic enforcement of access modifiers at module boundaries 🟢
 
 ## Phase 6 — Aether OS Integration 🟢 COMPLETE
 - [x] P06.01 — `sys func` keyword — direct syscall page calls (0x5000 table) 🟢
@@ -235,6 +243,13 @@
 - [x] P15.28 — NASM `-O0 -Wno-label-redef-late` flags for all nasm invocations 🟢
 - [x] P15.29 — `--version` option with git commit hash 🟢
 - [x] P15.30 — Aether comments (`#`) inside asm blocks are stripped from NASM output 🟢
+- [x] P15.31 — Tab indentation support (1 tab = 4 spaces, mixed tabs/spaces OK) 🟢
+- [x] P15.32 — Removed dead `test` keyword (was breaking user functions named `test`) 🟢
+- [x] P15.33 — Return-type enforcement: functions with return type must end with `return` 🟢
+- [x] P15.34 — `is_numeric_expr` follows initializer chain for untyped `let` bindings 🟢
+- [x] P15.35 — `is_numeric_expr` recognizes function calls returning numeric types 🟢
+- [x] P15.36 — `frame_collect` handles `NODE_TRY` bodies for proper stack slots 🟢
+- [x] P15.37 — Semantic analysis: `let` visits initializer before declaring name 🟢
 
 ## Phase 16 — OS Memory & Process Management 🔴 NOT STARTED
 - [ ] P16.01 — Virtual memory manager (paging, page faults)
@@ -296,7 +311,7 @@
 3. **Phase 2**: Host-native output ✅
 4. **Phase 3**: Memory management — defer, heap, regions, optionals ✅
 5. **Phase 4**: OOP and type system — classes, traits, generics ✅
-6. **Phase 5**: Advanced language features — exceptions, compile-time, contracts, closures, monomorphization, dynamic dispatch ✅
+6. **Phase 5**: Advanced language features — exceptions (proper unwinding, propagation, finally, catch-all, segfault handling), compile-time, contracts, closures, monomorphization, dynamic dispatch 🟡 HOLD (try/catch needs proper rewrite)
 7. **Phase 6**: Aether OS integration — sys func, module, attributes, stdlib ✅
 8. **Phase 7**: Self-hosting — compiler compiles itself
 9. **Phase 8**: Multi-target assembler — NASM → ARM64/RISC-V translation ✅
