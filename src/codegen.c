@@ -31,9 +31,10 @@ struct AutoDrop {
 /* Source location entry — tracked during codegen, emitted as a table at the end */
 typedef struct SrcLocEntry SrcLocEntry;
 struct SrcLocEntry {
-    int label_num;       /* Lsrc_<label_num> in .text */
+    int label_num;       /* _aether_src_<label_num> in .text */
     int line;
     int col;
+    const char *file;    /* source file name */
     SrcLocEntry *next;
 };
 
@@ -1287,6 +1288,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             e->label_num = cg->label_counter;
             e->line = node->loc.line;
             e->col = node->loc.col;
+            e->file = node->loc.file ? node->loc.file : "?";
             e->next = NULL;
             /* Append to linked list */
             if (!cg->src_loc_list) {
@@ -2603,12 +2605,22 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_write(cg, "global aether_source_map\n");
             cg_write(cg, "aether_source_map:\n");
         }
+        int file_id = 0;
         for (SrcLocEntry *e = cg->src_loc_list; e; e = e->next) {
             cg_write_fmt(cg, "  dq _aether_src_%d\n", e->label_num);
+            cg_write_fmt(cg, "  dq Lfile_%d\n", file_id);
             cg_write_fmt(cg, "  dd %d, %d\n", e->line, e->col);
+            file_id++;
         }
-        cg_write(cg, "  dq 0\n");  /* sentinel */
+        cg_write(cg, "  dq 0, 0\n");  /* sentinel */
         cg_write(cg, "  dd 0, 0\n");
+        cg_write(cg, "\n");
+        /* Emit file name strings */
+        file_id = 0;
+        for (SrcLocEntry *e = cg->src_loc_list; e; e = e->next) {
+            cg_write_fmt(cg, "Lfile_%d: db \"%s\", 0\n", file_id, e->file);
+            file_id++;
+        }
         cg_write(cg, "\n");
     }
 

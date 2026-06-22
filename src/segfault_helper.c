@@ -25,9 +25,10 @@
 /* Active jump buffer — set by try blocks, cleared after */
 static sigjmp_buf *volatile gActiveJmpBuf = NULL;
 
-/* Source map entry — 16 bytes: dq addr, dd line, dd col */
+/* Source map entry — 24 bytes: dq addr, dq file_string_ptr, dd line, dd col */
 typedef struct {
     uint64_t addr;
+    const char *file;
     uint32_t line;
     uint32_t col;
 } SourceMapEntry;
@@ -38,7 +39,7 @@ extern SourceMapEntry aether_source_map[];
 /* Walk the source map table to find the source location for a given RIP.
  * Finds the closest entry with addr <= rip (table is sorted by address).
  * Returns 1 if found, 0 if not. */
-static int lookupSourceLocation(uint64_t rip, uint32_t *outLine, uint32_t *outCol) {
+static int lookupSourceLocation(uint64_t rip, const char **outFile, uint32_t *outLine, uint32_t *outCol) {
     SourceMapEntry *best = NULL;
     for (int i = 0; aether_source_map[i].addr != 0; i++) {
         if (aether_source_map[i].addr <= rip) {
@@ -48,6 +49,7 @@ static int lookupSourceLocation(uint64_t rip, uint32_t *outLine, uint32_t *outCo
         }
     }
     if (best) {
+        *outFile = best->file;
         *outLine = best->line;
         *outCol = best->col;
         return 1;
@@ -92,22 +94,30 @@ static void segfaultHandler(int sig, siginfo_t *info, void *ucontext) {
         Dl_info dlinfo;
         int n;
         if (dladdr((void*)(uintptr_t)faultRip, &dlinfo) && dlinfo.dli_sname) {
-            ptrdiff_t offset = (uintptr_t)faultRip - (uintptr_t)dlinfo.dli_saddr;
-            n = snprintf(buf, sizeof(buf), "  Crash in: %s + %td  (RIP: 0x%016" PRIx64 ")\n",
-                dlinfo.dli_sname, offset, faultRip);
+            /* Skip internal source labels — the source map gives us better info */
+            if (strncmp(dlinfo.dli_sname, "aether_src_", 11) == 0 ||
+                strncmp(dlinfo.dli_sname, "_aether_src_", 12) == 0) {
+                /* Don't print this — source map will show the real location */
+            } else {
+                ptrdiff_t offset = (uintptr_t)faultRip - (uintptr_t)dlinfo.dli_saddr;
+                n = snprintf(buf, sizeof(buf), "  Crash in: %s + %td  (RIP: 0x%016" PRIx64 ")\n",
+                    dlinfo.dli_sname, offset, faultRip);
+                write(2, buf, (size_t)(n > 0 && n < (int)sizeof(buf) ? n : 0));
+            }
         } else {
             n = snprintf(buf, sizeof(buf), "  Crash at RIP: 0x%016" PRIx64 " (unknown function)\n",
                 faultRip);
+            write(2, buf, (size_t)(n > 0 && n < (int)sizeof(buf) ? n : 0));
         }
-        write(2, buf, (size_t)(n > 0 && n < (int)sizeof(buf) ? n : 0));
     }
 
     /* Look up source location from the source map table */
     {
+        const char *srcFile = NULL;
         uint32_t srcLine = 0, srcCol = 0;
-        if (lookupSourceLocation(faultRip, &srcLine, &srcCol)) {
+        if (lookupSourceLocation(faultRip, &srcFile, &srcLine, &srcCol)) {
             char buf[512];
-            int n = snprintf(buf, sizeof(buf), "  Source: line %u, col %u\n", srcLine, srcCol);
+            int n = snprintf(buf, sizeof(buf), "  Source: %s:%u:%u\n", srcFile, srcLine, srcCol);
             write(2, buf, (size_t)(n > 0 && n < (int)sizeof(buf) ? n : 0));
         }
     }
