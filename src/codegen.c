@@ -2269,11 +2269,14 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_write_fmt(cg, "global %s\n", entry);
             cg_write_fmt(cg, "%s:\n", entry);
             cg_inst1(cg, "mov", "rbp, rsp");
-            cg_comment(cg, "init segfault handler");
-            if (cg->target == TARGET_MACHO64) {
-                cg_inst(cg, "call _aether_initSegfault");
-            } else {
-                cg_inst(cg, "call aether_initSegfault");
+            /* Only init segfault handler for host targets (has segfault_helper.o) */
+            if (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST) {
+                cg_comment(cg, "init segfault handler");
+                if (cg->target == TARGET_MACHO64) {
+                    cg_inst(cg, "call _aether_initSegfault");
+                } else {
+                    cg_inst(cg, "call aether_initSegfault");
+                }
             }
             cg_comment(cg, "call main()");
             cg_inst(cg, "call main");
@@ -2964,8 +2967,10 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
     /* Step 3: Link */
     if (cg->target == TARGET_MACHO64) {
         snprintf(cmd, sizeof(cmd), "%s -o %s %s " SEGFAULT_HELPER, link_cmd_prefix, output_file, obj_file);
-    } else if (link_cmd_prefix && link_cmd_prefix[0] != '\0') {
+    } else if (cg->target == TARGET_ELF64_HOST) {
         snprintf(cmd, sizeof(cmd), "%s %s %s " SEGFAULT_HELPER, link_cmd_prefix, output_file, obj_file);
+    } else if (link_cmd_prefix && link_cmd_prefix[0] != '\0') {
+        snprintf(cmd, sizeof(cmd), "%s %s %s", link_cmd_prefix, output_file, obj_file);
     } else {
         /* No linker step needed (module targets) */
         /* Just copy object to output */
