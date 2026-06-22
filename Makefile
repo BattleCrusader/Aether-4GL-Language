@@ -76,8 +76,13 @@ $(BUILD_DIR)/aether.o: $(AETHER_MAIN_SRC)
 	@mkdir -p $(@D)
 	$(HOST_CC) $(HOST_CFLAGS) -DGIT_HASH='"$(GIT_HASH)"' -DGIT_BRANCH='"$(GIT_BRANCH)"' -c $< -o $@
 
-$(BUILD_DIR)/aether: $(CORE_OBJS) $(BUILD_DIR)/aether.o
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $^
+$(BUILD_DIR)/aether: $(CORE_OBJS) $(BUILD_DIR)/aether.o $(SEGFAULT_HELPER_OBJ)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(CORE_OBJS) $(BUILD_DIR)/aether.o
+
+# Segfault helper — compiled with host CC (needs libSystem for signal/backtrace)
+$(SEGFAULT_HELPER_OBJ): $(SEGFAULT_HELPER_SRC)
+	@mkdir -p $(@D)
+	$(HOST_CC) -arch x86_64 -c $< -o $@
 
 # Convenience targets
 tokenizer: $(BUILD_DIR)/test_tokenizer
