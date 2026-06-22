@@ -161,7 +161,6 @@ typedef struct {
     bool is_pub;            /* public */
     AccessLevel access;      /* pub / private / internal */
     bool is_static;         /* static */
-    bool is_test;           /* @Test */
     int sys_index;          /* syscall table index (-1 if not sys) */
     AstNodeList defer_list; /* deferred bodies for LIFO scope exit */
     AstNodeList type_params; /* generic type parameter identifiers */

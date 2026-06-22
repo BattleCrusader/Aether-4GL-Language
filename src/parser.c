@@ -108,7 +108,7 @@ static const TokenType STMT_START[] = {
     TOKEN_KW_DEFER, TOKEN_KW_MATCH, TOKEN_KW_ASM,
     TOKEN_KW_FUNC, TOKEN_KW_STRUCT, TOKEN_KW_ENUM,
     TOKEN_KW_CONST, TOKEN_KW_IMPORT, TOKEN_KW_MODULE,
-    TOKEN_KW_PUB, TOKEN_KW_STATIC, TOKEN_KW_TEST,
+    TOKEN_KW_PUB, TOKEN_KW_STATIC,
     TOKEN_KW_UNSAFE, TOKEN_KW_TRY, TOKEN_KW_THROW,
     TOKEN_AT,
     TOKEN_RBRACE, /* closing brace can follow statements */
@@ -166,7 +166,6 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
     bool is_private = parser_match(p, TOKEN_KW_PRIVATE);
     bool is_internal = parser_match(p, TOKEN_KW_INTERNAL);
     bool is_static = parser_match(p, TOKEN_KW_STATIC);
-    bool is_test = parser_match(p, TOKEN_KW_TEST);
     bool is_inline = parser_match(p, TOKEN_KW_INLINE);
     AccessLevel access = is_private ? ACCESS_PRIVATE : (is_internal ? ACCESS_INTERNAL : ACCESS_PUB);
 
@@ -176,7 +175,6 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             func->data.func.access = access;
             func->data.func.is_pub = is_pub;
             func->data.func.is_static = is_static;
-            func->data.func.is_test = is_test;
             func->data.func.is_inline = is_inline;
             /* Apply @export if the last attribute was export */
             if (last_attr) {
@@ -1309,8 +1307,7 @@ static AstNode *parse_type_postfix(Parser *p, AstNode *base) {
 
 AstNode *parse_attribute(Parser *p) {
     if (parser_check(p, TOKEN_IDENT) || parser_check(p, TOKEN_KW_EXPORT) ||
-        parser_check(p, TOKEN_KW_ENTRY) || parser_check(p, TOKEN_KW_LAYOUT) ||
-        parser_check(p, TOKEN_KW_TEST)) {
+        parser_check(p, TOKEN_KW_ENTRY) || parser_check(p, TOKEN_KW_LAYOUT)) {
         Token t = p->current; parser_advance(p);
         AstNode *attr = node_create(p->arena, NODE_ATTR, t.loc);
         attr->data.ident.name = t.text;

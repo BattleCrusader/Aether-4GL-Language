@@ -67,7 +67,6 @@ const KeywordEntry KEYWORDS[] = {
     {"export",   TOKEN_KW_EXPORT},
     {"entry",    TOKEN_KW_ENTRY},
     {"layout",   TOKEN_KW_LAYOUT},
-    {"test",     TOKEN_KW_TEST},
     {"run",      TOKEN_KW_RUN},
     {"prop",     TOKEN_KW_PROP},
     {"inline",   TOKEN_KW_INLINE},
@@ -152,7 +151,6 @@ const char *token_type_name(TokenType type) {
         case TOKEN_KW_EXPORT: return "export";
         case TOKEN_KW_ENTRY: return "entry";
         case TOKEN_KW_LAYOUT: return "layout";
-        case TOKEN_KW_TEST: return "test";
         case TOKEN_KW_RUN: return "run";
         case TOKEN_KW_PROP: return "prop";
         case TOKEN_KW_INLINE: return "inline";
@@ -301,13 +299,12 @@ void tokenizer_destroy(Tokenizer *t) {
 static int count_indent(const char *line_start, const char *line_end) {
     int spaces = 0;
     const char *p = line_start;
-    while (p < line_end && *p == ' ') {
-        spaces++;
+    while (p < line_end && (*p == ' ' || *p == '\t')) {
+        if (*p == '\t')
+            spaces = (spaces + 4) & ~3;  /* round up to next 4-space boundary */
+        else
+            spaces++;
         p++;
-    }
-    /* Tabs are not allowed */
-    if (p < line_end && *p == '\t') {
-        return -1;  /* signal tab error */
     }
     return spaces;
 }
@@ -336,12 +333,6 @@ static bool dequeue_token(Tokenizer *t, Token *out) {
 /* Handle indentation at the start of a new line */
 static void handle_indent(Tokenizer *t, const char *line_start, const char *line_content) {
     int spaces = count_indent(line_start, line_content);
-    
-    if (spaces < 0) {
-        /* Tab error */
-        queue_token(t, error_token(t, "Tabs are not allowed for indentation. Use spaces."));
-        return;
-    }
 
     /* Blank/empty line — no indent change */
     if (line_content >= t->end || *line_content == '\n') {

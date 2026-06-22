@@ -88,7 +88,6 @@ typedef enum {
     TOKEN_KW_EXPORT,    /* export */
     TOKEN_KW_ENTRY,     /* entry */
     TOKEN_KW_LAYOUT,    /* layout */
-    TOKEN_KW_TEST,      /* test */
     TOKEN_KW_RUN,       /* run (#run) */
     TOKEN_KW_PROP,      /* prop */
     TOKEN_KW_INLINE,    /* inline */
