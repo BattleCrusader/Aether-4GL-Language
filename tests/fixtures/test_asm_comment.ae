@@ -1,0 +1,12 @@
+# test_asm_comment.ae — Tests that Aether comments (#) inside asm blocks
+# are stripped from the generated NASM output (not passed through to NASM)
+func main(): u64 {
+    let result: u64 = 0
+    asm {
+        mov rax, 42
+        # This comment should be stripped
+        mov [rbp-8], rax
+        # Another comment that should not reach NASM
+    }
+    return result
+}

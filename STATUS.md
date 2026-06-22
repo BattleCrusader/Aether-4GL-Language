@@ -230,6 +230,11 @@
 - [x] P15.23 — Two-pass DCE: collect all funcs to symbol table, then collect refs from bodies 🟢
 - [x] P15.24 — Two-pass DCE removal: NODE_PROGRAM handled separately from NODE_BLOCK 🟢
 - [x] P15.25 — All 37/37 host-native tests passing 🟢
+- [x] P15.26 — `default rel` only for host targets (not freestanding/kernel/binary) 🟢
+- [x] P15.27 — String literals use `mov rax, label` (absolute) for freestanding targets 🟢
+- [x] P15.28 — NASM `-O0 -Wno-label-redef-late` flags for all nasm invocations 🟢
+- [x] P15.29 — `--version` option with git commit hash 🟢
+- [x] P15.30 — Aether comments (`#`) inside asm blocks are stripped from NASM output 🟢
 
 ## Phase 16 — OS Memory & Process Management 🔴 NOT STARTED
 - [ ] P16.01 — Virtual memory manager (paging, page faults)

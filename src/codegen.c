@@ -678,7 +678,16 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             /* Emit lea to string in .rodata */
             const char *label = cg_emit_string(cg, node->data.literal.string_val);
             char buf[128];
-            snprintf(buf, sizeof(buf), "lea rax, [rel %s]", label);
+            /* Use absolute addressing for freestanding targets to avoid
+             * NASM "label changed during code generation" errors from
+             * cross-section RIP-relative optimization.
+             * mov rax, label is a fixed-size 10-byte instruction (64-bit immediate),
+             * while lea rax, [rel label] varies between passes. */
+            if (cg->target == TARGET_HOST || cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST) {
+                snprintf(buf, sizeof(buf), "lea rax, [rel %s]", label);
+            } else {
+                snprintf(buf, sizeof(buf), "mov rax, %s", label);
+            }
             cg_inst(cg, buf);
             break;
         }
@@ -1583,7 +1592,14 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                             if ((p - s) >= 6 && strncmp(s, "extern", 6) == 0) {
                                 /* skip — already emitted at top */
                             } else {
-                                cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                                /* Strip Aether comments (#) from asm block output */
+                                const char *s_trim = line_start;
+                                while (s_trim < p && (*s_trim == ' ' || *s_trim == '\t')) s_trim++;
+                                if (s_trim < p && *s_trim == '#') {
+                                    /* Skip this line entirely — it's an Aether comment */
+                                } else {
+                                    cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                                }
                             }
                         } else {
                             cg_write(cg, "\n");
@@ -1934,7 +1950,13 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "bits 64\n");
     }
     if (!cg->has_layout) {
-        cg_write(cg, "default rel\n\n");
+        /* default rel causes NASM "label changed during code generation" errors
+         * on freestanding targets due to cross-section RIP-relative references.
+         * Only use it for host targets where it's safe. */
+        if (cg->target == TARGET_HOST || cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST) {
+            cg_write(cg, "default rel\n");
+        }
+        cg_write(cg, "\n");
     }
 
     /* Emit const declarations as NASM equ directives — only for non-layout targets */
@@ -1968,7 +1990,14 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                         const char *line_start = p;
                         while (p < end && *p != '\n') p++;
                         if (p > line_start) {
-                            cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                            /* Strip Aether comments (#) from asm block output */
+                            const char *s_trim = line_start;
+                            while (s_trim < p && (*s_trim == ' ' || *s_trim == '\t')) s_trim++;
+                            if (s_trim < p && *s_trim == '#') {
+                                /* Skip this line entirely — it's an Aether comment */
+                            } else {
+                                cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                            }
                         } else {
                             cg_write(cg, "\n");
                         }
@@ -2649,7 +2678,7 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
 
     /* If @layout or TARGET_BOOT, assemble as flat binary — direct output, no linker */
     if (cg->has_layout || cg->target == TARGET_BOOT) {
-        snprintf(cmd, sizeof(cmd), "nasm -f bin -o %s %s", output_file, asm_file);
+        snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f bin -o %s %s", output_file, asm_file);
         int ret = system(cmd);
         if (ret != 0) {
             fprintf(stderr, "nasm (flat binary) failed (exit %d)\n", ret);
@@ -2672,7 +2701,7 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         return 0;
     }
 
-    snprintf(cmd, sizeof(cmd), "nasm -f %s -o %s %s", nasm_format, obj_file, asm_file);
+    snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o %s %s", nasm_format, obj_file, asm_file);
     int ret = system(cmd);
     if (ret != 0) {
         fprintf(stderr, "nasm failed (exit %d)\n", ret);
