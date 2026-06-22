@@ -111,6 +111,8 @@ int count_ast_nodes(AstNode *node) {
             count += count_ast_nodes(node->data.try_node.body);
             for (int i = 0; i < node->data.try_node.catch_arms.count; i++)
                 count += count_ast_nodes(node->data.try_node.catch_arms.items[i]);
+            if (node->data.try_node.finally_body)
+                count += count_ast_nodes(node->data.try_node.finally_body);
             break;
         case NODE_THROW:
             count += count_ast_nodes(node->data.throw_node.value);
@@ -555,6 +557,8 @@ static void dce_collect(AstNode *node, SymbolTable *st) {
             dce_collect(node->data.try_node.body, st);
             for (int i = 0; i < node->data.try_node.catch_arms.count; i++)
                 dce_collect(node->data.try_node.catch_arms.items[i], st);
+            if (node->data.try_node.finally_body)
+                dce_collect(node->data.try_node.finally_body, st);
             break;
         case NODE_THROW:
             if (node->data.throw_node.value) dce_collect(node->data.throw_node.value, st);

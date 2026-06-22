@@ -1012,7 +1012,7 @@ AstNode *parse_statement(Parser *p) {
         return body;
     }
 
-    /* try { body } catch Type(var) { handler } ... */
+    /* try { body } catch Type(var) { handler } ... finally { body } */
     if (parser_match(p, TOKEN_KW_TRY)) {
         AstNode *body = NULL;
         if (parser_match(p, TOKEN_LBRACE)) {
@@ -1026,9 +1026,15 @@ AstNode *parse_statement(Parser *p) {
         while (parser_match(p, TOKEN_KW_CATCH)) {
             AstNode *catch_type = NULL;
             AstNode *catch_var = NULL;
+            bool is_catch_all = false;
 
+            /* catch _ { } — catch-all */
+            if (parser_check(p, TOKEN_IDENT) && p->current.text.len == 1 && p->current.text.data[0] == '_') {
+                parser_advance(p);
+                is_catch_all = true;
+            }
             /* catch Type or catch Type(var) */
-            if (parser_check(p, TOKEN_IDENT)) {
+            else if (parser_check(p, TOKEN_IDENT)) {
                 Token type_tok = p->current; parser_advance(p);
                 catch_type = node_type_named(p->arena, type_tok.loc, type_tok.text);
 
@@ -1050,8 +1056,17 @@ AstNode *parse_statement(Parser *p) {
             }
 
             AstNode *arm = node_catch_arm(p->arena, p->previous.loc,
-                catch_type, catch_var, catch_body);
+                catch_type, catch_var, catch_body, is_catch_all);
             node_list_append(&try_node->data.try_node.catch_arms, arm);
+        }
+
+        /* Optional finally block */
+        if (parser_match(p, TOKEN_KW_FINALLY)) {
+            if (parser_match(p, TOKEN_LBRACE)) {
+                try_node->data.try_node.finally_body = parse_block_braced(p);
+            } else {
+                try_node->data.try_node.finally_body = parse_block_braced(p);
+            }
         }
 
         return try_node;

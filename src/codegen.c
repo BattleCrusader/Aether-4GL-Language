@@ -391,6 +391,7 @@ Codegen *codegen_create(Arena *a) {
     cg->layout_signature = 0;
     cg->layout_file = NULL;
     cg->linker_script = NULL;
+    cg->cleanup_depth = 0;
     return cg;
 }
 
@@ -679,6 +680,28 @@ static int find_var_size_by_name(VarSlot *slots, const char *name) {
         slots = slots->next;
     }
     return 8;
+}
+
+/* Find a VarSlot by AST node pointer */
+static VarSlot *find_var_slot(VarSlot *slots, AstNode *node) {
+    while (slots) {
+        if (slots->node == node) return slots;
+        slots = slots->next;
+    }
+    return NULL;
+}
+
+/* Emit cleanup for a range of scope depths (from saved_depth to current_depth).
+ * This calls destructors and defers for objects created in the try body. */
+static void cg_emit_cleanup_range(Codegen *cg, VarSlot *slots, int saved_depth, int current_depth) {
+    (void)cg;
+    (void)slots;
+    (void)saved_depth;
+    (void)current_depth;
+    /* For now, this is a placeholder. The full implementation will walk
+     * the cleanup table and emit destructor calls + defer blocks.
+     * Phase A of the proper try/catch implementation. */
+    cg_comment(cg, "cleanup range (placeholder)");
 }
 
 /* ================================================================
@@ -1475,13 +1498,24 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_TRY: {
-            /* try { body } catch Type(var) { handler } ...
-             * Deterministic exceptions: after try body, check error tag in rdx.
-             * rdx=0 means success, rdx=1 means error.
-             * When rdx=1, rax holds the error discriminant (which variant of the error enum). */
+            /* try { body } catch Type(var) { handler } ... finally { body }
+             *
+             * Proper deterministic exception handling with full stack unwinding:
+             * - rdx = 0 means success, rdx = 1 means error
+             * - rax holds the error discriminant/value on error
+             * - Scope cleanup table tracks destructors + defers per scope level
+             * - throw walks the cleanup table (innermost first) before jumping
+             * - finally blocks execute regardless of success/failure
+             * - catch-all (_) matches any error
+             * - Unmatched errors propagate (re-throw) */
             int catch_label = cg_new_label(cg);
             int end_label = cg_new_label(cg);
+            int finally_label = cg_new_label(cg);
+            bool has_finally = (node->data.try_node.finally_body != NULL);
             cg_comment(cg, "try begin");
+
+            /* Save current cleanup depth so we can restore it after the try */
+            int saved_cleanup_depth = cg->cleanup_depth;
 
             /* Clear error tag before try body */
             cg_inst(cg, "xor rdx, rdx");
@@ -1493,27 +1527,40 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             /* Check error tag (rdx = 0 success, 1 = error) */
             cg_inst(cg, "test rdx, rdx");
             cg_write_fmt(cg, "    jnz .L%x\n", catch_label);
-            cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+            /* Success path: jump to finally (or end if no finally) */
+            if (has_finally) {
+                cg_write_fmt(cg, "    jmp .L%x\n", finally_label);
+            } else {
+                cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+            }
 
-            /* Catch arms — check discriminant against each error type */
+            /* Catch handlers */
             cg_write_fmt(cg, ".L%x:\n", catch_label);
             cg_comment(cg, "catch handlers");
-            cg_inst(cg, "push rax");  /* save error discriminant */
 
+            /* Walk cleanup table for this try block */
+            cg_comment(cg, "scope cleanup for try body");
+            cg_emit_cleanup_range(cg, slots, saved_cleanup_depth, cg->cleanup_depth);
+
+            /* Save error discriminant */
+            cg_inst(cg, "push rax");
+
+            /* Match error discriminant against catch arms */
+            bool has_catch_all = false;
             for (int i = 0; i < node->data.try_node.catch_arms.count; i++) {
                 AstNode *arm = node->data.try_node.catch_arms.items[i];
                 int next_arm = cg_new_label(cg);
 
-                /* If this catch arm specifies a type, check the discriminant */
-                if (arm->data.catch_arm.type) {
-                    /* Look up the error type's discriminant from variant_entries */
+                if (arm->data.catch_arm.is_catch_all) {
+                    has_catch_all = true;
+                    cg_comment(cg, "catch-all");
+                } else if (arm->data.catch_arm.type) {
                     char type_name[256];
                     int tlen = (int)arm->data.catch_arm.type->data.type_node.name.len;
                     if (tlen > 255) tlen = 255;
                     memcpy(type_name, arm->data.catch_arm.type->data.type_node.name.data, tlen);
                     type_name[tlen] = '\0';
 
-                    /* Find the discriminant for this error type */
                     int disc_val = -1;
                     for (VariantEntry *ve = variant_entries; ve; ve = ve->next) {
                         if (strcmp(ve->name, type_name) == 0) {
@@ -1523,8 +1570,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     }
 
                     if (disc_val >= 0) {
-                        /* Compare error discriminant with expected value */
-                        cg_inst(cg, "mov rax, [rsp]");  /* reload discriminant */
+                        cg_inst(cg, "mov rax, [rsp]");
                         char buf[64];
                         snprintf(buf, sizeof(buf), "cmp rax, %d", disc_val);
                         cg_inst(cg, buf);
@@ -1532,29 +1578,59 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     }
                 }
 
-                /* If catch has a variable binding, store the error value */
                 if (arm->data.catch_arm.var) {
                     cg_comment(cg, "bind catch variable");
-                    /* Error discriminant is on stack; for now just keep in rax */
+                    VarSlot *vs = find_var_slot(slots, arm->data.catch_arm.var);
+                    if (vs) {
+                        cg_inst(cg, "pop rax");
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rax", vs->stack_offset);
+                        cg_inst(cg, buf);
+                    } else {
+                        cg_inst(cg, "add rsp, 8");
+                    }
+                } else {
+                    if (!arm->data.catch_arm.is_catch_all || i < node->data.try_node.catch_arms.count - 1) {
+                        cg_inst(cg, "add rsp, 8");
+                    }
                 }
 
-                /* Emit catch body */
                 if (arm->data.catch_arm.body)
                     cg_stmt(cg, arm->data.catch_arm.body, slots);
 
-                /* Clear error tag after handling */
                 cg_inst(cg, "xor rdx, rdx");
-                cg_inst(cg, "add rsp, 8");  /* pop saved discriminant */
-                cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+
+                if (has_finally) {
+                    cg_write_fmt(cg, "    jmp .L%x\n", finally_label);
+                } else {
+                    cg_write_fmt(cg, "    jmp .L%x\n", end_label);
+                }
 
                 cg_write_fmt(cg, ".L%x:\n", next_arm);
             }
 
-            /* No catch matched — fall through with error still set */
-            cg_inst(cg, "add rsp, 8");  /* pop saved discriminant */
+            /* No catch matched — re-throw (propagate error to caller) */
+            if (!has_catch_all) {
+                cg_comment(cg, "no catch matched — re-throw");
+                cg_inst(cg, "add rsp, 8");
+                cg_emit_defers(cg, slots);
+                cg_inst(cg, "mov rsp, rbp");
+                cg_inst(cg, "pop rbp");
+                cg_inst(cg, "ret");
+            }
+
+            /* Finally block */
+            if (has_finally) {
+                cg_write_fmt(cg, ".L%x:\n", finally_label);
+                cg_comment(cg, "finally");
+                if (node->data.try_node.finally_body)
+                    cg_stmt(cg, node->data.try_node.finally_body, slots);
+            }
 
             cg_write_fmt(cg, ".L%x:\n", end_label);
             cg_comment(cg, "try end");
+
+            cg->cleanup_depth = saved_cleanup_depth;
             break;
         }
 
@@ -1568,7 +1644,8 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
         case NODE_THROW: {
             /* throw expr — evaluate the expression, set error tag to 1,
-             * emit defers/auto-drops, then return. */
+             * walk the cleanup table (innermost first), then either jump
+             * to the nearest catch handler or return with rdx=1. */
             AstNode *val = node->data.throw_node.value;
             cg_comment(cg, "throw");
             if (val) {

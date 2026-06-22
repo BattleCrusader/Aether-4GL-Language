@@ -378,10 +378,11 @@ typedef struct {
     AstNode *body;          /* region body (BLOCK) */
 } RegionNode;
 
-/* Try block: try { body } catch Type(var) { handler } ... */
+/* Try block: try { body } catch Type(var) { handler } ... finally { body } */
 typedef struct {
     AstNode *body;          /* the try body (BLOCK) */
     AstNodeList catch_arms; /* list of CATCH_ARM nodes */
+    AstNode *finally_body;  /* finally block (BLOCK), NULL if no finally */
 } TryNode;
 
 /* Throw statement: throw expr */
@@ -389,11 +390,12 @@ typedef struct {
     AstNode *value;         /* the thrown value */
 } ThrowNode;
 
-/* Catch arm: catch Type(var) { handler } */
+/* Catch arm: catch Type(var) { handler } or catch _ { handler } */
 typedef struct {
-    AstNode *type;          /* the caught error type (TYPE_NAMED) */
+    AstNode *type;          /* the caught error type (TYPE_NAMED), NULL for catch-all */
     AstNode *var;           /* the variable to bind (IDENT), NULL if no binding */
     AstNode *body;          /* handler block */
+    bool is_catch_all;      /* true if this is catch _ { } */
 } CatchArm;
 
 /* Attribute: @name or @name(payload) or @name(key=val, ...) */
@@ -524,7 +526,7 @@ AstNode *node_region(Arena *a, Location loc, StringView name, AstNode *body);
 AstNode *node_expr_stmt(Arena *a, Location loc, AstNode *expr);
 AstNode *node_try(Arena *a, Location loc, AstNode *body);
 AstNode *node_throw(Arena *a, Location loc, AstNode *value);
-AstNode *node_catch_arm(Arena *a, Location loc, AstNode *type, AstNode *var, AstNode *body);
+AstNode *node_catch_arm(Arena *a, Location loc, AstNode *type, AstNode *var, AstNode *body, bool is_catch_all);
 
 /* List helpers */
 void node_list_append(AstNodeList *list, AstNode *node);

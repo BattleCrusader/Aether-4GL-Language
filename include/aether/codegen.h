@@ -51,6 +51,7 @@ typedef struct {
     const char *layout_file; /* output filename, NULL = use normal pipeline */
     /* User-supplied linker script path, NULL = auto-generate */
     const char *linker_script;
+    int cleanup_depth;       /* current scope cleanup depth for try/catch unwinding */
 } Codegen;
 
 Codegen *codegen_create(Arena *a);

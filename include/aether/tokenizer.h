@@ -90,6 +90,7 @@ typedef enum {
     TOKEN_KW_PROP,      /* prop */
     TOKEN_KW_INLINE,    /* inline */
     TOKEN_KW_AT,        /* at */
+    TOKEN_KW_FINALLY,   /* finally */
 
     /* Operators */
     TOKEN_PLUS,         /* + */

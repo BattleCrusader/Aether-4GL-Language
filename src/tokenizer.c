@@ -33,6 +33,7 @@ const KeywordEntry KEYWORDS[] = {
     {"try",      TOKEN_KW_TRY},
     {"throw",    TOKEN_KW_THROW},
     {"catch",    TOKEN_KW_CATCH},
+    {"finally",  TOKEN_KW_FINALLY},
     {"and",      TOKEN_KW_AND},
     {"or",       TOKEN_KW_OR},
     {"not",      TOKEN_KW_NOT},
@@ -115,6 +116,7 @@ const char *token_type_name(TokenType type) {
         case TOKEN_KW_TRY: return "try";
         case TOKEN_KW_THROW: return "throw";
         case TOKEN_KW_CATCH: return "catch";
+        case TOKEN_KW_FINALLY: return "finally";
         case TOKEN_KW_AND: return "and";
         case TOKEN_KW_OR: return "or";
         case TOKEN_KW_NOT: return "not";

@@ -288,6 +288,7 @@ AstNode *node_try(Arena *a, Location loc, AstNode *body) {
     if (node) {
         node->data.try_node.body = body;
         node->data.try_node.catch_arms = (AstNodeList){0};
+        node->data.try_node.finally_body = NULL;
     }
     return node;
 }
@@ -298,12 +299,13 @@ AstNode *node_throw(Arena *a, Location loc, AstNode *value) {
     return node;
 }
 
-AstNode *node_catch_arm(Arena *a, Location loc, AstNode *type, AstNode *var, AstNode *body) {
+AstNode *node_catch_arm(Arena *a, Location loc, AstNode *type, AstNode *var, AstNode *body, bool is_catch_all) {
     AstNode *node = node_create(a, NODE_CATCH_ARM, loc);
     if (node) {
         node->data.catch_arm.type = type;
         node->data.catch_arm.var = var;
         node->data.catch_arm.body = body;
+        node->data.catch_arm.is_catch_all = is_catch_all;
     }
     return node;
 }

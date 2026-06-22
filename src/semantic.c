@@ -463,6 +463,10 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                     semantic_visit_node(sa, arm->data.catch_arm.body);
                 }
             }
+            /* Visit finally block */
+            if (node->data.try_node.finally_body) {
+                semantic_visit_node(sa, node->data.try_node.finally_body);
+            }
             break;
 
         case NODE_THROW:
