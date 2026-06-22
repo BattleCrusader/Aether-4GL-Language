@@ -29,11 +29,16 @@ static void usage(const char *prog) {
     fprintf(stderr, "Aether Compiler v0.5 (commit %s, branch %s)\n",
         GIT_HASH, GIT_BRANCH);
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "  %s [options] <file.ae>\n", prog);
-    fprintf(stderr, "  %s init|new <project-name>\n", prog);
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -o, --output <file>      Output file (default: a.out)\n");
-    fprintf(stderr, "  --target <target>        Output target:\n");
+    fprintf(stderr, "  %s [options] <file.ae>              Compile a source file\n", prog);
+    fprintf(stderr, "  %s run <file.ae> [args]             Compile and run immediately\n", prog);
+    fprintf(stderr, "  %s init|new <project-name>          Scaffold a new project\n", prog);
+    fprintf(stderr, "  %s fmt <file.ae>                    Format source code\n", prog);
+    fprintf(stderr, "  %s asm [options] <file.ae>          Show generated assembly\n", prog);
+    fprintf(stderr, "  %s inspect <file>                   Inspect compiled binary\n", prog);
+    fprintf(stderr, "  %s doc <file.ae>                    Generate documentation\n", prog);
+    fprintf(stderr, "\nOptions:\n");
+    fprintf(stderr, "  -o, --output <file>      Output file (default: /tmp/<name>)\n");
+    fprintf(stderr, "  --target <target>        Output target (default: host):\n");
     fprintf(stderr, "    host                   Auto-detect host format (default)\n");
     fprintf(stderr, "    x86_64-freestanding    Aether OS ELF64\n");
     fprintf(stderr, "    macho64                Mach-O 64 (macOS)\n");
@@ -46,11 +51,16 @@ static void usage(const char *prog) {
     fprintf(stderr, "    asm-arm64              Emit ARM64 assembly listing\n");
     fprintf(stderr, "    asm-riscv64            Emit RISC-V assembly listing\n");
     fprintf(stderr, "    universal              Universal binary (x86_64 + ARM64)\n");
-    fprintf(stderr, "    universal-all          Universal binary (all architectures)\n");
+    fprintf(stderr, "    universal-all           Universal binary (all architectures)\n");
     fprintf(stderr, "  -L, --linker-script <f>  Custom linker script\n");
     fprintf(stderr, "  -S                       Stop after assembly (emit .asm)\n");
+    fprintf(stderr, "  -O0                      No optimization (fastest compile)\n");
+    fprintf(stderr, "  -O1                      Basic optimization (default)\n");
+    fprintf(stderr, "  -O2                      Full optimization\n");
+    fprintf(stderr, "  -Oz                      Optimize for size\n");
     fprintf(stderr, "  --dump-ast               Print AST and exit\n");
     fprintf(stderr, "  --dump-tokens            Print tokens and exit\n");
+    fprintf(stderr, "  --dump-opt               Print optimized AST\n");
     fprintf(stderr, "  --version                Print version and exit\n");
     fprintf(stderr, "  -v, --verbose            Verbose output\n");
 }
@@ -719,10 +729,14 @@ int main(int argc, char **argv) {
     Target target = TARGET_HOST; /* default: auto-detect */
     const char *linker_script = NULL;
 
-    /* Check for subcommands: init, new, run, fmt, asm, inspect, version */
+    /* Check for subcommands: init, new, run, fmt, asm, inspect, version, help */
     if (argc > 1) {
         if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0) {
             printf("Aether Compiler v0.5 (commit %s, branch %s)\n", GIT_HASH, GIT_BRANCH);
+            return 0;
+        }
+        if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+            usage(argv[0]);
             return 0;
         }
         if (strcmp(argv[1], "init") == 0 || strcmp(argv[1], "new") == 0) {
@@ -802,8 +816,13 @@ int main(int argc, char **argv) {
             opt_level = 1;
         } else if (strcmp(argv[i], "-O2") == 0) {
             opt_level = 2;
+        } else if (strcmp(argv[i], "-Oz") == 0) {
+            opt_level = 3;
         } else if (strcmp(argv[i], "--dump-opt") == 0) {
             dump_opt = 1;
+        } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            usage(argv[0]);
+            return 0;
         } else if (argv[i][0] != '-') {
             input_file = argv[i];
         } else {
