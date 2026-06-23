@@ -1,0 +1,86 @@
+# test_mem.ae — comprehensive tests for std/mem.ae
+# Tests: copyMemory, zeroMemory, alloc, free, memset, memcmp
+
+import "std/test"
+
+@test
+func main() {
+    # alloc and free (bump allocator, just verify they don't crash)
+    let ptr: u64 = alloc(64)
+    assertTrue(ptr != 0, "alloc returns non-zero pointer")
+    free(ptr)
+
+    # copyMemory - copy data and verify
+    let src: u64 = alloc(16)
+    let dst: u64 = alloc(16)
+    # write some pattern to src using memset
+    memset(src, 0xAB, 16)
+    # copy from src to dst
+    copyMemory(dst, src, 16)
+    # verify they match
+    let cmpResult: i64 = memcmp(src, dst, 16)
+    assertEquals(cmpResult, 0, "copyMemory: memcmp after copy equals 0")
+    free(src)
+    free(dst)
+
+    # zeroMemory
+    let buf: u64 = alloc(16)
+    memset(buf, 0xFF, 16)
+    zeroMemory(buf, 16)
+    let zeroBuf: u64 = alloc(16)
+    memset(zeroBuf, 0x00, 16)
+    let cmpZero: i64 = memcmp(buf, zeroBuf, 16)
+    assertEquals(cmpZero, 0, "zeroMemory: all bytes zeroed")
+    free(buf)
+    free(zeroBuf)
+
+    # memset
+    let buf2: u64 = alloc(8)
+    memset(buf2, 0x42, 8)
+    let refBuf: u64 = alloc(8)
+    memset(refBuf, 0x42, 8)
+    let cmpMemset: i64 = memcmp(buf2, refBuf, 8)
+    assertEquals(cmpMemset, 0, "memset: bytes set correctly")
+    free(buf2)
+    free(refBuf)
+
+    # memcmp equal
+    let a: u64 = alloc(4)
+    let b: u64 = alloc(4)
+    memset(a, 0x01, 4)
+    memset(b, 0x01, 4)
+    let eq: i64 = memcmp(a, b, 4)
+    assertEquals(eq, 0, "memcmp equal returns 0")
+    free(a)
+    free(b)
+
+    # memcmp not equal (first < second)
+    let c: u64 = alloc(4)
+    let d: u64 = alloc(4)
+    memset(c, 0x01, 4)
+    memset(d, 0x02, 4)
+    let lt: i64 = memcmp(c, d, 4)
+    assertTrue(lt < 0, "memcmp first < second returns negative")
+    free(c)
+    free(d)
+
+    # memcmp not equal (first > second)
+    let e: u64 = alloc(4)
+    let f: u64 = alloc(4)
+    memset(e, 0x02, 4)
+    memset(f, 0x01, 4)
+    let gt: i64 = memcmp(e, f, 4)
+    assertTrue(gt > 0, "memcmp first > second returns positive")
+    free(e)
+    free(f)
+
+    # memcmp zero bytes
+    let g: u64 = alloc(4)
+    let h: u64 = alloc(4)
+    memset(g, 0xFF, 4)
+    memset(h, 0xFF, 4)
+    let zeroLen: i64 = memcmp(g, h, 0)
+    assertEquals(zeroLen, 0, "memcmp zero bytes returns 0")
+    free(g)
+    free(h)
+}

@@ -13,6 +13,29 @@ struct List {
     capacity: u64
 }
 
+struct HashMap {
+    keys: [string]
+    values: [u64]
+    occupied: [bool]
+    count: u64
+    capacity: u64
+}
+
+struct Set {
+    keys: [string]
+    occupied: [bool]
+    count: u64
+    capacity: u64
+}
+
+struct Queue {
+    data: [u64]
+    front: u64
+    back: u64
+    count: u64
+    capacity: u64
+}
+
 func newArray(): Array {
     let result: Array
     result.data = 0
@@ -27,4 +50,190 @@ func newList(): List {
     result.length = 0
     result.capacity = 0
     return result
+}
+
+func hashString(key: string): u64 {
+    let mut hash: u64 = 5381
+    let mut i: u64 = 0
+    while true {
+        let c: byte = key[i]
+        if c == 0 { return hash }
+        hash = (hash << 5) + hash + c
+        i = i + 1
+    }
+    return hash
+}
+
+func newHashMap(capacity: u64): HashMap {
+    let mut result: HashMap
+    result.keys = []
+    result.values = []
+    result.occupied = []
+    result.count = 0
+    result.capacity = capacity
+    let mut i: u64 = 0
+    while i < capacity {
+        result.keys = result.keys + [""]
+        result.values = result.values + [0]
+        result.occupied = result.occupied + [false]
+        i = i + 1
+    }
+    return result
+}
+
+func hashMapPut(self: ref HashMap, key: string, value: u64) {
+    if self.count >= self.capacity { return }
+    let hash: u64 = hashString(key)
+    let mut index: u64 = hash % self.capacity
+    while self.occupied[index] {
+        if self.keys[index] == key {
+            self.values[index] = value
+            return
+        }
+        index = (index + 1) % self.capacity
+    }
+    self.keys[index] = key
+    self.values[index] = value
+    self.occupied[index] = true
+    self.count = self.count + 1
+}
+
+func hashMapGet(self: ref HashMap, key: string): u64 {
+    let hash: u64 = hashString(key)
+    let mut index: u64 = hash % self.capacity
+    let mut startIndex: u64 = index
+    while self.occupied[index] {
+        if self.keys[index] == key { return self.values[index] }
+        index = (index + 1) % self.capacity
+        if index == startIndex { return 0 }
+    }
+    return 0
+}
+
+func hashMapContainsKey(self: ref HashMap, key: string): bool {
+    let hash: u64 = hashString(key)
+    let mut index: u64 = hash % self.capacity
+    let mut startIndex: u64 = index
+    while self.occupied[index] {
+        if self.keys[index] == key { return true }
+        index = (index + 1) % self.capacity
+        if index == startIndex { return false }
+    }
+    return false
+}
+
+func hashMapRemove(self: ref HashMap, key: string) {
+    let hash: u64 = hashString(key)
+    let mut index: u64 = hash % self.capacity
+    let mut startIndex: u64 = index
+    while self.occupied[index] {
+        if self.keys[index] == key {
+            self.occupied[index] = false
+            self.count = self.count - 1
+            return
+        }
+        index = (index + 1) % self.capacity
+        if index == startIndex { return }
+    }
+}
+
+func hashMapLen(self: ref HashMap): u64 {
+    return self.count
+}
+
+func newSet(capacity: u64): Set {
+    let mut result: Set
+    result.keys = []
+    result.occupied = []
+    result.count = 0
+    result.capacity = capacity
+    let mut i: u64 = 0
+    while i < capacity {
+        result.keys = result.keys + [""]
+        result.occupied = result.occupied + [false]
+        i = i + 1
+    }
+    return result
+}
+
+func setPut(self: ref Set, key: string) {
+    if self.count >= self.capacity { return }
+    let hash: u64 = hashString(key)
+    let mut index: u64 = hash % self.capacity
+    while self.occupied[index] {
+        if self.keys[index] == key { return }
+        index = (index + 1) % self.capacity
+    }
+    self.keys[index] = key
+    self.occupied[index] = true
+    self.count = self.count + 1
+}
+
+func setContains(self: ref Set, key: string): bool {
+    let hash: u64 = hashString(key)
+    let mut index: u64 = hash % self.capacity
+    let mut startIndex: u64 = index
+    while self.occupied[index] {
+        if self.keys[index] == key { return true }
+        index = (index + 1) % self.capacity
+        if index == startIndex { return false }
+    }
+    return false
+}
+
+func setRemove(self: ref Set, key: string) {
+    let hash: u64 = hashString(key)
+    let mut index: u64 = hash % self.capacity
+    let mut startIndex: u64 = index
+    while self.occupied[index] {
+        if self.keys[index] == key {
+            self.occupied[index] = false
+            self.count = self.count - 1
+            return
+        }
+        index = (index + 1) % self.capacity
+        if index == startIndex { return }
+    }
+}
+
+func setLen(self: ref Set): u64 {
+    return self.count
+}
+
+func newQueue(capacity: u64): Queue {
+    let mut result: Queue
+    result.data = []
+    result.front = 0
+    result.back = 0
+    result.count = 0
+    result.capacity = capacity
+    let mut i: u64 = 0
+    while i < capacity {
+        result.data = result.data + [0]
+        i = i + 1
+    }
+    return result
+}
+
+func queueEnqueue(self: ref Queue, value: u64) {
+    if self.count >= self.capacity { return }
+    self.data[self.back] = value
+    self.back = (self.back + 1) % self.capacity
+    self.count = self.count + 1
+}
+
+func queueDequeue(self: ref Queue): u64 {
+    if self.count == 0 { return 0 }
+    let value: u64 = self.data[self.front]
+    self.front = (self.front + 1) % self.capacity
+    self.count = self.count - 1
+    return value
+}
+
+func queueIsEmpty(self: ref Queue): bool {
+    return self.count == 0
+}
+
+func queueLen(self: ref Queue): u64 {
+    return self.count
 }
