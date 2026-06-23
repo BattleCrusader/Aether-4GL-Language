@@ -2,7 +2,7 @@
 # Uses asm for pointer operations (Aether cannot express byte-level pointer access natively).
 # Uses Aether's heap keyword for allocation.
 
-func memCopy(destination: u64, source: u64, byteCount: u64) {
+func copyMemory(destination: u64, source: u64, byteCount: u64) {
     asm {
         mov rdi, rdi
         mov rsi, rsi
@@ -11,7 +11,7 @@ func memCopy(destination: u64, source: u64, byteCount: u64) {
     }
 }
 
-func memZero(pointer: u64, byteCount: u64) {
+func zeroMemory(pointer: u64, byteCount: u64) {
     asm {
         mov rdi, rdi
         mov rcx, rsi

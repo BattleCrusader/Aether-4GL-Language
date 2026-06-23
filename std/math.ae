@@ -1,7 +1,7 @@
-# std/math.ae — Basic math: absValue, min, max, clamp
+# std/math.ae — Basic math: absoluteValue, min, max, clamp
 # Pure Aether — no asm blocks needed for simple arithmetic.
 
-func absValue(value: int): int {
+func absoluteValue(value: int): int {
     if value < 0 { return -value }
     return value
 }

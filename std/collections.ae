@@ -13,7 +13,7 @@ struct List {
     capacity: u64
 }
 
-func arrayNew(): Array {
+func newArray(): Array {
     let result: Array
     result.data = 0
     result.length = 0
@@ -21,7 +21,7 @@ func arrayNew(): Array {
     return result
 }
 
-func listNew(): List {
+func newList(): List {
     let result: List
     result.data = 0
     result.length = 0

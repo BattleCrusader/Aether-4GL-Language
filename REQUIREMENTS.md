@@ -508,11 +508,11 @@ func host_init() {
 | Function | Description |
 |----------|-------------|
 | `syscall(n, ...)` | Call Aether OS syscall at 0x5000 |
-| `outb(port, value)` | Write byte to I/O port |
-| `inb(port) -> u8` | Read byte from I/O port |
-| `cli()` | Disable interrupts |
-| `sti()` | Enable interrupts |
-| `hlt()` | Halt CPU |
+| `writePortByte(port, value)` | Write byte to I/O port |
+| `readPortByte(port) -> u8` | Read byte from I/O port |
+| `disableInterrupts()` | Disable interrupts |
+| `enableInterrupts()` | Enable interrupts |
+| `haltCpu()` | Halt CPU |
 
 ---
 

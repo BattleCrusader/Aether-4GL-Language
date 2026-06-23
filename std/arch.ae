@@ -1,11 +1,11 @@
 # std/arch.ae — Architecture detection and multi-target helpers
-# archDetect uses asm for CPUID (can't be done in pure Aether).
+# detectArchitecture uses asm for CPUID (can't be done in pure Aether).
 
-const archX8664 = 0
-const archArm64 = 1
-const archRiscv64 = 2
+const architectureX8664 = 0
+const architectureArm64 = 1
+const architectureRiscv64 = 2
 
-func archDetect(): u64 {
+func detectArchitecture(): u64 {
     asm {
         pushfq
         pushfq

@@ -46,7 +46,7 @@ struct Elf64Symbol {
     size: u64
 }
 
-func elfVerifyMagic(header: ref Elf64Header): bool {
+func verifyElfMagic(header: ref Elf64Header): bool {
     # little-endian ELF64 magic
     return header.magic == 0x00010102464C457F
 }

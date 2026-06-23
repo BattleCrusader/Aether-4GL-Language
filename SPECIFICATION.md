@@ -1346,7 +1346,7 @@ func render_dynamic(items: [ref dyn Drawable]) {
 Full NASM syntax is a first-class citizen. The asm block text is emitted verbatim into the generated assembly. Aether function parameters are **not** automatically substituted — use SysV ABI registers directly (rdi=arg1, rsi=arg2, rdx=arg3, rcx=arg4, r8=arg5, r9=arg6).
 
 ```aether
-func outb(port: u16, value: byte) {
+func writePortByte(port: u16, value: byte) {
     asm {
         mov dx, rdi
         mov al, sil
@@ -1383,7 +1383,7 @@ LSR_THR_EMPTY equ 0x20
 Use `asm: (outputs) { body }` to bind assembly results to Aether variables.
 
 ```aether
-func rdtsc(): u64 {
+func readTimestampCounter(): u64 {
     let hi: u32
     let lo: u32
     asm: (hi, lo) {
@@ -2050,7 +2050,7 @@ interrupt timer at(0x20) {
 }
 
 interrupt keyboard at(0x21) {
-    let scancode = inb(0x60)
+    let scancode = readPortByte(0x60)
     handle_key(scancode)
 }
 ```
@@ -2132,7 +2132,7 @@ interrupt timer at(0x20) {
 }
 
 interrupt keyboard at(0x21) {
-    let scancode = inb(0x60)
+    let scancode = readPortByte(0x60)
     handle_key(scancode)
 }
 ```

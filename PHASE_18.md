@@ -14,15 +14,15 @@ All 11 standard library files were rewritten from asm-heavy stubs to pure Aether
 
 ## P18.01 — `std/math.ae` — Basic math
 
-- [x] `absValue(value: int): int` — pure Aether `if/else`
+- [x] `absoluteValue(value: int): int` — pure Aether `if/else`
 - [x] `min(firstValue, secondValue: int): int` — pure Aether `if/else`
 - [x] `max(firstValue, secondValue: int): int` — pure Aether `if/else`
 - [x] `clamp(value, lowerBound, upperBound: int): int` — pure Aether `if/else`
 
 ## P18.02 — `std/mem.ae` — Memory operations
 
-- [x] `memCopy(destination, source, byteCount: u64)` — asm `rep movsb` (byte-level pointer ops)
-- [x] `memZero(pointer, byteCount: u64)` — asm `rep stosb` (byte-level pointer ops)
+- [x] `copyMemory(destination, source, byteCount: u64)` — asm `rep movsb` (byte-level pointer ops)
+- [x] `zeroMemory(pointer, byteCount: u64)` — asm `rep stosb` (byte-level pointer ops)
 - [x] `alloc(byteCount: u64): u64` — Aether `heap` keyword
 - [x] `free(pointer: u64)` — no-op (bump allocator)
 
@@ -40,42 +40,42 @@ All 11 standard library files were rewritten from asm-heavy stubs to pure Aether
 
 ## P18.05 — `std/arch.ae` — Architecture detection
 
-- [x] `archDetect(): u64` — asm `pushfq`/`popfq` CPUID detection
-- [x] Constants: `archX8664`, `archArm64`, `archRiscv64`, `cacheLine*`, `pageSize`
+- [x] `detectArchitecture(): u64` — asm `pushfq`/`popfq` CPUID detection
+- [x] Constants: `architectureX8664`, `architectureArm64`, `architectureRiscv64`, `cacheLine*`, `pageSize`
 
 ## P18.06 — `std/asm.ae` — NASM helper macros
 
-- [x] `memoryFence()`, `storeFence()`, `loadFence()` — asm memory barriers
-- [x] `portOutByte(portNumber: u16, value: u8)` — asm `out` instruction
-- [x] `portInByte(portNumber: u16): u8` — asm `in` instruction
-- [x] `interruptsDisable()`, `interruptsEnable()`, `haltCpu()` — asm CPU control
+- [x] `fenceMemory()`, `fenceStore()`, `fenceLoad()` — asm memory barriers
+- [x] `writePortByte(portNumber: u16, value: u8)` — asm `out` instruction
+- [x] `readPortByte(portNumber: u16): u8` — asm `in` instruction
+- [x] `disableInterrupts()`, `enableInterrupts()`, `haltCpu()` — asm CPU control
 - [x] `readTimestampCounter(): u64` — asm timestamp counter
 
 ## P18.07 — `std/collections.ae` — Simple collections
 
 - [x] `Array` struct with `data`, `length`, `capacity`
 - [x] `List` struct with `data`, `length`, `capacity`
-- [x] `arrayNew(): Array`, `listNew(): List` — pure Aether struct field init
+- [x] `newArray(): Array`, `newList(): List` — pure Aether struct field init
 
 ## P18.08 — `std/elf.ae` — ELF64 reader/writer
 
 - [x] `Elf64Header` struct (all fields, camelCase, no reserved keywords)
 - [x] `Elf64SectionHeader` struct
 - [x] `Elf64Symbol` struct
-- [x] `elfVerifyMagic(header: ref Elf64Header): bool` — pure Aether struct ref access
+- [x] `verifyElfMagic(header: ref Elf64Header): bool` — pure Aether struct ref access
 
 ## P18.09 — `std/fs.ae` — AetherFS syscall wrappers
 
 - [x] `sys func fsOpen/fsRead/fsWrite/fsClose/fsSeek/fsStat` — Aether `sys` keyword
 - [x] `File` struct with `fileDescriptor`
-- [x] `fileOpen`, `fileRead`, `fileWrite`, `fileClose` — method-style functions
+- [x] `openFile`, `readFile`, `writeFile`, `closeFile` — method-style functions
 
 ## P18.10 — `std/serial.ae` — COM1 serial I/O
 
-- [x] `serialInit(): bool` — asm port I/O (COM1 init, 115200 baud, 8N1)
-- [x] `serialPutc(character: byte)` — asm `out` instruction
-- [x] `serialPuts(inputString: string)` — asm `out` loop
-- [x] `serialGetc(): byte` — asm `in` instruction (blocking)
+- [x] `initSerial(): bool` — asm port I/O (COM1 init, 115200 baud, 8N1)
+- [x] `writeSerialByte(character: byte)` — asm `out` instruction
+- [x] `writeSerialString(inputString: string)` — asm `out` loop
+- [x] `readSerialByte(): byte` — asm `in` instruction (blocking)
 
 ## P18.11 — `libaether.aelib` combined archive
 
@@ -111,7 +111,7 @@ All 11 standard library files were rewritten from asm-heavy stubs to pure Aether
 | `fs.ae` | No | `sys` keyword |
 | `test.ae` | No | String interpolation, `exit()` |
 | `arch.ae` | Yes (CPUID) | Can't detect CPU in pure Aether |
-| `asm.ae` | Yes (port I/O, barriers) | `in`/`out`, `memoryFence` etc. |
+| `asm.ae` | Yes (port I/O, barriers) | `in`/`out`, `fenceMemory` etc. |
 | `serial.ae` | Yes (port I/O) | `in`/`out` instructions |
 | `mem.ae` | Yes (byte copy) | `rep movsb`/`stosb` |
 
@@ -120,9 +120,9 @@ All 11 standard library files were rewritten from asm-heavy stubs to pure Aether
 ## Naming Conventions
 
 All std library code uses:
-- **camelCase** for function names (`absValue`, `memCopy`, `serialPutc`)
-- **camelCase** for variable names (`firstValue`, `byteCount`, `inputString`)
-- **camelCase** for struct fields (`fileDescriptor`, `sectionType`)
-- **camelCase** for constants (`archX8664`, `pageSize`)
+- **verbNoun** for function names (`absoluteValue`, `copyMemory`, `writeSerialByte`, `detectArchitecture`, `disableInterrupts`)
+- **verbNoun** for variable names (`firstValue`, `byteCount`, `inputString`)
+- **verbNoun** for struct fields (`fileDescriptor`, `sectionType`)
+- **verbNoun** for constants (`architectureX8664`, `pageSize`)
 - No `main()` functions in library files
 - Descriptive variable names (not `a`, `b`, `c`)
