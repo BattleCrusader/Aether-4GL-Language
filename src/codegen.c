@@ -25,7 +25,7 @@ static int mkdir_p(const char *path) {
     return mkdir(tmp, 0755);
 }
 
-#define INITIAL_CAP 65536
+#define INITIAL_CAP 262144
 
 /* Forward declarations */
 typedef struct VarSlot VarSlot;
@@ -3323,12 +3323,11 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "\n");
     }
 
-    /* Emit string table — uses the label stored in each StringEntry */
-    if (!cg->has_layout) {
+    /* Emit string table at the end — all string literals are collected during codegen */
+    if (string_entries) {
         cg_write(cg, "section .rodata\n");
         for (StringEntry *e = string_entries; e; e = e->next) {
             cg_write_fmt(cg, "Lstr%d: db ", e->label_num);
-            /* Emit printable chars between quotes, non-printable as numeric */
             cg_write(cg, "\"");
             for (size_t i = 0; i < e->sv.len; i++) {
                 unsigned char c = (unsigned char)e->sv.data[i];
@@ -3336,7 +3335,6 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                 else if (c == '\\') cg_write(cg, "\\\\");
                 else if (c >= 32 && c < 127) { char buf[2] = {c, 0}; cg_write(cg, buf); }
                 else {
-                    /* Non-printable: close string, emit as numeric, reopen */
                     cg_write_fmt(cg, "\", %u, \"", c);
                 }
             }
@@ -3700,7 +3698,7 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         return 0;
     }
 
-    snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o %s %s", nasm_format, obj_file, asm_file);
+    snprintf(cmd, sizeof(cmd), "nasm -O2 -Wno-label-redef-late -f %s -o %s %s", nasm_format, obj_file, asm_file);
     int ret = system(cmd);
     if (ret != 0) {
         fprintf(stderr, "nasm failed (exit %d)\n", ret);
