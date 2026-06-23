@@ -1,10 +1,10 @@
-# .ae — test match expression (single line)
+# test_match.ae — test match expression
 @test(expect=30)
 func main(): int {
     let x = 2;
-    match x {
+    return match x {
         case 0 -> 10;
         case 1 -> 20;
         case _ -> 30
-    }
+    };
 }

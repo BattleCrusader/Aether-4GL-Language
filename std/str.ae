@@ -6,24 +6,123 @@ func concat(firstString: string, secondString: string): string {
     return firstString + secondString
 }
 
+func strlen(inputString: string): u64 {
+    let mut i: u64 = 0
+    while true {
+        let c: byte = inputString[i]
+        if c == 0 { return i }
+        i = i + 1
+    }
+    return i
+}
+
+func strcmp(a: string, b: string): bool {
+    return strEq(a, b)
+}
+
 func split(inputString: string, delimiter: string): [string] {
-    # TODO: implement string split
-    return []
+    let mut result: [string] = []
+    let inputLen: u64 = strlen(inputString)
+    let delimLen: u64 = strlen(delimiter)
+    if delimLen == 0 {
+        let mut i: u64 = 0
+        while i < inputLen {
+            let mut part: string = ""
+            part = part + inputString[i]
+            result = result + [part]
+            i = i + 1
+        }
+        return result
+    }
+    let mut start: u64 = 0
+    let mut pos: u64 = 0
+    while pos < inputLen {
+        let mut matches: bool = true
+        let mut di: u64 = 0
+        while di < delimLen {
+            if inputString[pos + di] != delimiter[di] { matches = false }
+            di = di + 1
+        }
+        if matches {
+            let mut part: string = ""
+            let mut si: u64 = start
+            while si < pos {
+                part = part + inputString[si]
+                si = si + 1
+            }
+            result = result + [part]
+            pos = pos + delimLen
+            start = pos
+        } else {
+            pos = pos + 1
+        }
+    }
+    let mut part: string = ""
+    let mut si: u64 = start
+    while si < inputLen {
+        part = part + inputString[si]
+        si = si + 1
+    }
+    result = result + [part]
+    return result
 }
 
 func trim(inputString: string): string {
-    # TODO: implement string trim
-    return inputString
+    let len: u64 = strlen(inputString)
+    let mut start: u64 = 0
+    while start < len {
+        let c: byte = inputString[start]
+        if c != 32 and c != 9 and c != 10 and c != 13 { break }
+        start = start + 1
+    }
+    if start == len { return "" }
+    let mut end: u64 = len
+    while end > start {
+        let c: byte = inputString[end - 1]
+        if c != 32 and c != 9 and c != 10 and c != 13 { break }
+        end = end - 1
+    }
+    let mut result: string = ""
+    let mut i: u64 = start
+    while i < end {
+        result = result + inputString[i]
+        i = i + 1
+    }
+    return result
 }
 
 func toUpper(inputString: string): string {
-    # TODO: implement string toUpper
-    return inputString
+    let mut result: string = ""
+    let mut i: u64 = 0
+    while true {
+        let c: byte = inputString[i]
+        if c == 0 { return result }
+        if c >= 97 and c <= 122 {
+            let upper: byte = c - 32
+            result = result + upper
+        } else {
+            result = result + c
+        }
+        i = i + 1
+    }
+    return result
 }
 
 func toLower(inputString: string): string {
-    # TODO: implement string toLower
-    return inputString
+    let mut result: string = ""
+    let mut i: u64 = 0
+    while true {
+        let c: byte = inputString[i]
+        if c == 0 { return result }
+        if c >= 65 and c <= 90 {
+            let lower: byte = c + 32
+            result = result + lower
+        } else {
+            result = result + c
+        }
+        i = i + 1
+    }
+    return result
 }
 
 # strEq(a: string, b: string): bool
@@ -39,4 +138,110 @@ func strEq(a: string, b: string): bool {
         i = i + 1
     }
     return true
+}
+
+func substring(inputString: string, startIndex: u64, endIndex: u64): string {
+    let mut result: string = ""
+    let mut i: u64 = startIndex
+    while i < endIndex {
+        result = result + inputString[i]
+        i = i + 1
+    }
+    return result
+}
+
+func startsWith(inputString: string, prefix: string): bool {
+    let prefixLen: u64 = strlen(prefix)
+    let mut i: u64 = 0
+    while i < prefixLen {
+        if inputString[i] != prefix[i] { return false }
+        i = i + 1
+    }
+    return true
+}
+
+func endsWith(inputString: string, suffix: string): bool {
+    let inputLen: u64 = strlen(inputString)
+    let suffixLen: u64 = strlen(suffix)
+    if suffixLen > inputLen { return false }
+    let mut i: u64 = 0
+    while i < suffixLen {
+        if inputString[inputLen - suffixLen + i] != suffix[i] { return false }
+        i = i + 1
+    }
+    return true
+}
+
+func contains(haystack: string, needle: string): bool {
+    let hayLen: u64 = strlen(haystack)
+    let needleLen: u64 = strlen(needle)
+    if needleLen == 0 { return true }
+    if needleLen > hayLen { return false }
+    let mut i: u64 = 0
+    while i <= hayLen - needleLen {
+        let mut matches: bool = true
+        let mut j: u64 = 0
+        while j < needleLen {
+            if haystack[i + j] != needle[j] { matches = false; break }
+            j = j + 1
+        }
+        if matches { return true }
+        i = i + 1
+    }
+    return false
+}
+
+func replace(inputString: string, searchFor: string, replaceWith: string): string {
+    let inputLen: u64 = strlen(inputString)
+    let searchLen: u64 = strlen(searchFor)
+    if searchLen == 0 { return inputString }
+    let mut result: string = ""
+    let mut i: u64 = 0
+    while i < inputLen {
+        let mut matches: bool = true
+        let mut j: u64 = 0
+        while j < searchLen {
+            if i + j >= inputLen { matches = false; break }
+            if inputString[i + j] != searchFor[j] { matches = false; break }
+            j = j + 1
+        }
+        if matches {
+            let mut ri: u64 = 0
+            let replaceLen: u64 = strlen(replaceWith)
+            while ri < replaceLen {
+                result = result + replaceWith[ri]
+                ri = ri + 1
+            }
+            i = i + searchLen
+        } else {
+            result = result + inputString[i]
+            i = i + 1
+        }
+    }
+    return result
+}
+
+func join(strings: [string], delimiter: string): string {
+    let mut result: string = ""
+    let count: u64 = #strings
+    if count == 0 { return result }
+    let mut i: u64 = 0
+    while i < count {
+        if i > 0 {
+            let mut di: u64 = 0
+            let delimLen: u64 = strlen(delimiter)
+            while di < delimLen {
+                result = result + delimiter[di]
+                di = di + 1
+            }
+        }
+        let itemLen: u64 = strlen(strings[i])
+        let mut j: u64 = 0
+        while j < itemLen {
+            result = result + strings[i][j]
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return result
 }

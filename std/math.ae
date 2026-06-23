@@ -1,23 +1,70 @@
 # std/math.ae — Basic math: absoluteValue, min, max, clamp
 # Pure Aether — no asm blocks needed for simple arithmetic.
 
-func absoluteValue(value: int): int {
+pub func absoluteValue(value: int): int {
     if value < 0 { return -value }
     return value
 }
 
-func min(firstValue: int, secondValue: int): int {
+pub func min(firstValue: int, secondValue: int): int {
     if firstValue < secondValue { return firstValue }
     return secondValue
 }
 
-func max(firstValue: int, secondValue: int): int {
+pub func max(firstValue: int, secondValue: int): int {
     if firstValue > secondValue { return firstValue }
     return secondValue
 }
 
-func clamp(value: int, lowerBound: int, upperBound: int): int {
+pub func clamp(value: int, lowerBound: int, upperBound: int): int {
     if value < lowerBound { return lowerBound }
     if value > upperBound { return upperBound }
     return value
+}
+
+pub func integerSquareRoot(value: u64): u64 {
+    if value < 2 { return value }
+    let mut x: u64 = value
+    let mut y: u64 = (x + 1) / 2
+    while y < x {
+        x = y
+        y = (y + value / y) / 2
+    }
+    return x
+}
+
+pub func power(base: u64, exponent: u64): u64 {
+    if exponent == 0 { return 1 }
+    let mut result: u64 = 1
+    let mut b: u64 = base
+    let mut e: u64 = exponent
+    while e > 0 {
+        if e & 1 == 1 { result = result * b }
+        b = b * b
+        e = e >> 1
+    }
+    return result
+}
+
+pub func isPrime(value: u64): bool {
+    if value < 2 { return false }
+    if value < 4 { return true }
+    if value % 2 == 0 { return false }
+    let mut i: u64 = 3
+    while i * i <= value {
+        if value % i == 0 { return false }
+        i = i + 2
+    }
+    return true
+}
+
+pub func greatestCommonDivisor(a: u64, b: u64): u64 {
+    if b == 0 { return a }
+    return greatestCommonDivisor(b, a % b)
+}
+
+pub func leastCommonMultiple(a: u64, b: u64): u64 {
+    if a == 0 or b == 0 { return 0 }
+    let gcd: u64 = greatestCommonDivisor(a, b)
+    return (a / gcd) * b
 }

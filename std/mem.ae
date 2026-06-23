@@ -27,3 +27,27 @@ func alloc(byteCount: u64): u64 {
 func free(pointer: u64) {
     # bump allocator: no-op
 }
+
+func memset(destination: u64, value: byte, byteCount: u64) {
+    asm {
+        mov rdi, rdi
+        mov al, sil
+        mov rcx, rdx
+        rep stosb
+    }
+}
+
+func memcmp(firstPointer: u64, secondPointer: u64, byteCount: u64): i64 {
+    asm {
+        mov rdi, rdi
+        mov rsi, rsi
+        mov rcx, rdx
+        xor rax, rax
+        repe cmpsb
+        je .done
+        mov al, 1
+        ja .done
+        mov al, -1
+    .done:
+    }
+}

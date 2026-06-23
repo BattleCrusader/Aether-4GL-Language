@@ -11,3 +11,81 @@ func print(value: string) {
 func println(value: string) {
     print(value + "\n")
 }
+
+sys func read(fileDescriptor: u64, buffer: u64, count: u64): u64 at(0)
+
+func readLine(): string {
+    let mut result: string = ""
+    let buf: u64 = alloc(1)
+    let mut done: bool = false
+    while !done {
+        let bytesRead: u64 = read(0, buf, 1)
+        if bytesRead == 0 { done = true; break }
+        let mut tempByte: byte = 0
+        asm: (tempByte) {
+            mov rdi, [buf]
+            mov al, [rdi]
+            movzx rax, al
+        }
+        if tempByte == 10 { done = true; break }
+        let s: string = tempByte
+        result = result + s
+    }
+    free(buf)
+    return result
+}
+
+func printHex(value: u64) {
+    let mut result: string = ""
+    let mut v: u64 = value
+    if v == 0 {
+        print("0x0")
+        return
+    }
+    let mut started: bool = false
+    let mut shift: u64 = 60
+    while true {
+        let digit: u64 = (v >> shift) & 0xF
+        if digit != 0 or started or shift == 0 {
+            if !started {
+                print("0x")
+                started = true
+            }
+            if digit < 10 {
+                let ch: byte = 48 + digit
+                let s: string = ch
+                print(s)
+            } else {
+                let ch: byte = 87 + digit
+                let s: string = ch
+                print(s)
+            }
+        }
+        if shift == 0 { break }
+        shift = shift - 4
+    }
+}
+
+func printDecimal(value: u64) {
+    if value == 0 {
+        print("0")
+        return
+    }
+    let mut digits: [byte] = []
+    let mut v: u64 = value
+    while v > 0 {
+        let digit: byte = (v % 10) + 48
+        digits = digits + [digit]
+        v = v / 10
+    }
+    let mut i: u64 = #digits
+    while i > 0 {
+        i = i - 1
+        let s: string = digits[i]
+        print(s)
+    }
+}
+
+func formatString(template: string, args: ...): string {
+    return template
+}

@@ -2267,7 +2267,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                 StringView asm_text = node->data.asm_block.text->data.literal.string_val;
                 if (asm_text.len > 0) {
                     cg_write(cg, "; begin asm block\n");
-                    /* Write each line directly, skipping extern declarations */
+                    /* Write each line, substituting [varName] with [rbp+offset] */
                     const char *p = asm_text.data;
                     const char *end = p + asm_text.len;
                     while (p < end) {
@@ -2286,7 +2286,42 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                                 if (s_trim < p && *s_trim == '#') {
                                     /* Skip this line entirely — it's an Aether comment */
                                 } else {
-                                    cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                                    /* Process line: substitute [varName] with [rbp+offset] */
+                                    char line_buf[1024];
+                                    int buf_pos = 0;
+                                    const char *cp = line_start;
+                                    while (cp < p && buf_pos < (int)sizeof(line_buf) - 8) {
+                                        if (*cp == '[') {
+                                            /* Look for matching ']' */
+                                            const char *rb = cp + 1;
+                                            while (rb < p && *rb != ']' && *rb != ' ' && *rb != '\t' && *rb != '\n') rb++;
+                                            if (rb < p && *rb == ']') {
+                                                size_t vlen = rb - (cp + 1);
+                                                if (vlen > 0 && vlen < 256) {
+                                                    char vname[256];
+                                                    memcpy(vname, cp + 1, vlen);
+                                                    vname[vlen] = '\0';
+                                                    /* Check if this name matches a known variable slot */
+                                                    VarSlot *vs = slots;
+                                                    bool found = false;
+                                                    while (vs) {
+                                                        if (strcmp(vs->name, vname) == 0) {
+                                                            int n = snprintf(line_buf + buf_pos, sizeof(line_buf) - buf_pos, "[rbp%+d]", vs->stack_offset);
+                                                            if (n > 0) buf_pos += n;
+                                                            cp = rb + 1;
+                                                            found = true;
+                                                            break;
+                                                        }
+                                                        vs = vs->next;
+                                                    }
+                                                    if (found) continue;
+                                                }
+                                            }
+                                        }
+                                        line_buf[buf_pos++] = *cp++;
+                                    }
+                                    line_buf[buf_pos] = '\0';
+                                    cg_write_fmt(cg, "%s\n", line_buf);
                                 }
                             }
                         } else {
@@ -2295,6 +2330,23 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                         if (p < end) p++;
                     }
                     cg_write(cg, "; end asm block\n");
+
+                    /* After asm block, store outputs from registers back to stack */
+                    if (node->data.asm_block.outputs.count > 0) {
+                        const char *regs[] = {"rax", "rdx"};
+                        for (int i = 0; i < node->data.asm_block.outputs.count && i < 2; i++) {
+                            AstNode *out_var = node->data.asm_block.outputs.items[i];
+                            StringView oname = out_var->data.ident.name;
+                            /* Null-terminate for lookup */
+                            char vname[256];
+                            int vlen = oname.len < 255 ? (int)oname.len : 255;
+                            memcpy(vname, oname.data, vlen);
+                            vname[vlen] = '\0';
+                            int offset = find_var_offset_by_name(slots, vname);
+                            cg_indent(cg);
+                            cg_write_fmt(cg, "mov [rbp%+d], %s\n", offset, regs[i]);
+                        }
+                    }
                 }
             }
             break;

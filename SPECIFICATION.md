@@ -1,7 +1,7 @@
 # Aether Language Specification
 
 **Version**: 1.0 (Comprehensive)
-**Status**: Living Document — Updated 2026-06-22
+**Status**: Living Document — Last updated: 2026-06-24 — Comprehensive audit complete. See annotations for implementation status.
 
 ---
 
@@ -440,6 +440,8 @@ let x = x + 5   // shadows previous x, now 15
 
 ## 6. Functions
 
+> **Implementation status**: ⚠️ Partially implemented — basic functions work; default parameters and variadic functions are not yet implemented.
+
 ### 6.1 Function Declaration
 
 ```aether
@@ -483,6 +485,8 @@ inline func fast_path(): u64 { return 42 }
 
 ### 6.3 Default Parameters
 
+> **❌ NOT YET IMPLEMENTED** — Parser does not support default parameter values.
+
 ```aether
 func create_window(title: string, width: u64 = 800, height: u64 = 600) {
     // ...
@@ -493,6 +497,8 @@ create_window("Wide", 1024, 768)          // explicit
 ```
 
 ### 6.4 Variadic Functions
+
+> **❌ NOT YET IMPLEMENTED** — Parser does not support variadic parameter syntax.
 
 ```aether
 func sum(values: ...u64): u64 {
@@ -509,6 +515,8 @@ let s = sum(1, 2, 3, 4, 5)  // s = 15
 ---
 
 ## 7. Control Flow
+
+> **Implementation status**: ✅ Fully implemented — if/elif/else, while, for, break/continue, match, defer all work.
 
 ### 7.1 If / Elif / Else
 
@@ -608,6 +616,8 @@ func process_file(path: string) {
 
 ## 8. Memory Management
 
+> **Implementation status**: ⚠️ Partially implemented — stack allocation, explicit heap, region blocks, and destructor insertion work; escape analysis and ownership/borrowing are not yet implemented.
+
 This is the heart of the language and what makes it a true 4GL — **you describe allocation semantics; the compiler generates the exact free/teardown code.**
 
 ### 8.1 Stack Allocation (Default)
@@ -623,6 +633,8 @@ func process() {
 ```
 
 ### 8.2 Escape Analysis
+
+> **❌ NOT YET IMPLEMENTED** — No escape analysis pass exists. All variables remain stack-allocated; no automatic heap promotion.
 
 When a reference to a stack variable could outlive its scope, the compiler **automatically promotes** it to heap allocation. No programmer annotation needed for simple cases.
 
@@ -643,6 +655,8 @@ let shared = heap rc SharedState()
 ```
 
 ### 8.4 Ownership and Borrowing
+
+> **❌ NOT YET IMPLEMENTED** — `owned`, `ref`, and `rc` type annotations are parsed but no borrow checker or ownership tracking exists. All types are effectively treated as plain values.
 
 - `owned T` — single-owner, moved on assignment, freed when owner drops
 - `ref T` — borrowed reference, non-owning, must not outlive the lender
@@ -714,6 +728,8 @@ func read_config(): throws string {
 
 ## 9. Object-Oriented Programming
 
+> **Implementation status**: ⚠️ Partially implemented — classes, structs, enums, implicit self, access modifiers work; traits (§9.4), properties (§9.6), and operator overloading (§9.7) are parsed but not codegen'd.
+
 ### 9.1 Classes
 
 Classes are syntactic sugar over structs + associated functions. The compiler tracks constructors (`init`) and destructors (`drop`) and inserts calls automatically.
@@ -774,6 +790,8 @@ func distance(p: Point): float {
 
 ### 9.4 Traits (Interfaces)
 
+> **⚠️ PARSED BUT NOT CODEGEN'D** — Trait declarations and impl blocks are parsed into AST nodes but no vtable or dispatch code is generated. Static dispatch via traits does not yet work.
+
 Traits define shared behavior. They compile to vtable pointers only when used dynamically; static dispatch is the default.
 
 ```aether
@@ -818,6 +836,8 @@ class BankAccount {
 
 ### 9.6 Properties (Inferred from Return Type)
 
+> **⚠️ PARSED BUT NOT CODEGEN'D** — `prop` keyword is parsed into `NODE_PROPERTY` AST nodes but no getter/setter dispatch code is generated.
+
 Properties are methods that look like fields. The compiler infers getter/setter from the return type:
 
 - **Getter**: has a return type → `obj.prop` calls the getter
@@ -845,6 +865,8 @@ t.fahrenheit = 32    // calls setter → celsius = 0
 
 ### 9.7 Operator Overloading
 
+> **⚠️ PARSED BUT NOT CODEGEN'D** — `op_add`, `op_sub`, etc. method names are parsed as regular methods but no operator dispatch code is generated. The `+` operator is not overloadable for user types.
+
 ```aether
 struct Vector2 {
     x: f64
@@ -871,7 +893,11 @@ let d = a * 2.0        // calls op_mul
 
 ## 10. Generics
 
+> **Implementation status**: ⚠️ Partially implemented — generic type parameters are parsed and monomorphization is attempted in semantic analysis, but codegen for generic functions is not fully working. Test fixture exists (`test_generic.ae`, `test_monomorph.ae`).
+
 ### 10.1 Generic Functions
+
+> **⚠️ PARSED BUT NOT CODEGEN'D** — Generic type parameters are parsed and monomorphization is attempted in semantic analysis, but the codegen path for generic functions is incomplete.
 
 Generics are monomorphized (zero-cost). Type parameters use angle brackets.
 
@@ -933,6 +959,8 @@ func min<T: Comparable>(a: T, b: T): T {
 ---
 
 ## 11. Error Handling
+
+> **Implementation status**: ✅ Fully implemented — deterministic exceptions with try/catch/finally, throw, error propagation, nested try/catch, and segfault handling all work. Test fixtures exist (`test_trycatch.ae`, `test_trycatch_nested.ae`, `test_trycatch_finally.ae`, `test_trycatch_catch_var.ae`, `test_throw.ae`, `test_segfault.ae`, `test_catch_all.ae`).
 
 ### 11.1 Deterministic Exceptions with Full Unwinding
 
@@ -1114,7 +1142,11 @@ The compiler generates IDT entries for page fault (interrupt 14) and general pro
 
 ## 12. Compile-Time Execution
 
+> **Implementation status**: ⚠️ Partially implemented — `#run` blocks are parsed and visited in semantic analysis, but no actual compile-time evaluation occurs. The codegen emits a comment stub. Test fixture exists (`test_comptime.ae`).
+
 ### 12.1 `#run` Blocks
+
+> **⚠️ PARSED BUT NOT CODEGEN'D** — `#run` blocks are parsed into `NODE_RUN_BLOCK` AST nodes and visited during semantic analysis, but no compile-time evaluation engine exists. The codegen emits a comment and produces no runtime code.
 
 Code inside `#run { }` executes at compile time. This enables metaprogramming without a separate macro system.
 
@@ -1153,7 +1185,11 @@ const GREETING = "Hello, World!"
 
 ## 13. Contract Programming
 
+> **Implementation status**: ⚠️ Partially implemented — pre/post conditions are parsed and codegen'd with runtime checks; class invariants (§13.2) are not yet implemented. Test fixture exists (`test_contract.ae`).
+
 ### 13.1 Preconditions and Postconditions
+
+> **✅ Implemented** — Pre/post conditions are parsed, codegen'd with runtime checks in debug builds, and eliminated in release builds. Test fixture: `test_contract.ae`.
 
 ```aether
 func withdraw(account: ref Account, amount: u64)
@@ -1165,6 +1201,8 @@ func withdraw(account: ref Account, amount: u64)
 ```
 
 ### 13.2 Invariants
+
+> **❌ NOT YET IMPLEMENTED** — The `inv()` syntax for class invariants is not parsed or codegen'd.
 
 ```aether
 class Queue<T> {
@@ -1199,7 +1237,11 @@ func fast_path(x: u64): u64
 
 ## 14. Closures and Lambdas
 
+> **Implementation status**: ⚠️ Partially implemented — non-capturing lambdas are parsed and codegen'd as standalone functions; closures with captures (§14.2) are not yet implemented. Test fixture exists (`test_closure.ae`).
+
 ### 14.1 Lambda Syntax
+
+> **✅ Implemented** — Non-capturing lambdas are parsed and codegen'd as unique standalone functions. Test fixture: `test_closure.ae`.
 
 ```aether
 let add = |a: int, b: int| -> a + b
@@ -1217,6 +1259,8 @@ let process = |items: [int]| {
 
 ### 14.2 Closures with Captures
 
+> **❌ NOT YET IMPLEMENTED** — Capturing lambdas (closures that reference variables from the enclosing scope) are not yet supported. The codegen has a placeholder comment noting this is deferred.
+
 ```aether
 func make_adder(x: int): func(int): int {
     return |y| -> x + y  // captures x by reference
@@ -1227,6 +1271,8 @@ let result = add5(3)  // result = 8
 ```
 
 ### 14.3 Higher-Order Functions
+
+> **⚠️ PARSED BUT NOT CODEGEN'D** — Higher-order functions (passing lambdas as arguments) are parsed but the function pointer dispatch is not fully codegen'd.
 
 ```aether
 func map<T, U>(items: [T], f: func(T): U): [U] {
@@ -1245,7 +1291,11 @@ let doubled = map(numbers, |x| -> x * 2)
 
 ## 15. Properties and Operator Overloading
 
+> **Implementation status**: ⚠️ Partially implemented — both properties and operator overloading are parsed but not codegen'd. See §9.6 and §9.7 for details.
+
 ### 15.1 Properties (Inferred from Return Type)
+
+> **⚠️ PARSED BUT NOT CODEGEN'D** — See §9.6 annotation.
 
 Properties are methods that look like fields. The compiler infers getter/setter from the return type:
 
@@ -1273,6 +1323,8 @@ t.fahrenheit = 32    // calls setter → celsius = 0
 ```
 
 ### 15.2 Operator Overloading
+
+> **⚠️ PARSED BUT NOT CODEGEN'D** — See §9.7 annotation.
 
 ```aether
 struct Vector2 {
@@ -1307,7 +1359,11 @@ impl Vector2 {
 
 ## 16. Dynamic Dispatch
 
+> **Implementation status**: ❌ Not yet implemented — `dyn Trait` syntax is parsed but no vtable or fat pointer codegen exists. Test fixture exists (`test_dyn.ae`).
+
 ### 16.1 `dyn Trait` Syntax
+
+> **⚠️ PARSED BUT NOT CODEGEN'D** — `dyn` keyword and trait impl blocks are parsed but no vtable dispatch code is generated. The test fixture (`test_dyn.ae`) only tests parsing.
 
 Dynamic dispatch uses fat pointers (vtable pointer + data pointer). Use `dyn Trait` to opt in.
 
@@ -1340,6 +1396,8 @@ func render_dynamic(items: [ref dyn Drawable]) {
 ---
 
 ## 17. Inline Assembly
+
+> **Implementation status**: ✅ Fully implemented — inline asm blocks, const values in asm, output bindings, labels/jumps, top-level asm blocks, extern hoisting, and rax preservation all work.
 
 ### 17.1 Basic Inline Assembly
 
@@ -1454,6 +1512,8 @@ Top-level asm blocks are emitted in declaration order, before any function code.
 
 ### 17.6 Extern Hoisting
 
+> **✅ Implemented** — Extern declarations from asm blocks are automatically hoisted to file level.
+
 The compiler automatically hoists `extern` declarations from asm blocks to the top of the output file. NASM requires `extern` at file level, not inside function bodies.
 
 ```aether
@@ -1488,9 +1548,24 @@ main:
         rep stosb
 ```
 
+### 17.7 Asm Block RAX Preservation
+
+> **✅ Implemented** — The compiler no longer zeros `rax` after asm blocks. When a function body is (or ends with) an asm block, the compiler skips the default `xor rax, rax` return-value zeroing, trusting that the asm block already set `rax` to the intended return value. This is detected by checking if the function body is `NODE_ASM_BLOCK` or if the last statement in a `NODE_BLOCK` is an asm block.
+
+```aether
+func get_forty_two(): u64 {
+    asm {
+        mov rax, 42
+    }
+    // No "xor rax, rax" emitted here — rax preserved from asm block
+}
+```
+
 ---
 
 ## 18. Aether OS Integration
+
+> **Implementation status**: ⚠️ Partially implemented — freestanding and host-native targets work; syscall page, module interface, file imports, binary entry points, and memory layout directives are implemented. `pool` and `protocol` declarations are parsed but codegen is a comment stub.
 
 ### 18.1 Freestanding Target
 
@@ -1511,6 +1586,8 @@ The compiler also outputs **host-native formats** so you can compile and run `.a
 | Windows | PE32+ | `link.exe` or direct |
 
 ### 18.3 Syscall Page (0x5000)
+
+> **✅ Implemented** — The compiler knows the Aether syscall table and generates optimal call sequences. On freestanding targets, `print()` uses slot 1 of the syscall page at `0x5008`.
 
 The compiler knows the Aether syscall table and generates optimal call sequences:
 
@@ -1614,6 +1691,8 @@ func init_memory() {
 
 ### 18.8 Declarative Resources
 
+> **⚠️ PARSED BUT NOT CODEGEN'D** — `pool` declarations are parsed into `NODE_POOL_DECL` AST nodes but codegen emits only a comment stub. No pool alloc/free code is generated.
+
 ```aether
 // Declare a memory pool for USB transfers
 pool UsbDmaBuffer of size 64, count 32, alignment 256
@@ -1624,7 +1703,13 @@ func alloc_usb_buf(): UsbDmaBuffer {
 }  // compiler inserts: return to pool on drop
 ```
 
+**Syntax**: `pool <Name> of size <N>, count <M>, alignment <A>`
+
+The parser accepts `pool`, `of`, `size`, `count`, and `alignment` as keywords. The AST node stores `name`, `size`, `count`, and `alignment` fields. Codegen currently emits `; pool declaration (reserved)` and produces no runtime code.
+
 ### 18.9 Protocol Generation
+
+> **⚠️ PARSED BUT NOT CODEGEN'D** — `protocol` declarations are parsed into `NODE_PROTOCOL_DECL` AST nodes but codegen emits only a comment stub. No protocol dispatch or bit-banging code is generated.
 
 ```aether
 protocol Serial {
@@ -1637,9 +1722,15 @@ protocol Serial {
 }
 ```
 
+**Syntax**: `protocol <Name> { <field_decls> <method_decls> }`
+
+The `protocol` keyword is parsed at the top level. The AST node (`NODE_PROTOCOL_DECL`) stores a `name` and a list of method declarations. Codegen currently emits `; protocol declaration (interface)` and produces no runtime code. This is distinct from the `protocol` block in §28.1 (Automatic Protocol Generation for hardware), which is a separate feature.
+
 ---
 
 ## 19. Multi-Target Assembler
+
+> **Implementation status**: ✅ Fully implemented — NASM parser, AsmIR, and backends for x86_64 (passthrough), ARM64, and RISC-V all work. Register translation and instruction mapping tables are complete.
 
 ### 19.1 Architecture
 
@@ -1690,6 +1781,8 @@ aether --target asm-riscv64 source.ae -o output.asm
 ---
 
 ## 20. Universal Binaries
+
+> **Implementation status**: ⚠️ Partially implemented — universal binary concept and CPU detection trampoline are designed; the `--target universal` flag exists but the multi-arch ELF packaging is not fully integrated.
 
 ### 20.1 Concept
 
@@ -1758,6 +1851,8 @@ aether build --target universal-all --output kernel.elf
 
 ## 21. Standard Library
 
+> **Implementation status**: ⚠️ Partially implemented — `std.io` (print, println), `std.mem` (alloc, free), `std.serial` (COM1, putc, puts), `std.test` (assert, test_runner) are implemented. Other modules are planned.
+
 The compiler ships a freestanding standard library:
 
 | Module | Contents |
@@ -1777,6 +1872,8 @@ The compiler ships a freestanding standard library:
 ---
 
 ## 22. Build System
+
+> **Implementation status**: ⚠️ Partially implemented — `aether build`, `aether run`, and `aether test` CLI commands work. Other commands (`fmt`, `doc`, `asm`, `inspect`, `init`) are planned.
 
 ### 22.1 `aether` CLI
 
@@ -1847,6 +1944,8 @@ std = { path = "/lib/aether/std" }
 ---
 
 ## 24. Think Outside the Box: Unique Aether Innovations
+
+> **Implementation status**: ⚠️ Mostly aspirational — compile-time OS knowledge (§24.1) and zero-cost error context (§24.10) are partially implemented. Most other features in this section (§24.2–§24.12) are aspirational/planned.
 
 This section describes the features that make Aether genuinely different from other systems languages.
 
