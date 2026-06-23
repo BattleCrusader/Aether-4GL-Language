@@ -1,35 +1,26 @@
 # std/test.ae — Testing: assert, test runner
 # Freestanding standard library for host-native tests
 #
-# Usage:
-#   import "std/test"
-#   func main(): u64 {
-#       assert_eq(add(2, 3), 5, "2 + 3 should be 5")
-#       return 0
-#   }
+# A test case is just an assertEquals call:
+#   assertEquals(2 + 3, 5, "2 + 3 should be 5")
+#
+# If the assertion fails, the process exits immediately with code 1
+# (like JUnit throwing an AssertionError). If it passes, execution continues.
 
-# Assert that condition is true. Returns 0 if true, 1 if false.
-func assert(condition: bool, message: string): u64 {
-    if !condition {
-        print("ASSERTION FAILED: {message}\n")
-        return 1
-    }
-    return 0
-}
-
-# Assert that a == b. Returns 0 if equal, 1 if not.
-func assert_eq(a: u64, b: u64, message: string): u64 {
+# Assert that a == b. Prints PASS or FAIL. Exits with code 1 on failure.
+func assertEquals(a: u64, b: u64, message: string) {
     if a != b {
-        print("ASSERTION FAILED: {message} (got {a}, expected {b})\n")
-        return 1
+        print("  FAIL: {message} (got {a}, expected {b})\n")
+        exit(1)
     }
-    return 0
+    print("  PASS: {message}\n")
 }
 
-# Run a test function by name and return its result.
-# Uses the auto-generated test dispatcher: binary takes function name as argv[1].
-# Returns the test function's return value.
-func test_run(name: string): u64 {
-    print("  TEST: {name} ... ")
-    return 0
+# Assert that condition is true. Prints PASS or FAIL. Exits with code 1 on failure.
+func assertTrue(condition: bool, message: string) {
+    if !condition {
+        print("  FAIL: {message}\n")
+        exit(1)
+    }
+    print("  PASS: {message}\n")
 }

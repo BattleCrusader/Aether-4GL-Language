@@ -1645,6 +1645,21 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     }
                     break;
                 }
+
+                /* Built-in: exit(code) — emit exit syscall inline */
+                if (strcmp(fn_name, "exit") == 0 && node->data.call.args.count >= 1) {
+                    AstNode *arg = node->data.call.args.items[0];
+                    cg_comment(cg, "exit() built-in");
+                    cg_expr(cg, arg, slots);
+                    cg_inst1(cg, "mov", "rdi, rax");
+                    if (cg->target == TARGET_MACHO64) {
+                        cg_inst1(cg, "mov", "rax, 0x2000001");
+                    } else {
+                        cg_inst1(cg, "mov", "rax, 60");
+                    }
+                    cg_inst(cg, "syscall");
+                    break;
+                }
             }
 
             /* Check for enum construction: EnumName::Variant(args) */

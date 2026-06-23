@@ -1,12 +1,10 @@
 # test_std_test.ae — verify std/test.ae works
 import "std/test"
 
-@test(expect=0)
-func main(): u64 {
-    if assert_eq(2 + 3, 5, "2 + 3 should be 5") != 0 { return 1 }
-    if assert_eq(10 - 4, 6, "10 - 4 should be 6") != 0 { return 1 }
-    if assert(true, "true should be true") != 0 { return 1 }
-    if assert_eq(3 * 4, 12, "3 * 4 should be 12") != 0 { return 1 }
-    print("All tests passed.\n")
-    return 0
+@test
+func main() {
+    assertEquals(2 + 3, 5, "2 + 3 should be 5")
+    assertEquals(10 - 4, 6, "10 - 4 should be 6")
+    assertTrue(true, "true should be true")
+    assertEquals(3 * 4, 12, "3 * 4 should be 12")
 }
