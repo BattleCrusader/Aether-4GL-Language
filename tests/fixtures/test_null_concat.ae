@@ -1,5 +1,5 @@
 # test_null_concat.ae — test that string concat handles null pointers
-@test(expect=0)
+@test
 func main(): u64 {
     # Test 1: concat with null (no args passed = null string)
     print("hello \n")

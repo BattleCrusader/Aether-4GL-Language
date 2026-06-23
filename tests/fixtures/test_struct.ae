@@ -4,7 +4,7 @@ struct Point {
     y: int
 }
 
-@test(expect=0)
+@test
 func main(): int {
     let p: Point
     # Can't construct struct literals yet, but struct types compile

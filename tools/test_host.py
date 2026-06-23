@@ -5,7 +5,7 @@ For each .ae fixture:
   1. Compile with `aether --target host`
   2. If @test is on func main → run binary, check exit code
   3. If @test is on other functions (no main) → run binary with each
-     func name as argv[1], check exit code against @test(expect=N)
+     func name as argv[1], check exit code against @test(expect=N) or 0
 
 Usage: python3 tools/test_host.py <aether_binary> <fixture1.ae> [fixture2.ae ...]
 """
@@ -16,16 +16,18 @@ import re
 import sys
 
 def extract_tests(filepath):
-    """Extract @test(expect=N) annotations paired with their func names."""
+    """Extract @test annotations paired with their func names.
+    Supports @test(expect=N) and bare @test (expect=0)."""
     with open(filepath, 'r') as f:
         lines = f.readlines()
 
     tests = []
     for i, line in enumerate(lines):
-        m = re.search(r'@test\(expect=(\d+)\)', line)
+        # Match @test(expect=N) or bare @test
+        m = re.search(r'@test(?:\(expect=(\d+)\))?', line)
         if not m:
             continue
-        expect = int(m.group(1))
+        expect = int(m.group(1)) if m.group(1) else 0
         # Look for the func line (could be same line or next non-empty line)
         func_name = None
         # Check if func is on the same line

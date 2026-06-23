@@ -592,5 +592,10 @@ void semantic_analyze(SemanticAnalyzer *sa, AstNode *program) {
     sa->builtin_print = print_decl;
     scope_declare(sa, "print", print_decl);
 
+    AstNode *exit_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
+    memset(exit_decl, 0, sizeof(AstNode));
+    exit_decl->type = NODE_FUNC_DECL;
+    scope_declare(sa, "exit", exit_decl);
+
     semantic_visit_node(sa, program);
 }

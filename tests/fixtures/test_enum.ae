@@ -4,7 +4,7 @@ enum Option {
     None
 }
 
-@test(expect=0)
+@test
 func main(): int {
     let x: Option = Option::Some(42)
     let y: Option = Option::None

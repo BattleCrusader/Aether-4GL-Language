@@ -23,6 +23,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <unistd.h>   /* for close, mkstemp, unlink */
 #include <errno.h>
 
 static void usage(const char *prog) {
@@ -52,6 +53,7 @@ static void usage(const char *prog) {
     fprintf(stderr, "    asm-riscv64            Emit RISC-V assembly listing\n");
     fprintf(stderr, "    universal              Universal binary (x86_64 + ARM64)\n");
     fprintf(stderr, "    universal-all           Universal binary (all architectures)\n");
+    fprintf(stderr, "    lib                    .aelib library archive\n");
     fprintf(stderr, "  -L, --linker-script <f>  Custom linker script\n");
     fprintf(stderr, "  -S                       Stop after assembly (emit .asm)\n");
     fprintf(stderr, "  -O0                      No optimization (fastest compile)\n");
@@ -235,6 +237,7 @@ static int parse_target_name(const char *t) {
     if (strcmp(t, "asm-riscv64") == 0)         return (int)TARGET_ASM_RISCV64;
     if (strcmp(t, "universal") == 0)           return (int)TARGET_UNIVERSAL;
     if (strcmp(t, "universal-all") == 0)       return (int)TARGET_UNIVERSAL_ALL;
+    if (strcmp(t, "lib") == 0)                 return (int)TARGET_LIB;
     /* Parse "universal-x86_64-arm64" style explicit arch lists */
     if (strncmp(t, "universal-", 10) == 0)     return (int)TARGET_UNIVERSAL;
     return -1;
@@ -891,6 +894,22 @@ int main(int argc, char **argv) {
             } else {
                 output_file = "/tmp/kernel/aether.out";
             }
+        } else if (target == TARGET_LIB) {
+            /* Default .aelib output: same name as input with .aelib extension */
+            const char *fname = strrchr(input_file, '/');
+            fname = fname ? fname + 1 : input_file;
+            const char *dot = strrchr(fname, '.');
+            if (dot && strcmp(dot, ".ae") == 0) {
+                size_t base_len = (size_t)(dot - fname);
+                char buf[1024];
+                int n = snprintf(buf, sizeof(buf), "%.*s.aelib", (int)base_len, fname);
+                if (n > 0 && n < (int)sizeof(buf)) {
+                    output_file = (const char *)malloc((size_t)n + 1);
+                    if (output_file) memcpy((char *)output_file, buf, (size_t)n + 1);
+                }
+            } else {
+                output_file = "lib.aelib";
+            }
         } else {
             output_file = "a.out";
         }
@@ -974,6 +993,11 @@ int main(int argc, char **argv) {
     }
 
     /* Phase 2.5: Resolve imports — read imported files and merge their declarations */
+    /* Save .aelib import paths for linking (must persist until after codegen) */
+    char **aelib_import_paths = NULL;
+    int aelib_import_count = 0;
+    int aelib_import_cap = 0;
+
     {
         /* Build a set of already-imported paths to avoid cycles */
         char **imported_paths = NULL;
@@ -1026,72 +1050,257 @@ int main(int argc, char **argv) {
 
             if (verbose) printf("Resolving import: %s\n", import_path);
 
-            /* Read the imported file */
-            FILE *ifile = fopen(import_path, "rb");
+            /* Try .ae first, then .aelib */
+            char ae_path[1024], aelib_path[1024];
+            bool is_aelib = false;
+            snprintf(ae_path, sizeof(ae_path), "%s", import_path);
+            snprintf(aelib_path, sizeof(aelib_path), "%s", import_path);
+
+            /* If path doesn't have an extension, try .ae then .aelib */
+            const char *dot = strrchr(import_path, '.');
+            if (!dot || (strcmp(dot, ".ae") != 0 && strcmp(dot, ".aelib") != 0)) {
+                /* No recognized extension — try .ae first */
+                size_t base_len = strlen(import_path);
+                snprintf(ae_path, sizeof(ae_path), "%.*s.ae", (int)base_len, import_path);
+                snprintf(aelib_path, sizeof(aelib_path), "%.*s.aelib", (int)base_len, import_path);
+            } else if (strcmp(dot, ".aelib") == 0) {
+                is_aelib = true;
+            }
+
+            /* Try to open the file */
+            FILE *ifile = NULL;
+            char *resolved_path = NULL;
+            char std_resolved[1024]; /* persistent buffer for std path resolution */
+
+            if (!is_aelib) {
+                ifile = fopen(ae_path, "rb");
+                if (ifile) resolved_path = ae_path;
+            }
+
             if (!ifile) {
-                fprintf(stderr, "Error: cannot open import '%s'\n", import_path);
+                ifile = fopen(aelib_path, "rb");
+                if (ifile) {
+                    resolved_path = aelib_path;
+                    is_aelib = true;
+                }
+            }
+
+            if (!ifile) {
+                /* Try the import path directly (it may already be a valid path
+                 * like "std/test.ae" relative to CWD) */
+                char sp_ae[1024], sp_aelib[1024];
+                snprintf(sp_ae, sizeof(sp_ae), "%.*s.ae", (int)path_len, path_start);
+                snprintf(sp_aelib, sizeof(sp_aelib), "%.*s.aelib", (int)path_len, path_start);
+                if (verbose) printf("  std fallback: trying '%s' and '%s'\n", sp_ae, sp_aelib);
+                if (!is_aelib) {
+                    ifile = fopen(sp_ae, "rb");
+                    if (ifile) { snprintf(std_resolved, sizeof(std_resolved), "%s", sp_ae); resolved_path = std_resolved; }
+                }
+                if (!ifile) {
+                    ifile = fopen(sp_aelib, "rb");
+                    if (ifile) { snprintf(std_resolved, sizeof(std_resolved), "%s", sp_aelib); resolved_path = std_resolved; is_aelib = true; }
+                }
+            }
+
+            if (!ifile) {
+                fprintf(stderr, "Error: cannot open import '%s' (tried .ae, .aelib, and std paths)\n", import_path);
                 return 1;
             }
-            fseek(ifile, 0, SEEK_END);
-            long ilen = ftell(ifile);
-            fseek(ifile, 0, SEEK_SET);
-            char *isrc = (char *)malloc((size_t)ilen + 1);
-            if (!isrc) { fclose(ifile); return 1; }
-            size_t rlen = fread(isrc, 1, (size_t)ilen, ifile);
-            isrc[rlen] = '\0';
-            fclose(ifile);
 
-            /* Parse the imported file using the main parser's arena so nodes persist */
-            Parser *iparser = parser_create_with_arena(isrc, rlen, import_path, parser->arena);
-            AstNode *iprog = parser_parse(iparser);
-            if (iparser->error_count > 0) {
-                fprintf(stderr, "Import '%s' has %d parse errors\n", import_path, iparser->error_count);
+            if (is_aelib) {
+                /* ── .aelib import: create synthetic extern declarations ── */
+                if (verbose) printf("Import is .aelib: %s\n", resolved_path);
+
+                /* Read raw symbol table from the file directly */
+                fseek(ifile, 0, SEEK_SET);
+                uint8_t hdr_buf[46];
+                size_t meta_off = 0, meta_sz = 0;
+                if (fread(hdr_buf, 1, 46, ifile) == 46) {
+                    meta_off = (size_t)((uint64_t)hdr_buf[30] | ((uint64_t)hdr_buf[31] << 8) |
+                        ((uint64_t)hdr_buf[32] << 16) | ((uint64_t)hdr_buf[33] << 24) |
+                        ((uint64_t)hdr_buf[34] << 32) | ((uint64_t)hdr_buf[35] << 40) |
+                        ((uint64_t)hdr_buf[36] << 48) | ((uint64_t)hdr_buf[37] << 56));
+                    meta_sz = (size_t)((uint64_t)hdr_buf[38] | ((uint64_t)hdr_buf[39] << 8) |
+                        ((uint64_t)hdr_buf[40] << 16) | ((uint64_t)hdr_buf[41] << 24) |
+                        ((uint64_t)hdr_buf[42] << 32) | ((uint64_t)hdr_buf[43] << 40) |
+                        ((uint64_t)hdr_buf[44] << 48) | ((uint64_t)hdr_buf[45] << 56));
+                }
+                fclose(ifile);
+
+                int new_decls = 0;
+                uint8_t *meta = NULL; /* keep alive for StringView references */
+                if (meta_off > 0 && meta_sz > 0) {
+                    /* Read metadata section */
+                    FILE *mf = fopen(resolved_path, "rb");
+                    if (mf) {
+                        fseek(mf, (long)meta_off, SEEK_SET);
+                        meta = (uint8_t *)malloc(meta_sz);
+                        if (meta && fread(meta, 1, meta_sz, mf) == meta_sz) {
+                            /* Parse symbol count (at offset 10 in meta header) */
+                            uint32_t sc = (uint32_t)meta[10] | ((uint32_t)meta[11] << 8) |
+                                          ((uint32_t)meta[12] << 16) | ((uint32_t)meta[13] << 24);
+                            for (uint32_t si = 0; si < sc; si++) {
+                                size_t entry_off = 14 + (size_t)si * 18;
+                                uint32_t name_off = (uint32_t)meta[entry_off] | ((uint32_t)meta[entry_off+1] << 8) |
+                                    ((uint32_t)meta[entry_off+2] << 16) | ((uint32_t)meta[entry_off+3] << 24);
+                                uint8_t kind = meta[entry_off + 4];
+                                uint8_t flags = meta[entry_off + 5];
+                                uint32_t td_off2 = (uint32_t)meta[entry_off+10] | ((uint32_t)meta[entry_off+11] << 8) |
+                                    ((uint32_t)meta[entry_off+12] << 16) | ((uint32_t)meta[entry_off+13] << 24);
+                                uint32_t td_sz2 = (uint32_t)meta[entry_off+14] | ((uint32_t)meta[entry_off+15] << 8) |
+                                    ((uint32_t)meta[entry_off+16] << 16) | ((uint32_t)meta[entry_off+17] << 24);
+
+                                /* Resolve name (absolute offset within metadata) */
+                                const char *name_ptr = (const char *)meta + name_off;
+                                size_t name_len = strlen(name_ptr);
+
+                                if (verbose) printf("  .aelib symbol: '%s' kind=%d pub=%d\n",
+                                    name_ptr, kind, (flags & 1));
+
+                                /* Create synthetic extern function declaration */
+                                Location loc = {0};
+                                StringView sv = {name_ptr, name_len};
+                                AstNode *ident = node_ident(parser->arena, loc, sv);
+                                AstNode *func = node_func_decl(parser->arena, loc, ident,
+                                    (flags & 1) != 0, false);
+                                func->data.func.body = NULL; /* extern */
+
+                                /* Parse type data to get return type and params */
+                                if (td_sz2 > 0 && kind == 0) { /* function */
+                                    const uint8_t *td = meta + td_off2;
+                                    size_t tp = 0;
+                                    /* Return type name (null-terminated) */
+                                    const char *ret_name = (const char *)td;
+                                    size_t ret_len = strlen(ret_name);
+                                    StringView ret_sv = {ret_name, ret_len};
+                                    func->data.func.return_type = node_type_named(parser->arena, loc, ret_sv);
+                                    tp += ret_len + 1; /* skip return type + null */
+
+                                    if (tp < td_sz2) {
+                                        uint8_t pc = td[tp++];
+                                        for (int pi = 0; pi < (int)pc && tp < td_sz2; pi++) {
+                                            /* param name */
+                                            const char *pn = (const char *)td + tp;
+                                            while (tp < td_sz2 && td[tp] != 0) tp++;
+                                            tp++; /* skip null */
+                                            /* param type */
+                                            const char *pt = (const char *)td + tp;
+                                            while (tp < td_sz2 && td[tp] != 0) tp++;
+                                            tp++; /* skip null */
+                                            /* is_mut */
+                                            if (tp < td_sz2) tp++;
+
+                                            StringView pn_sv = {pn, strlen(pn)};
+                                            StringView pt_sv = {pt, strlen(pt)};
+                                            AstNode *pname = node_ident(parser->arena, loc, pn_sv);
+                                            AstNode *ptype = node_type_named(parser->arena, loc, pt_sv);
+                                            AstNode *param = node_param(parser->arena, loc, pname, ptype, false, false);
+                                            node_list_append(&func->data.func.params, param);
+                                        }
+                                    }
+                                }
+
+                                /* Add to program */
+                                int new_count = program->data.list.count + 1;
+                                AstNode **new_items = (AstNode **)malloc(new_count * sizeof(AstNode *));
+                                if (new_items) {
+                                    for (int k = 0; k < program->data.list.count; k++)
+                                        new_items[k] = program->data.list.items[k];
+                                    new_items[program->data.list.count] = func;
+                                    program->data.list.items = new_items;
+                                    program->data.list.count = new_count;
+                                    program->data.list.cap = new_count;
+                                }
+                                new_decls++;
+                            }
+                        }
+                        fclose(mf);
+                    }
+                }
+                /* NOTE: meta is intentionally NOT freed here — StringView fields
+                 * in the synthetic AST nodes point into it. It will be freed
+                 * at the end of main() alongside the source buffer. */
+
+                /* Track the .aelib path for linking */
+                if (imported_count >= imported_cap) {
+                    int nc = imported_cap ? imported_cap * 2 : 8;
+                    char **na = (char **)realloc(imported_paths, nc * sizeof(char *));
+                    if (!na) { fprintf(stderr, "Error: out of memory\n"); return 1; }
+                    imported_paths = na;
+                    imported_cap = nc;
+                }
+                imported_paths[imported_count] = strdup(resolved_path);
+                imported_count++;
+
+                /* Save .aelib path for linking (persistent list) */
+                if (aelib_import_count >= aelib_import_cap) {
+                    int nc = aelib_import_cap ? aelib_import_cap * 2 : 8;
+                    char **na = (char **)realloc(aelib_import_paths, nc * sizeof(char *));
+                    if (!na) { fprintf(stderr, "Error: out of memory\n"); return 1; }
+                    aelib_import_paths = na;
+                    aelib_import_cap = nc;
+                }
+                aelib_import_paths[aelib_import_count++] = strdup(resolved_path);
+
+                /* Remove the import node */
+                for (int k = i; k < program->data.list.count - 1; k++)
+                    program->data.list.items[k] = program->data.list.items[k + 1];
+                program->data.list.count--;
+                i--;
+
+                if (verbose) printf("Import resolved: %s (%d synthetic decls, program now has %d decls)\n",
+                    resolved_path, new_decls, program->data.list.count);
+
+            } else {
+                /* ── .ae source import (existing behavior) ── */
+                fseek(ifile, 0, SEEK_END);
+                long ilen = ftell(ifile);
+                fseek(ifile, 0, SEEK_SET);
+                char *isrc = (char *)malloc((size_t)ilen + 1);
+                if (!isrc) { fclose(ifile); return 1; }
+                size_t rlen = fread(isrc, 1, (size_t)ilen, ifile);
+                isrc[rlen] = '\0';
+                fclose(ifile);
+
+                /* Parse the imported file using the main parser's arena so nodes persist */
+                Parser *iparser = parser_create_with_arena(isrc, rlen, resolved_path, parser->arena);
+                AstNode *iprog = parser_parse(iparser);
+                if (iparser->error_count > 0) {
+                    fprintf(stderr, "Import '%s' has %d parse errors\n", resolved_path, iparser->error_count);
+                    iparser->arena = NULL;
+                    parser_destroy(iparser);
+                    free(isrc);
+                    return 1;
+                }
+
+                /* Append imported decls to end, then remove the import node */
+                int new_count = program->data.list.count + iprog->data.list.count;
+                AstNode **new_items = (AstNode **)malloc(new_count * sizeof(AstNode *));
+                if (!new_items) { fprintf(stderr, "Error: out of memory\n"); return 1; }
+                for (int k = 0; k < program->data.list.count; k++)
+                    new_items[k] = program->data.list.items[k];
+                int write_idx = program->data.list.count;
+                for (int j = 0; j < iprog->data.list.count; j++) {
+                    AstNode *idecl = iprog->data.list.items[j];
+                    if (idecl->type == NODE_IMPORT) continue;
+                    new_items[write_idx++] = idecl;
+                }
+                program->data.list.items = new_items;
+                program->data.list.count = write_idx;
+                program->data.list.cap = new_count;
+
+                /* Remove the import node */
+                for (int k = i; k < program->data.list.count - 1; k++)
+                    program->data.list.items[k] = program->data.list.items[k + 1];
+                program->data.list.count--;
+                i--;
+
                 iparser->arena = NULL;
                 parser_destroy(iparser);
-                free(isrc);
-                return 1;
-            }
 
-            /* Append imported decls to end, then remove the import node */
-            /* Note: can't use node_list_append here because the list's items array
-               was allocated by the arena (bump allocator), and realloc on arena memory is UB.
-               Instead, manually grow with malloc. */
-            int new_count = program->data.list.count + iprog->data.list.count;
-            AstNode **new_items = (AstNode **)malloc(new_count * sizeof(AstNode *));
-            if (!new_items) { fprintf(stderr, "Error: out of memory\n"); return 1; }
-            /* Copy existing items */
-            for (int k = 0; k < program->data.list.count; k++) {
-                new_items[k] = program->data.list.items[k];
+                if (verbose) printf("Import resolved: %s (program now has %d decls)\n",
+                    resolved_path, program->data.list.count);
             }
-            /* Append imported decls */
-            int write_idx = program->data.list.count;
-            for (int j = 0; j < iprog->data.list.count; j++) {
-                AstNode *idecl = iprog->data.list.items[j];
-                if (idecl->type == NODE_IMPORT) continue;
-                new_items[write_idx++] = idecl;
-            }
-            /* Free old items if they were malloc'd (not arena) */
-            /* Don't free arena-allocated memory — it's a bump allocator */
-            /* if (program->data.list.items) free(program->data.list.items); */
-            program->data.list.items = new_items;
-            program->data.list.count = write_idx;
-            program->data.list.cap = new_count;
-
-            /* Remove the import node by shifting everything after it left */
-            for (int k = i; k < program->data.list.count - 1; k++) {
-                program->data.list.items[k] = program->data.list.items[k + 1];
-            }
-            program->data.list.count--;
-            i--;  /* re-check this index */
-
-            iparser->arena = NULL;
-            parser_destroy(iparser);
-            /* Keep isrc alive — StringView fields in imported AST nodes point into it.
-               It will be freed when the main source is freed at the end of main(). */
-            /* free(isrc); */
-
-            if (verbose) printf("Import resolved: %s (program now has %d decls)\n",
-                import_path, program->data.list.count);
         }
 
         for (int i = 0; i < imported_count; i++) free(imported_paths[i]);
@@ -1153,16 +1362,55 @@ int main(int argc, char **argv) {
     Codegen *cg = codegen_create(cg_arena);
     codegen_set_target(cg, target);
     cg->linker_script = linker_script;
+    cg->aelib_output = output_file;
     codegen_generate(cg, program);
+
+    /* Register any imported .aelib paths for linking */
+    for (int i = 0; i < aelib_import_count; i++) {
+        codegen_add_aelib_import(cg, aelib_import_paths[i]);
+    }
 
     if (verbose) {
         printf("Target: %s\n", target_name(cg->target));
     }
 
+    /* For --target lib: extract metadata from AST */
+    if (target == TARGET_LIB) {
+        if (codegen_extract_metadata(cg, program) != 0) {
+            fprintf(stderr, "Metadata extraction failed\n");
+            parser_destroy(parser);
+            free(source);
+            arena_destroy(sa_arena);
+            arena_destroy(cg_arena);
+            return 1;
+        }
+        if (verbose) printf("Metadata extracted for .aelib library\n");
+    }
+
     /* Determine output filenames */
     char asm_file[1024];
+    char temp_asm_buf[256]; /* for TARGET_LIB only */
 
-    if (stop_after_asm) {
+    bool is_lib_target = (target == TARGET_LIB);
+
+    if (is_lib_target) {
+        /* For library target, write assembly to a temp path, output to .aelib */
+        snprintf(temp_asm_buf, sizeof(temp_asm_buf), "/tmp/kernel/aether_lib_XXXXXX");
+        int fd = mkstemp(temp_asm_buf);
+        if (fd < 0) {
+            fprintf(stderr, "Error: cannot create temp assembly file\n");
+            return 1;
+        }
+        close(fd);
+        /* mkstemp gives us /tmp/kernel/aether_lib_<rand>, add .asm suffix */
+        size_t len = strlen(temp_asm_buf);
+        if (len + 4 >= sizeof(temp_asm_buf)) {
+            fprintf(stderr, "Error: temp path too long\n");
+            return 1;
+        }
+        memcpy(temp_asm_buf + len, ".asm", 5);
+        snprintf(asm_file, sizeof(asm_file), "%s", temp_asm_buf);
+    } else if (stop_after_asm) {
         snprintf(asm_file, sizeof(asm_file), "%s", output_file);
     } else {
         /* Use /tmp/kernel/ for intermediate files */

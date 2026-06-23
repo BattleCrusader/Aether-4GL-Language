@@ -1,0 +1,7 @@
+# test_aelib_import.ae — import a .aelib library and call its functions
+import "lib_math"
+
+@test(expect=42)
+func main(): u64 {
+    return add(20, 22)
+}

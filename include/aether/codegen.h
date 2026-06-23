@@ -4,6 +4,7 @@
 #include "defs.h"
 #include "ast.h"
 #include "arena.h"
+#include "aelib.h"
 
 /*
  * Code Generator — walks the AST and emits NASM assembly text.
@@ -24,6 +25,7 @@ typedef enum {
     TARGET_ASM_RISCV64,    /* emit RISC-V assembly listing */
     TARGET_UNIVERSAL,      /* universal binary: x86_64 + ARM64 */
     TARGET_UNIVERSAL_ALL,  /* universal binary: all architectures */
+    TARGET_LIB,            /* .aelib library archive */
 } Target;
 
 typedef struct AutoDrop AutoDrop;
@@ -54,6 +56,13 @@ typedef struct {
     const char *linker_script;
     int cleanup_depth;       /* current scope cleanup depth for try/catch unwinding */
     SrcLocEntry *src_loc_list;  /* linked list of source location entries for segfault handler */
+    /* .aelib library generation */
+    AelibWriter *aelib_writer;  /* non-NULL when building --target lib */
+    const char *aelib_output;   /* output .aelib file path */
+    /* Imported .aelib paths for linking */
+    char **aelib_imports;
+    int aelib_import_count;
+    int aelib_import_cap;
 } Codegen;
 
 Codegen *codegen_create(Arena *a);
@@ -79,5 +88,14 @@ Target codegen_detect_host(void);
 
 /* Get human-readable target name */
 const char *target_name(Target t);
+
+/* Extract metadata from AST and populate the aelib writer.
+ * Called after codegen_generate() when target is TARGET_LIB.
+ * Returns 0 on success, nonzero on error. */
+int codegen_extract_metadata(Codegen *cg, AstNode *program);
+
+/* Register an imported .aelib path for linking.
+ * The path is copied internally. */
+void codegen_add_aelib_import(Codegen *cg, const char *path);
 
 #endif /* AETHER_CODEGEN_H */

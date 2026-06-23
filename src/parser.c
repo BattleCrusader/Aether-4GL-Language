@@ -202,7 +202,7 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                 } else if (strcmp(aname, "kernel_layout") == 0) {
                     func->data.func.is_kernel_layout = true;
                 } else if (strcmp(aname, "test") == 0) {
-                    func->data.func.has_test = last_attr->data.attr.has_test;
+                    func->data.func.has_test = true;
                     func->data.func.test_expect_int = last_attr->data.attr.test_expect_int;
                     func->data.func.test_expect_str = last_attr->data.attr.test_expect_str;
                 }

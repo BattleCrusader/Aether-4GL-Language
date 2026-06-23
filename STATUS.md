@@ -3,8 +3,9 @@
 > **Last updated**: 2026-06-24
 > **Current state**: 44/45 host-native tests passing. 15/16 tokenizer tests passing.
 > Compiler builds clean. All major language features through Phase 11 are
-> implemented and tested. Phase 17 (.aelib library format) designed but not yet implemented.
-> Test fixtures use `@test(expect=N)` function attributes (not comments).
+> implemented and tested. Phase 17 (.aelib library format) is implemented and
+> working end-to-end. Test fixtures use `@test` function attributes (bare or with `expect=N`).
+> Standard library provides `std/test.ae` with JUnit-style `assertEquals`/`assertTrue`.
 > STATUS.md is compiler-only — OS implementation phases live in the OS repo's STATUS.md.
 
 ---
@@ -246,9 +247,19 @@ Compiler language features for OS development. Not OS implementation — that's 
 - [ ] P16.03 — `#run` compile-time hardware detection and code emission (NODE_RUN_BLOCK in parser — parsing only)
 - [ ] P16.04 — Phase 16 Verification & Cleanup
 
-## Phase 17 — `.aelib` Library Format 🟡 DESIGNED, not implemented
+## Phase 17 — `.aelib` Library Format ✅ COMPLETE
 
 Closed-source library distribution without reverse engineering risk.
+
+- [x] P17.01 — Add `TARGET_LIB` to Target enum and CLI (`--target lib`)
+- [x] P17.02 — AelibWriter: write `.aelib` binary format (header, code section, metadata section)
+- [x] P17.03 — Metadata extraction from AST (function signatures, struct/class/enum layouts)
+- [x] P17.04 — Codegen for `--target lib` (assemble to .o, extract metadata, write .aelib)
+- [x] P17.05 — Import resolution for `.aelib` files (try .ae first, then .aelib)
+- [x] P17.06 — Synthetic AST nodes from metadata (extern function decls with params/return types)
+- [x] P17.07 — Linking `.o` from `.aelib` archives (extract .o, add to linker command)
+- [x] P17.08 — Test fixture: `lib_math.ae` → `.aelib` → import → compile → run (returns 42)
+- [x] P17.09 — Documentation and cleanup
 
 ---
 
@@ -290,17 +301,26 @@ Closed-source library distribution without reverse engineering risk.
 
 ## Recent Changes (2026-06-24)
 
-5. **Phase 17 `.aelib` library format designed** — Archive format containing compiled
-   code (`.o` files) + metadata section with type signatures, class layouts, export table.
-   Enables closed-source library distribution without reverse engineering risk. Import
-   syntax: `import "lib" : ClassName`. Build with `aether build --target lib`.
-   Implementation deferred to a new feature branch — docs only this commit.
-
-6. **STATUS.md scoped to compiler only** — Removed OS implementation phases
+1. **Phase 17 `.aelib` library format implemented** — Full end-to-end pipeline:
+   - `--target lib` produces `.aelib` archives with code + metadata
+   - `import "lib"` resolves `.aelib` files (tries `.ae` first, then `.aelib`)
+   - Synthetic extern function declarations created from metadata
+   - `.o` extracted from `.aelib` archives and linked into final binary
+   - Tested: `lib_math.ae` → `.aelib` → import → compile → run → returns 42
+2. **STATUS.md scoped to compiler only** — Removed OS implementation phases
    (Phase 12 OS Boot & Shell, Phase 14 OS Memory & Process Management). Renumbered
    remaining phases: Language Spec → 12, Concurrency → 13, Advanced OS Lang → 14,
    Goal-Oriented I/O → 15, Protocol → 16, .aelib → 17. OS issues now live in
    the OS repo's STATUS.md.
+3. **`std/test.ae` completed** — JUnit-style test framework with `assertEquals`/`assertTrue`.
+   Assertions print PASS/FAIL and call `exit(1)` on failure (like AssertionError).
+   No return chaining or if blocks needed in test functions.
+4. **`exit()` built-in** — Compiler emits exit syscall inline (macOS 0x2000001, Linux 60).
+   Registered in semantic analyzer so it resolves like `print()`.
+5. **`@test` without `expect=N`** — Bare `@test` works, defaults to `expect=0`.
+   All `@test(expect=0)` fixtures updated to bare `@test`.
+6. **Import resolution** — Fallback to try import path directly (e.g. `"std/test"` resolves
+   to `std/test.ae` relative to CWD) when file-relative resolution fails.
 
 7. **Auto-generated test dispatcher** — When `@test` functions exist but no `main()` is
    provided, the compiler emits a `main:` that takes the function name as argv[1],
@@ -333,13 +353,13 @@ Closed-source library distribution without reverse engineering risk.
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| src/aether.c | 1244 | CLI: build, run, init, fmt, asm, inspect, doc, aether.toml |
+| src/aether.c | 1454 | CLI: build, run, init, fmt, asm, inspect, doc, aether.toml, .aelib import |
 | src/tokenizer.c | 690 | 70+ token types, newline-aware, comment handling |
 | src/lexer.c | 90 | Lexer stream wrapper |
 | src/parser.c | 1861 | Recursive descent + Pratt parser, all declarations + statements |
 | src/ast.c | 590 | 65+ AST node types, node constructors |
 | src/semantic.c | 700 | Symbol resolution, type checking |
-| src/codegen.c | 3046 | NASM codegen: all statements, expressions, runtime, targets |
+| src/codegen.c | 3725 | NASM codegen: all statements, expressions, runtime, targets, .aelib metadata |
 | src/optimizer.c | 960 | Constant folding, DCE, inline (stub) |
 | src/asm_ir.c | 310 | Multi-target assembler IR (AsmIRBlock, AsmInstruction) |
 | src/asm_parser.c | 610 | ASM block parser (instructions, operands, directives) |
@@ -348,7 +368,8 @@ Closed-source library distribution without reverse engineering risk.
 | src/asm_backend_riscv64.c | 200 | RISC-V instruction mapping backend |
 | src/universal.c | 500 | Universal binary builder, CPUID trampolines |
 | src/segfault_helper.c | 160 | sigsetjmp/siglongjmp for host segfault handling |
-| include/aether/*.h | 15 files | All header definitions |
+| src/aelib.c | 510 | .aelib library format writer + reader (binary archive format) |
+| include/aether/*.h | 16 files | All header definitions |
 
 **Standard library** (std/*.ae): arch, asm, collections, elf, fs, io, math, mem, serial, str, test (11 files)
 
@@ -356,15 +377,14 @@ Closed-source library distribution without reverse engineering risk.
 
 ## Priority Queue (Next to Build)
 
-1. **Phase 17**: `.aelib` library format (DESIGNED, awaiting feature branch)
-2. **Phase 12**: Language specification & requirements (REQUIREMENTS.md + spec document)
-3. **Fix test_match**: Match statement compilation failure
-4. **Phase 9 remaining**: Escape analysis, devirtualization, loop unrolling, actionable errors
-5. **Phase 7**: Self-hosting — compiler compiles itself
-6. **Phase 13**: Concurrency & fibers (spawn, channels, mutex, scheduler)
-7. **Phase 14**: Advanced OS language features (bootchain, interrupt handlers, metadata)
-8. **Phase 15**: Goal-oriented I/O & query fusion
-9. **Phase 16**: Protocol generation & hardware configuration
+1. **Phase 12**: Language specification & requirements (REQUIREMENTS.md + spec document)
+2. **Fix test_match**: Match statement compilation failure
+3. **Phase 9 remaining**: Escape analysis, devirtualization, loop unrolling, actionable errors
+4. **Phase 7**: Self-hosting — compiler compiles itself
+5. **Phase 13**: Concurrency & fibers (spawn, channels, mutex, scheduler)
+6. **Phase 14**: Advanced OS language features (bootchain, interrupt handlers, metadata)
+7. **Phase 15**: Goal-oriented I/O & query fusion
+8. **Phase 16**: Protocol generation & hardware configuration
 
 ---
 

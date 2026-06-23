@@ -1,28 +1,26 @@
-# std/test.ae — Testing: assert, test runner stub
-# Freestanding standard library — stub implementations
+# std/test.ae — Testing: assert, test runner
+# Freestanding standard library for host-native tests
+#
+# A test case is just an assertEquals call:
+#   assertEquals(2 + 3, 5, "2 + 3 should be 5")
+#
+# If the assertion fails, the process exits immediately with code 1
+# (like JUnit throwing an AssertionError). If it passes, execution continues.
 
-func assert(condition: bool, message: string) {
-    asm {
-        ; assert condition, panic with message if false
-        nop
+# Assert that a == b. Prints PASS or FAIL. Exits with code 1 on failure.
+func assertEquals(a: u64, b: u64, message: string) {
+    if a != b {
+        print("  FAIL: {message} (got {a}, expected {b})\n")
+        exit(1)
     }
+    print("  PASS: {message}\n")
 }
 
-func assert_eq(a: u64, b: u64, message: string) {
-    asm {
-        ; assert a == b
-        nop
+# Assert that condition is true. Prints PASS or FAIL. Exits with code 1 on failure.
+func assertTrue(condition: bool, message: string) {
+    if !condition {
+        print("  FAIL: {message}\n")
+        exit(1)
     }
-}
-
-func test_run(name: string): u64 {
-    asm {
-        ; run a test function and report
-        xor rax, rax
-    }
-    return 0
-}
-
-func main(): u64 {
-    return 0
+    print("  PASS: {message}\n")
 }

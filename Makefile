@@ -37,7 +37,8 @@ CORE_SRCS = \
 	src/asm_backend_arm64.c \
 	src/asm_backend_riscv64.c \
 	src/universal.c \
-	src/optimizer.c
+	src/optimizer.c \
+	src/aelib.c
 
 # aether.o has main() — linked separately so test executables don't get duplicate main
 AETHER_MAIN_SRC = src/aether.c
@@ -142,7 +143,13 @@ TEST_FIXTURES = \
 	tests/fixtures/test_segfault.ae \
 	tests/fixtures/test_args.ae \
 	tests/fixtures/test_null_concat.ae \
-	tests/fixtures/test_logical_keywords.ae
+	tests/fixtures/test_logical_keywords.ae \
+	tests/fixtures/test_aelib_import.ae \
+	tests/fixtures/test_std_test.ae
+
+# .aelib library fixtures — must be built before test-host
+AELIB_FIXTURES = \
+	tests/fixtures/lib_math.ae
 
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \
@@ -158,6 +165,19 @@ NEW_TARGET_FIXTURES = \
 	tests/fixtures/test_boot_target.ae
 
 test-host: aether-cli
+	@echo "=== Building .aelib library fixtures ==="
+	@for fixture in $(AELIB_FIXTURES); do \
+		name=$$(basename $$fixture .ae); \
+		dir=$$(dirname $$fixture); \
+		printf "  BUILD: %s ... " $$name; \
+		./$(BUILD_DIR)/aether --target lib $$fixture -o $$dir/$$name.aelib 2>/dev/null >/dev/null; \
+		if [ $$? -eq 0 ]; then \
+			printf "OK\n"; \
+		else \
+			printf "FAIL\n"; \
+		fi; \
+	done
+	@echo ""
 	@echo "=== Host-Native Test Runner ==="
 	@echo ""
 	@python3 tools/test_host.py ./$(BUILD_DIR)/aether $(TEST_FIXTURES)
