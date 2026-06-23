@@ -12,19 +12,19 @@ struct File {
     fileDescriptor: u64
 }
 
-func fileOpen(self: ref File, path: string): u64 {
+func openFile(self: ref File, path: string): u64 {
     self.fileDescriptor = fsOpen(path.data, 0)
     return self.fileDescriptor
 }
 
-func fileRead(self: ref File, buffer: *u8, count: u64): u64 {
+func readFile(self: ref File, buffer: *u8, count: u64): u64 {
     return fsRead(self.fileDescriptor, buffer, count)
 }
 
-func fileWrite(self: ref File, buffer: *u8, count: u64): u64 {
+func writeFile(self: ref File, buffer: *u8, count: u64): u64 {
     return fsWrite(self.fileDescriptor, buffer, count)
 }
 
-func fileClose(self: ref File): u64 {
+func closeFile(self: ref File): u64 {
     return fsClose(self.fileDescriptor)
 }

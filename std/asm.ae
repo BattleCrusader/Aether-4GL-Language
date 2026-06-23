@@ -2,22 +2,22 @@
 # Only uses asm for things Aether cannot express: port I/O, CPU control, memory barriers.
 
 @force_inline
-func memoryFence() {
+func fenceMemory() {
     asm { mfence }
 }
 
 @force_inline
-func storeFence() {
+func fenceStore() {
     asm { sfence }
 }
 
 @force_inline
-func loadFence() {
+func fenceLoad() {
     asm { lfence }
 }
 
 @force_inline
-func portOutByte(portNumber: u16, value: u8) {
+func writePortByte(portNumber: u16, value: u8) {
     asm {
         mov dx, di
         mov al, sil
@@ -26,7 +26,7 @@ func portOutByte(portNumber: u16, value: u8) {
 }
 
 @force_inline
-func portInByte(portNumber: u16): u8 {
+func readPortByte(portNumber: u16): u8 {
     asm {
         mov dx, di
         in al, dx
@@ -34,12 +34,12 @@ func portInByte(portNumber: u16): u8 {
 }
 
 @force_inline
-func interruptsDisable() {
+func disableInterrupts() {
     asm { cli }
 }
 
 @force_inline
-func interruptsEnable() {
+func enableInterrupts() {
     asm { sti }
 }
 

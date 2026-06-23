@@ -3,7 +3,7 @@
 
 const com1Port = 0x3F8
 
-func serialInit(): bool {
+func initSerial(): bool {
     asm {
         mov dx, 0x3F8
         add dx, 1
@@ -36,7 +36,7 @@ func serialInit(): bool {
     }
 }
 
-func serialPutc(character: byte) {
+func writeSerialByte(character: byte) {
     asm {
         mov dx, 0x3F8
         add dx, 5
@@ -50,7 +50,7 @@ func serialPutc(character: byte) {
     }
 }
 
-func serialPuts(inputString: string) {
+func writeSerialString(inputString: string) {
     asm {
         mov rsi, rdi
     .loop:
@@ -71,7 +71,7 @@ func serialPuts(inputString: string) {
     }
 }
 
-func serialGetc(): byte {
+func readSerialByte(): byte {
     asm {
         mov dx, 0x3F8
         add dx, 5
