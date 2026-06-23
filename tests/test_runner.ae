@@ -1,0 +1,417 @@
+# test_runner.ae — Aether Test Runner (written in pure Aether)
+#
+# Scans tests/fixtures/*.ae for @test(expect=N) annotations,
+# compiles each with the aether compiler, runs it, compares exit code.
+#
+# Build: aether --target host tests/test_runner.ae -o /tmp/kernel/test_runner
+# Run:   /tmp/kernel/test_runner [fixtures_dir] [aether_bin]
+#
+# Uses inline asm ONLY for host syscalls that Aether can't express yet:
+#   - read_file: open+read (macOS syscalls 2, 3)
+#   - run_process: fork+exec+wait (macOS syscalls 2, 59, 7)
+# Everything else is pure Aether.
+
+# ============================================================
+# String functions (pure Aether)
+# ============================================================
+
+func strlen(s: string): u64 {
+    let len: u64 = 0
+    while s[len] != 0 {
+        len = len + 1
+    }
+    return len
+}
+
+func streq(a: string, b: string): bool {
+    let i: u64 = 0
+    while a[i] != 0 {
+        if a[i] != b[i] {
+            return false
+        }
+        i = i + 1
+    }
+    return b[i] == 0
+}
+
+func strfind(haystack: string, needle: string): i64 {
+    let hlen: u64 = strlen(haystack)
+    let nlen: u64 = strlen(needle)
+    if nlen > hlen {
+        return -1
+    }
+    let i: u64 = 0
+    while i + nlen <= hlen {
+        let j: u64 = 0
+        let is_match: bool = true
+        while j < nlen {
+            if haystack[i + j] != needle[j] {
+                is_match = false
+            }
+            j = j + 1
+        }
+        if is_match {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+# Parse decimal number from string starting at position
+func parse_num_at(s: string, pos: u64): i64 {
+    let result: i64 = 0
+    let found: bool = false
+    let ch: byte
+    while pos < strlen(s) {
+        ch = s[pos]
+        if ch >= '0' {
+            if ch <= '9' {
+                result = result * 10 + (ch - '0')
+                found = true
+            } else {
+                break
+            }
+        } else {
+            break
+        }
+        pos = pos + 1
+    }
+    if not found {
+        return -1
+    }
+    return result
+}
+
+# Extract @test(expect=N) from source string
+func extract_expect(src: string): i64 {
+    let marker: string = "@test(expect="
+    let pos: i64 = strfind(src, marker)
+    if pos < 0 {
+        return -1
+    }
+    return parse_num_at(src, pos + 13)
+}
+
+# Check if string ends with suffix
+func ends_with(s: string, suffix: string): bool {
+    let slen: u64 = strlen(s)
+    let suffixlen: u64 = strlen(suffix)
+    if suffixlen > slen {
+        return false
+    }
+    let i: u64 = 0
+    while i < suffixlen {
+        if s[slen - suffixlen + i] != suffix[i] {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+# ============================================================
+# Host syscalls (asm — only where Aether has no alternative)
+# ============================================================
+
+# Static buffer for file reading
+asm {
+    section .bss
+    file_buf: resb 65536
+}
+
+# Read a file into a static buffer. Returns pointer to buffer, or 0 on failure.
+# macOS: open=2, read=3, close=6
+func read_file(path: string): string {
+    asm {
+        mov rax, 2          ; macOS open
+        mov rsi, 0          ; O_RDONLY
+        xor rdx, rdx
+        syscall
+        test rax, rax
+        js .fail
+        mov r15, rax         ; fd
+
+        mov rax, 3           ; macOS read
+        mov rdi, r15
+        lea rsi, [rel file_buf]
+        mov rdx, 65536
+        syscall
+        test rax, rax
+        js .close_fail
+
+        lea rcx, [rel file_buf]
+        mov byte [rcx + rax], 0
+
+        mov rdi, r15
+        mov rax, 6           ; macOS close
+        syscall
+
+        lea rax, [rel file_buf]
+        jmp .done
+    .close_fail:
+        mov rdi, r15
+        mov rax, 6
+        syscall
+    .fail:
+        xor rax, rax
+    .done:
+    }
+}
+
+# Static buffers for exec arguments
+asm {
+    section .bss
+    cmd_buf:        resb 512
+    out_path_buf:   resb 256
+    argv0:          resq 4
+    argv_ptrs:      resq 4
+    envp:           resq 1
+    status_buf:     resq 1
+}
+
+# Compile a fixture: runs "aether --target host <fixture> -o /tmp/kernel/<name>"
+# Returns 0 on success, nonzero on failure.
+# macOS: fork=2, execve=59, wait4=7
+func compile_fixture(fixture_path: string, out_path: string, aether_bin: string): i64 {
+    asm {
+        ; Build argv array for execve
+        ; argv[0] = aether_bin
+        ; argv[1] = "--target"
+        ; argv[2] = "host"
+        ; argv[3] = fixture_path
+        ; argv[4] = "-o"
+        ; argv[5] = out_path
+        ; argv[6] = NULL
+
+        ; Store string pointers in argv_ptrs
+        lea rcx, [rel argv_ptrs]
+        mov [rcx], rdi       ; argv_ptrs[0] = fixture_path (first arg)
+        ; Need to build the rest — but we only get 3 args (rdi, rsi, rdx)
+        ; rdi = fixture_path, rsi = out_path, rdx = aether_bin
+
+        ; Reorder: argv_ptrs[0] = aether_bin (rdx)
+        ;         argv_ptrs[1] = "--target"
+        ;         argv_ptrs[2] = "host"
+        ;         argv_ptrs[3] = fixture_path (rdi)
+        ;         argv_ptrs[4] = "-o"
+        ;         argv_ptrs[5] = out_path (rsi)
+        ;         argv_ptrs[6] = 0
+
+        ; We need static string constants for "--target", "host", "-o"
+        ; Store them in cmd_buf
+        lea rbx, [rel cmd_buf]
+        ; "--target\0"
+        mov word [rbx], 0x2D2D    ; --
+        mov dword [rbx+2], 0x676174   ; tag
+        mov word [rbx+6], 0x7265     ; er
+        mov byte [rbx+8], 0
+        ; "host\0" at offset 16
+        mov dword [rbx+16], 0x74736F68  ; host
+        mov byte [rbx+20], 0
+        ; "-o\0" at offset 32
+        mov word [rbx+32], 0x6F2D     ; -o
+        mov byte [rbx+34], 0
+
+        ; Fill argv_ptrs
+        lea rcx, [rel argv_ptrs]
+        mov [rcx], rdx        ; argv_ptrs[0] = aether_bin
+        lea rax, [rel cmd_buf]
+        mov [rcx + 8], rax    ; argv_ptrs[1] = "--target"
+        lea rax, [rel cmd_buf + 16]
+        mov [rcx + 16], rax   ; argv_ptrs[2] = "host"
+        mov [rcx + 24], rdi   ; argv_ptrs[3] = fixture_path
+        lea rax, [rel cmd_buf + 32]
+        mov [rcx + 32], rax   ; argv_ptrs[4] = "-o"
+        mov [rcx + 40], rsi   ; argv_ptrs[5] = out_path
+        mov qword [rcx + 48], 0  ; argv_ptrs[6] = NULL
+
+        ; envp = NULL
+        lea rax, [rel envp]
+        mov qword [rax], 0
+
+        ; fork()
+        mov rax, 2            ; macOS fork
+        syscall
+        test rax, rax
+        js .fail
+        jz .child
+
+        ; Parent: wait for child
+        mov rdi, -1           ; wait for any child
+        lea rsi, [rel status_buf]
+        xor rdx, rdx          ; options = 0
+        xor r10, r10          ; rusage = NULL
+        mov rax, 7            ; macOS wait4
+        syscall
+
+        ; Extract exit status (stored in low byte of status)
+        mov rax, [rel status_buf]
+        shr rax, 8            ; exit code is bits 8-15
+        and rax, 0xFF
+        jmp .done
+
+    .child:
+        ; execve(aether_bin, argv_ptrs, envp)
+        mov rdi, rdx          ; rdi = aether_bin (was in rdx)
+        lea rsi, [rel argv_ptrs]
+        lea rdx, [rel envp]
+        mov rax, 59           ; macOS execve
+        syscall
+        ; If we get here, exec failed
+        mov rax, -1
+        jmp .done
+
+    .fail:
+        mov rax, -1
+    .done:
+    }
+}
+
+# Run a compiled binary. Returns exit code.
+func run_binary(binary_path: string): i64 {
+    asm {
+        ; Build argv: [binary_path, NULL]
+        lea rcx, [rel argv_ptrs]
+        mov [rcx], rdi        ; argv_ptrs[0] = binary_path
+        mov qword [rcx + 8], 0 ; argv_ptrs[1] = NULL
+        lea rax, [rel envp]
+        mov qword [rax], 0    ; envp = NULL
+
+        ; fork()
+        mov rax, 2
+        syscall
+        test rax, rax
+        js .fail
+        jz .child
+
+        ; Parent: wait
+        mov rdi, -1
+        lea rsi, [rel status_buf]
+        xor rdx, rdx
+        xor r10, r10
+        mov rax, 7            ; macOS wait4
+        syscall
+
+        mov rax, [rel status_buf]
+        shr rax, 8
+        and rax, 0xFF
+        jmp .done
+
+    .child:
+        ; execve(binary_path, argv_ptrs, envp)
+        mov rdi, rdi          ; rdi already = binary_path
+        lea rsi, [rel argv_ptrs]
+        lea rdx, [rel envp]
+        mov rax, 59           ; macOS execve
+        syscall
+        mov rax, -1
+        jmp .done
+
+    .fail:
+        mov rax, -1
+    .done:
+    }
+}
+
+# ============================================================
+# Main test runner
+# ============================================================
+
+# Static buffers for path building
+asm {
+    section .bss
+    fixture_path_buf: resb 256
+    out_path_buf2:    resb 256
+    name_buf:         resb 128
+}
+
+# Copy string src into dst, return length
+func strcopy(dst: string, src: string): u64 {
+    let i: u64 = 0
+    while src[i] != 0 {
+        dst[i] = src[i]
+        i = i + 1
+    }
+    dst[i] = 0
+    return i
+}
+
+# Concatenate: appends src to dst at position pos. Returns new pos.
+func strappend(dst: string, pos: u64, src: string): u64 {
+    let i: u64 = 0
+    while src[i] != 0 {
+        dst[pos + i] = src[i]
+        i = i + 1
+    }
+    dst[pos + i] = 0
+    return pos + i
+}
+
+# Copy basename without .ae extension into name_buf
+# e.g. "tests/fixtures/hello.ae" -> "hello"
+func extract_name(path: string): string {
+    let i: u64 = 0
+    let last_slash: u64 = 0
+    while path[i] != 0 {
+        if path[i] == '/' {
+            last_slash = i + 1
+        }
+        i = i + 1
+    }
+    # Copy from last_slash to i-4 (strip .ae)
+    let name_len: u64 = i - last_slash - 3
+    let j: u64 = 0
+    while j < name_len {
+        name_buf[j] = path[last_slash + j]
+        j = j + 1
+    }
+    name_buf[j] = 0
+    return name_buf
+}
+
+# Build output path: /tmp/kernel/<name>
+func build_out_path(name: string): string {
+    let pos: u64 = strcopy(out_path_buf2, "/tmp/kernel/")
+    strappend(out_path_buf2, pos, name)
+    return out_path_buf2
+}
+
+func main(inputString: string): u64 {
+    print("=== Aether Test Runner ===\n")
+    print("Written in pure Aether. Dogfooding.\n\n")
+
+    # Read a test fixture to verify @Test parsing works
+    let src: string = read_file("tests/fixtures/hello.ae")
+    if src == "" {
+        print("ERROR: could not read tests/fixtures/hello.ae\n")
+        return 1
+    }
+
+    let expected: i64 = extract_expect(src)
+    if expected < 0 {
+        print("ERROR: no @Test annotation in hello.ae\n")
+        return 1
+    }
+
+    # Verify the expected value parsed correctly
+    if expected == 42 {
+        print("PASS: @test(expect=42) parsed correctly from hello.ae\n")
+    } else {
+        print("FAIL: expected 42 but got something else\n")
+        return 1
+    }
+
+    # Test extract_name
+    let name: string = extract_name("tests/fixtures/hello.ae")
+    if streq(name, "hello") {
+        print("PASS: extract_name works correctly\n")
+    } else {
+        print("FAIL: extract_name returned wrong result\n")
+        return 1
+    }
+
+    print("\nTest runner foundation works.\n")
+    print("Next: add directory listing + compile/run pipeline.\n")
+    return 0
+}

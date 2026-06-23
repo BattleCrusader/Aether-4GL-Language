@@ -1,5 +1,5 @@
 # test_interp_multi.ae — multiple interpolations in one string
-# @expected(42)
+@test(expect=42)
 func main(): u64 {
     let a = "hello"
     let b = "world"

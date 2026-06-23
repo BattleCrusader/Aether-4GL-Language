@@ -1,5 +1,5 @@
-# @expected(42)
 @entry(0x2000000)
+@test(expect=42)
 func main(): int {
     return 42
 }

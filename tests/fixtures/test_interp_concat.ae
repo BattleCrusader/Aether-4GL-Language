@@ -1,5 +1,5 @@
 # test_interp_concat.ae — interpolation combined with explicit concat
-# @expected(42)
+@test(expect=42)
 func main(): u64 {
     let name = "Aether"
     let msg = "Hello {name}" + "!!"

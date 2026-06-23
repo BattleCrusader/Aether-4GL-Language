@@ -1,10 +1,10 @@
 # test_throw.ae — throw and catch
-# @expected(42)
 func do_throw(): u64 throws {
     throw 99
     return 0
 }
 
+@test(expect=42)
 func main(): u64 {
     let mut result: u64 = 0
 

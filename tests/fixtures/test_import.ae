@@ -1,7 +1,7 @@
 # test_import.ae — test import functionality
-# @expected(42)
 import "test_lib.ae"
 
+@test(expect=42)
 func main(): u64 {
     return greet()
 }

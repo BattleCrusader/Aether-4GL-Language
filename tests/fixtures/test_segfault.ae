@@ -1,5 +1,5 @@
 # test_segfault.ae — catch a segfault with try/catch
-# @expected(42)
+@test(expect=42)
 func main(): u64 {
     let mut result: u64 = 0
 

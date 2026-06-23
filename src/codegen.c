@@ -997,9 +997,38 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                         cg_inst(cg, buf);
                     }
                     break;
-                /* Logical (short-circuit emulated) */
-                case BIN_AND: cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jz L_false"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
-                case BIN_OR:  cg_inst1(cg, "test", "rax, rax"); cg_inst(cg, "jnz L_true"); cg_inst1(cg, "test", "rcx, rcx"); cg_inst(cg, "setnz al"); cg_inst(cg, "movzx rax, al"); break;
+                /* Logical (short-circuit with unique labels) */
+                case BIN_AND: {
+                    int lbl_false = cg_new_label(cg);
+                    char lbl[32];
+                    cg_inst1(cg, "test", "rax, rax");
+                    snprintf(lbl, sizeof(lbl), "jz L_and_false_%d", lbl_false);
+                    cg_inst(cg, lbl);
+                    cg_inst1(cg, "test", "rcx, rcx");
+                    cg_inst(cg, "setnz al");
+                    cg_inst(cg, "movzx rax, al");
+                    snprintf(lbl, sizeof(lbl), "L_and_false_%d:", lbl_false);
+                    cg_write_fmt(cg, "%s\n", lbl);
+                    /* If left was false, rax is still 0 (correct — short-circuit) */
+                    break;
+                }
+                case BIN_OR: {
+                    int lbl_true = cg_new_label(cg);
+                    char lbl[32];
+                    cg_inst1(cg, "test", "rax, rax");
+                    snprintf(lbl, sizeof(lbl), "jnz L_or_true_%d", lbl_true);
+                    cg_inst(cg, lbl);
+                    cg_inst1(cg, "test", "rcx, rcx");
+                    cg_inst(cg, "setnz al");
+                    cg_inst(cg, "movzx rax, al");
+                    snprintf(lbl, sizeof(lbl), "L_or_true_%d:", lbl_true);
+                    cg_write_fmt(cg, "%s\n", lbl);
+                    /* If left was true, rax is still nonzero — normalize to 1 */
+                    cg_inst1(cg, "test", "rax, rax");
+                    cg_inst(cg, "setnz al");
+                    cg_inst(cg, "movzx rax, al");
+                    break;
+                }
                 case BIN_RANGE: cg_comment(cg, "range"); cg_inst1(cg, "mov", "rax, rcx"); break;
                 case BIN_CONCAT: {
                     cg_comment(cg, "string concat");
@@ -2116,6 +2145,132 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         } else if (node->type == NODE_ENUM_DECL) {
             build_enum_layout(cg->arena, node);
         }
+    }
+
+    /* Scan for @test functions and check if main() exists */
+    bool has_main = false;
+    int test_func_count = 0;
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *node = program->data.list.items[i];
+        if (node->type == NODE_FUNC_DECL) {
+            const char *fname = arena_strndup(cg->arena,
+                node->data.func.name->data.ident.name.data,
+                node->data.func.name->data.ident.name.len);
+            if (strcmp(fname, "main") == 0) {
+                has_main = true;
+            }
+            if (node->data.func.has_test) {
+                test_func_count++;
+            }
+        }
+    }
+
+    /* If @test functions exist but no main(), auto-generate a test dispatcher */
+    bool has_test_harness = false;
+    if (test_func_count > 0 && !has_main && !cg->has_layout) {
+        has_test_harness = true;
+        cg_comment(cg, "Auto-generated test dispatcher (no main() found, @test functions present)");
+        cg_comment(cg, "Usage: ./binary <test_func_name>  — calls the named @test function, returns its exit code");
+
+        /* Emit test name strings in .rodata */
+        cg_write(cg, "section .rodata\n");
+        for (int i = 0; i < program->data.list.count; i++) {
+            AstNode *node = program->data.list.items[i];
+            if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
+            const char *fname = arena_strndup(cg->arena,
+                node->data.func.name->data.ident.name.data,
+                node->data.func.name->data.ident.name.len);
+            cg_write_fmt(cg, "L_test_name_%d: db \"%s\", 0\n", i, fname);
+        }
+        cg_write(cg, "\n");
+
+        /* Emit main dispatcher in .text */
+        cg_write(cg, "section .text\n\n");
+
+        /* main: rdi = inputString (argv[1]), rsi = strlen */
+        cg_write(cg, "main:\n");
+        cg_inst1(cg, "push", "rbp");
+        cg_inst1(cg, "mov", "rbp, rsp");
+
+        /* If no argument (rdi=0), return -1 */
+        cg_inst(cg, "test rdi, rdi");
+        cg_inst(cg, "jz L_test_no_arg");
+
+        /* Save inputString ptr in r12 (callee-saved) */
+        cg_inst1(cg, "mov", "r12, rdi");
+
+        /* Try each @test function name */
+        int test_idx = 0;
+        for (int i = 0; i < program->data.list.count; i++) {
+            AstNode *node = program->data.list.items[i];
+            if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
+
+            const char *fname = arena_strndup(cg->arena,
+                node->data.func.name->data.ident.name.data,
+                node->data.func.name->data.ident.name.len);
+
+            cg_write_fmt(cg, "; Try: %s\n", fname);
+            cg_inst1(cg, "mov", "rsi, r12");        /* rsi = inputString */
+            cg_write_fmt(cg, "    lea rdi, [rel L_test_name_%d]\n", i);  /* rdi = test name */
+            cg_inst(cg, "call L_test_strcmp");
+            cg_inst(cg, "test rax, rax");
+            int lbl = cg_new_label(cg);
+            char jz_buf[32];
+            snprintf(jz_buf, sizeof(jz_buf), "jnz L_test_call_%d", lbl);
+            cg_inst(cg, jz_buf);
+            /* Not a match — try next */
+            char next_buf[32];
+            snprintf(next_buf, sizeof(next_buf), "jmp L_test_next_%d", lbl);
+            cg_inst(cg, next_buf);
+            /* Match — call the function with default args (0, 0) */
+            snprintf(jz_buf, sizeof(jz_buf), "L_test_call_%d:", lbl);
+            cg_write_fmt(cg, "%s\n", jz_buf);
+            cg_inst(cg, "xor rdi, rdi");
+            cg_inst(cg, "xor rsi, rsi");
+            cg_write_fmt(cg, "    call %s\n", fname);
+            cg_write(cg, "    leave\n");
+            cg_write(cg, "    ret\n");
+            snprintf(jz_buf, sizeof(jz_buf), "L_test_next_%d:", lbl);
+            cg_write_fmt(cg, "%s\n", jz_buf);
+            test_idx++;
+        }
+
+        /* No match found — return -1 */
+        cg_comment(cg, "no matching @test function found");
+        cg_inst(cg, "mov rax, -1");
+        cg_write(cg, "    leave\n");
+        cg_write(cg, "    ret\n");
+
+        /* No argument — return -1 */
+        cg_write(cg, "L_test_no_arg:\n");
+        cg_inst(cg, "mov rax, -1");
+        cg_write(cg, "    leave\n");
+        cg_write(cg, "    ret\n\n");
+
+        /* Simple strcmp: rdi=a, rsi=b, returns 1 if equal, 0 if not */
+        cg_write(cg, "L_test_strcmp:\n");
+        cg_inst1(cg, "push", "rbx");
+        cg_inst1(cg, "mov", "rbx, rdi");
+        cg_write(cg, "L_strcmp_loop:\n");
+        cg_inst(cg, "mov al, [rbx]");
+        cg_inst(cg, "mov dl, [rsi]");
+        cg_inst(cg, "test al, al");
+        cg_inst(cg, "jz L_strcmp_end_a");
+        cg_inst(cg, "cmp al, dl");
+        cg_inst(cg, "jne L_strcmp_neq");
+        cg_inst(cg, "inc rbx");
+        cg_inst(cg, "inc rsi");
+        cg_inst(cg, "jmp L_strcmp_loop");
+        cg_write(cg, "L_strcmp_end_a:\n");
+        cg_inst(cg, "test dl, dl");
+        cg_inst(cg, "jnz L_strcmp_neq");
+        cg_inst(cg, "mov rax, 1");
+        cg_inst(cg, "jmp L_strcmp_done");
+        cg_write(cg, "L_strcmp_neq:\n");
+        cg_inst(cg, "xor rax, rax");
+        cg_write(cg, "L_strcmp_done:\n");
+        cg_inst1(cg, "pop", "rbx");
+        cg_write(cg, "    ret\n\n");
     }
 
     /* First pass: scan for functions with @entry(addr), @layout, or @kernel_layout attributes */

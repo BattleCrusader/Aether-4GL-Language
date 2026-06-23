@@ -1,5 +1,5 @@
-# @expected(42)
 # test_trycatch_finally.ae — try/catch with finally block
+@test(expect=42)
 func main(): u64 {
     let mut result: u64 = 0
     let mut finally_ran: u64 = 0

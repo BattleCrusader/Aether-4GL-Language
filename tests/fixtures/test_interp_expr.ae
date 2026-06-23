@@ -1,5 +1,5 @@
 # test_interp_expr.ae — interpolation with numeric expressions
-# @expected(42)
+@test(expect=42)
 func main(): u64 {
     let x: u64 = 40
     let y: u64 = 2

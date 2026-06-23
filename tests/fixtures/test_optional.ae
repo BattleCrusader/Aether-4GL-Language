@@ -1,4 +1,4 @@
-# @expected(0)
+@test(expect=0)
 func main(): u64 {
     let x: u64? = none
     return 0

@@ -1,5 +1,5 @@
 # test_interp_print_num.ae — print() with numeric argument
-# @expected(42)
+@test(expect=42)
 func main(): u64 {
     let n: u64 = 42
     print(n)

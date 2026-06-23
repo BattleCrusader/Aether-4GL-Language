@@ -141,7 +141,8 @@ TEST_FIXTURES = \
 	tests/fixtures/test_asm_comment.ae \
 	tests/fixtures/test_segfault.ae \
 	tests/fixtures/test_args.ae \
-	tests/fixtures/test_null_concat.ae
+	tests/fixtures/test_null_concat.ae \
+	tests/fixtures/test_logical_keywords.ae
 
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \
@@ -159,33 +160,7 @@ NEW_TARGET_FIXTURES = \
 test-host: aether-cli
 	@echo "=== Host-Native Test Runner ==="
 	@echo ""
-	@total=0; pass=0; \
-	for fixture in $(TEST_FIXTURES); do \
-		total=$$((total + 1)); \
-		name=$$(basename $$fixture .ae); \
-		expected=$$(grep -o '@expected([0-9]*)' $$fixture | grep -o '[0-9]*'); \
-		if [ -z "$$expected" ]; then \
-			printf "  TEST: %s ... FAIL (no @expected annotation)\n" $$name; \
-			continue; \
-		fi; \
-		printf "  TEST: %s ... " $$name; \
-		./$(BUILD_DIR)/aether --target host $$fixture 2>/dev/null >/dev/null; \
-		if [ $$? -ne 0 ]; then \
-			printf "FAIL (compile)\n"; \
-			continue; \
-		fi; \
-		/tmp/kernel/$$name 2>/dev/null >/dev/null; \
-		got=$$?; \
-		if [ "$$got" = "$$expected" ]; then \
-			printf "PASS (exit %d)\n" $$got; \
-			pass=$$((pass + 1)); \
-		else \
-			printf "FAIL (expected %d, got %d)\n" $$expected $$got; \
-		fi; \
-	done; \
-	echo ""; \
-	echo "=== Results: $$pass/$$total passed, $$((total - pass)) failed ==="; \
-	[ $$pass -eq $$total ]
+	@python3 tools/test_host.py ./$(BUILD_DIR)/aether $(TEST_FIXTURES)
 
 test-layout: aether-cli
 	@echo "=== Layout (Flat Binary) Test Runner ==="

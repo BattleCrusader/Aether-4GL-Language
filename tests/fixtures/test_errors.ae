@@ -1,5 +1,4 @@
 # test_errors.ae — custom error types with enum variants and discriminant matching
-# @expected(42)
 enum MyError {
     NotFound
     PermissionDenied
@@ -11,6 +10,7 @@ func do_fail(): u64 throws {
     return 0
 }
 
+@test(expect=42)
 func main(): u64 {
     let mut result: u64 = 0
 

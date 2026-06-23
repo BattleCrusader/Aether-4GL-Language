@@ -1,5 +1,5 @@
 # test_closure.ae — lambda/closure parsing
-# @expected(42)
+@test(expect=42)
 func main(): u64 {
     let double = |x: int| x * 2
     return 42

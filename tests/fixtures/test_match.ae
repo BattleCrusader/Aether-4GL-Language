@@ -1,5 +1,5 @@
 # .ae — test match expression (single line)
-# @expected(30)
+@test(expect=30)
 func main(): int {
     let x = 2;
     match x {

@@ -1,5 +1,5 @@
 # test_interp_numeric.ae — numeric-to-string via + concat
-# @expected(42)
+@test(expect=42)
 func main(): u64 {
     let n: u64 = 42
     let msg = "value: " + n

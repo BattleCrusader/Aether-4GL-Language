@@ -1,9 +1,9 @@
 # test_monomorph.ae — generics monomorphization
-# @expected(42)
 func identity<T>(value: T): T {
     return value
 }
 
+@test(expect=42)
 func main(): u64 {
     let x = identity(42)
     return x

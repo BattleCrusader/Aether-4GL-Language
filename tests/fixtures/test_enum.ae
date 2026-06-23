@@ -1,10 +1,10 @@
 # test_enum.ae — test enum declaration, layout, and construction
-# @expected(0)
 enum Option {
     Some(int)
     None
 }
 
+@test(expect=0)
 func main(): int {
     let x: Option = Option::Some(42)
     let y: Option = Option::None

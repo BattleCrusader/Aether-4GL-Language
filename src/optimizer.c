@@ -466,7 +466,8 @@ static void dce_collect(AstNode *node, SymbolTable *st) {
             bool is_entry = (len == 4 && memcmp(name_buf, "main", 4) == 0) ||
                             node->data.func.is_exported ||
                             node->data.func.is_sys ||
-                            node->data.func.entry_addr >= 0;
+                            node->data.func.entry_addr >= 0 ||
+                            node->data.func.has_test;
             if (!is_entry) add_symbol(st, name_buf, node);
             if (node->data.func.body) dce_collect(node->data.func.body, st);
             break;
@@ -497,7 +498,8 @@ static void dce_collect(AstNode *node, SymbolTable *st) {
                     bool is_entry = (len == 4 && memcmp(name_buf, "main", 4) == 0) ||
                                     decl->data.func.is_exported ||
                                     decl->data.func.is_sys ||
-                                    decl->data.func.entry_addr >= 0;
+                                    decl->data.func.entry_addr >= 0 ||
+                                    decl->data.func.has_test;
                     if (!is_entry) add_symbol(st, name_buf, decl);
                 }
             }

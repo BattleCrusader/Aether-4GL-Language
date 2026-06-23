@@ -35,6 +35,7 @@
 26. [Advanced OS Integration](#26-advanced-os-integration)
 27. [Goal-Oriented I/O and Query Fusion](#27-goal-oriented-io-and-query-fusion)
 28. [Protocol Generation and Hardware Configuration](#28-protocol-generation-and-hardware-configuration)
+29. [Module System and Imports](#29-module-system-and-imports)
 
 ---
 
@@ -2273,6 +2274,120 @@ protocol I2C {
     }
 }
 ```
+
+---
+
+## 29. Module System and Imports
+
+### 29.1 File as Module
+
+Each `.ae` file is a module. The filename (without extension) is the module name.
+
+### 29.2 Source Imports (`.ae` files)
+
+```
+import "math.ae"
+import "io/file.ae"
+```
+
+Imports are resolved at compile time: the compiler reads the file, parses it with a shared arena, and merges declarations. Circular imports are detected. Two-pass semantic analysis (declare all names first, then visit bodies) handles forward references across files.
+
+### 29.3 Library Imports (`.aelib` files) — Phase 19 (planned)
+
+For closed-source third-party library distribution, Aether uses `.aelib` — an archive format containing compiled code (`.o` files) plus a metadata section with type signatures, class layouts, and the export table. The metadata enables code completion and compile-time validation while the archive format prevents trivial reverse engineering with `objdump`.
+
+**File format (version 1):**
+```
++----------------------------------+
+|  Magic: "AELIB\0" (8 bytes)     |
+|  Version: 0x0001 (2 bytes)     |
+|  Flags:  (2 bytes)             |
+|  ABI version: (2 bytes)         |
++----------------------------------+
+|  Code section offset (8 bytes)  |
+|  Code section size   (8 bytes)  |
++----------------------------------+
+|  Metadata section offset (8)    |
+|  Metadata section size   (8)    |
++----------------------------------+
+|  Code section (archive of .o)  |
++----------------------------------+
+|  Metadata section (binary blob) |
++----------------------------------+
+```
+
+**Metadata section format:**
+- Header: magic `"AEMETA\0"`, version `0x0001`
+- Symbol table: name, kind (function/struct/class/global/const/enum), flags (public bit), namespace, type data offset/size
+- Type data: function signatures (return type, param count, params with name/type/mutability), struct/class layouts (field offsets/sizes), enum variants
+- String table: null-terminated strings concatenated
+
+### 29.4 Import Syntax
+
+```
+# All public decls from a library
+import "libtest"
+
+# Only public decls from a specific class/namespace
+import "libtest" : Foo
+
+# From multiple classes
+import "libtest" : Foo, Bar
+
+# Explicit .aelib file
+import "libtest.aelib" : Foo
+
+# Standard library (auto-resolved by compiler)
+import "std/io"
+```
+
+### 29.5 Resolution Order
+
+For `import "foo"` (no extension), the compiler tries in order:
+1. `foo.ae` — source file (for code you own)
+2. `foo.aelib` — pre-compiled library
+3. `foo/lib.ae` or `foo/lib.aelib` — package directory
+4. Standard library paths: `$AETHER_LIB`, `~/.aether/lib`, `/usr/local/lib/aether`
+
+If none found, the compiler reports an error listing what was tried.
+
+### 29.6 Public, Private, Internal Visibility
+
+```
+pub func exported() { }          // visible to importers
+private func internal_only() { } // only within this file
+internal func package_only() { }  // within the same package
+func default_public() { }        // public by default (for simplicity)
+```
+
+For `.aelib` libraries, visibility is enforced via metadata gating — `private` and `internal` declarations are omitted from the metadata entirely, so they literally cannot be called from outside the library.
+
+### 29.7 Build Command
+
+```
+aether build --target lib libtest.ae -o libtest.aelib
+```
+
+The new `--target lib` target produces code + metadata in one `.aelib` file.
+
+### 29.8 Linking Modes
+
+When importing a `.aelib`, the consumer has two options:
+
+- **Static linking** (default for `--target kernel`, `--target binary`): extract `.o` files from the archive, link them into the final binary. Everything in one executable — no runtime dependencies.
+- **Dynamic linking** (for `--target host`): reference the `.aelib` as a shared library, runtime resolution via the OS dynamic linker. Smaller binaries, can update libraries without recompiling.
+
+### 29.9 Multi-Arch Libraries
+
+A `.aelib` can contain code for multiple architectures (x86_64, ARM64, RISC-V). The metadata is arch-agnostic — it references symbols by name. The linker picks the right arch at build time, like macOS fat dylibs.
+
+### 29.10 Why Class/Namespace Imports, Not Function-Level
+
+Function-level imports create ambiguity problems (multiple overloads with different signatures — which do you import?). Class-level is unambiguous: import the whole class, use `Foo.sayHello()` to call methods. This is how Python modules, Java classes, and C# namespaces work. The class is the natural unit of grouping.
+
+### 29.11 Why `.aelib`, Not `.aeb`?
+
+An ELF file with a metadata section (`.aeb`) is trivially reverse-engineerable with `objdump -d` — anyone can disassemble the code sections. An archive format (`.aelib`) requires writing a custom disassembler to extract the code sections AND understanding the archive layout. This matches how dylibs work on every platform (macOS, Linux, Windows) and is the natural choice for distributing compiled libraries without exposing source.
 
 ---
 

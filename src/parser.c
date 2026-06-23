@@ -201,6 +201,10 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     func->data.func.layout_file = last_attr->data.attr.layout_file;
                 } else if (strcmp(aname, "kernel_layout") == 0) {
                     func->data.func.is_kernel_layout = true;
+                } else if (strcmp(aname, "test") == 0) {
+                    func->data.func.has_test = last_attr->data.attr.has_test;
+                    func->data.func.test_expect_int = last_attr->data.attr.test_expect_int;
+                    func->data.func.test_expect_str = last_attr->data.attr.test_expect_str;
                 }
             }
             node_list_append(decls, func);
@@ -1338,10 +1342,13 @@ AstNode *parse_attribute(Parser *p) {
         attr->data.attr.layout_file = (StringView){0};
         attr->data.attr.has_module_abi = false;
         attr->data.attr.module_abi_version = -1;
+        attr->data.attr.has_test = false;
+        attr->data.attr.test_expect_int = -1;
+        attr->data.attr.test_expect_str = (StringView){0};
 
         /* @name(payload) — parenthesized attribute arguments */
         if (parser_match(p, TOKEN_LPAREN)) {
-            /* Try key=value pairs first (e.g., @layout(start=0x7C00, ...)) */
+            /* Try key=value or key:value pairs first (e.g., @layout(start=0x7C00, ...)) */
             if (parser_check(p, TOKEN_IDENT) || parser_check(p, TOKEN_KW_LAYOUT) ||
                 parser_check(p, TOKEN_KW_ENTRY)) {
                 /* Parse key = value [, key = value] ... */
@@ -1360,8 +1367,8 @@ AstNode *parse_attribute(Parser *p) {
                         key = kt.text;
                     }
 
-                    /* Expect = */
-                    if (parser_match(p, TOKEN_EQ)) {
+                    /* Expect = or : (key=value or key:value) */
+                    if (parser_match(p, TOKEN_EQ) || parser_match(p, TOKEN_COLON)) {
                         /* Parse value — int or string */
                         if (parser_check(p, TOKEN_INT_LITERAL)) {
                             uint64_t val = p->current.val.int_value; parser_advance(p);
@@ -1380,9 +1387,24 @@ AstNode *parse_attribute(Parser *p) {
                             } else if (klen == 7 && strncmp(key.data, "version", 7) == 0) {
                                 attr->data.attr.has_module_abi = true;
                                 attr->data.attr.module_abi_version = (int64_t)val;
+                            } else if (klen == 6 && strncmp(key.data, "expect", 6) == 0) {
+                                attr->data.attr.has_test = true;
+                                attr->data.attr.test_expect_int = (int64_t)val;
+                                attr->data.attr.test_expect_str = (StringView){0};
                             }
                         } else if (parser_check(p, TOKEN_STRING_LITERAL)) {
-                            attr->data.attr.layout_file = p->current.text; parser_advance(p);
+                            /* String value — for @Test(expect: "hello") or @layout(file="name") */
+                            StringView sv = p->current.text;
+                            /* Check if this is for expect key */
+                            size_t klen = key.len;
+                            if (klen == 6 && strncmp(key.data, "expect", 6) == 0) {
+                                attr->data.attr.has_test = true;
+                                attr->data.attr.test_expect_int = -1;
+                                attr->data.attr.test_expect_str = sv;
+                            } else {
+                                attr->data.attr.layout_file = sv;
+                            }
+                            parser_advance(p);
                         } else {
                             /* Skip unknown value */
                             parser_advance(p);
@@ -1427,8 +1449,8 @@ static Precedence token_precedence(TokenType type) {
         case TOKEN_EQ: case TOKEN_PLUS_EQ: case TOKEN_MINUS_EQ:
         case TOKEN_STAR_EQ: case TOKEN_SLASH_EQ:
             return PREC_ASSIGNMENT;
-        case TOKEN_PIPE_PIPE: return PREC_LOGICAL_OR;
-        case TOKEN_AND_AND: return PREC_LOGICAL_AND;
+        case TOKEN_PIPE_PIPE: case TOKEN_KW_OR: return PREC_LOGICAL_OR;
+        case TOKEN_AND_AND: case TOKEN_KW_AND: return PREC_LOGICAL_AND;
         case TOKEN_EQ_EQ: case TOKEN_BANG_EQ: case TOKEN_LT:
         case TOKEN_GT: case TOKEN_LT_EQ: case TOKEN_GT_EQ:
             return PREC_COMPARISON;
@@ -1650,6 +1672,10 @@ static AstNode *parse_prefix(Parser *p) {
             parser_advance(p);
             return node_unary(p->arena, loc, UNARY_NOT, parse_expr_prec(p, PREC_UNARY));
 
+        case TOKEN_KW_NOT:
+            parser_advance(p);
+            return node_unary(p->arena, loc, UNARY_NOT, parse_expr_prec(p, PREC_UNARY));
+
         case TOKEN_TILDE:
             parser_advance(p);
             return node_unary(p->arena, loc, UNARY_BIT_NOT, parse_expr_prec(p, PREC_UNARY));
@@ -1788,8 +1814,8 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         case TOKEN_GT: op = BIN_GT; break;
         case TOKEN_LT_EQ: op = BIN_LE; break;
         case TOKEN_GT_EQ: op = BIN_GE; break;
-        case TOKEN_AND_AND: op = BIN_AND; break;
-        case TOKEN_PIPE_PIPE: op = BIN_OR; break;
+        case TOKEN_AND_AND: case TOKEN_KW_AND: op = BIN_AND; break;
+        case TOKEN_PIPE_PIPE: case TOKEN_KW_OR: op = BIN_OR; break;
         case TOKEN_AMPERSAND: op = BIN_BIT_AND; break;
         case TOKEN_PIPE: op = BIN_BIT_OR; break;
         case TOKEN_CARET: op = BIN_BIT_XOR; break;

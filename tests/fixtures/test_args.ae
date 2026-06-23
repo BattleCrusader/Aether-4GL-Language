@@ -1,5 +1,5 @@
 # test_args.ae — test that main() receives argv[1] as string parameter
-# @expected(0)
+@test(expect=0)
 func main(inputString: string): u64 {
     print("hello {inputString}\n")
     return 0

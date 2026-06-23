@@ -1,0 +1,42 @@
+# test_logical_keywords.ae — test not/and/or keyword operators
+# Each @test function is self-contained (no params). The compiler
+# auto-generates a dispatcher that takes the function name as argv[1].
+
+@test(expect=1)
+func test_not(): u64 {
+    let a: bool = true
+    let b: bool = false
+    if not b {
+        return 1
+    }
+    return 0
+}
+
+@test(expect=2)
+func test_and(): u64 {
+    let a: bool = true
+    let b: bool = false
+    if a and not b {
+        return 2
+    }
+    return 0
+}
+
+@test(expect=3)
+func test_or(): u64 {
+    let a: bool = true
+    let b: bool = false
+    if b or a {
+        return 3
+    }
+    return 0
+}
+
+@test(expect=4)
+func test_not_on_variable(): u64 {
+    let found: bool = false
+    if not found {
+        return 4
+    }
+    return 0
+}
