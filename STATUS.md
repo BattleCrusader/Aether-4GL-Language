@@ -2,11 +2,10 @@
 
 > **Last updated**: 2026-06-24
 > **Current state**: 44/45 host-native tests passing. 15/16 tokenizer tests passing.
-> Compiler builds clean. All major language features through Phase 5 are
-> implemented and tested. OS integration (Phase 6) is functional — kernel, binaries, and
-> boot targets all compile and link. Phase 12 (OS boot/shell) is active in the OS repo.
+> Compiler builds clean. All major language features through Phase 11 are
+> implemented and tested. Phase 17 (.aelib library format) designed but not yet implemented.
 > Test fixtures use `@test(expect=N)` function attributes (not comments).
-> Phase 19 (.aelib library format) designed but not yet implemented.
+> STATUS.md is compiler-only — OS implementation phases live in the OS repo's STATUS.md.
 
 ---
 
@@ -204,73 +203,52 @@
 - [x] P11.09 — Standard library module path resolution (std/*.ae: arch, asm, collections, elf, fs, io, math, mem, serial, str, test)
 - [x] P11.10 — Phase 11 Verification & Cleanup (test_interp_* — 8 fixtures all passing)
 
-## Phase 12 — OS Boot & Shell ✅ COMPLETE (in OS repo)
+## Phase 12 — Language Specification & Requirements 🔴 NOT STARTED
 
-- [x] P12.01 — Boot chain (BIOS → stage1 → stage2 → long mode → kernel_main) (os/src/boot/stage1.ae, stage2.ae, boot.ae)
-- [x] P12.02 — Serial I/O (COM1, 115200 8N1) (serial_init, serial_putc, serial_puts in OS kernel)
-- [x] P12.03 — Physical page allocator (bitmap, 4KB pages) (BITMAP_ADDR=0xD000 in OS kernel)
-- [x] P12.04 — ELF64 loader (flat-offset, no stdlib, cross-module safe) (elf_check_header, elf_get_entry, elf_load_segments)
-- [x] P12.05 — Syscall page at 0x5000 (syscall_init with putc, puts, open, read, readdir, getcwd, chdir, exit, booleval stubs)
-- [x] P12.06 — Module registry at 0x4000 (MODULE_REGISTRY, module slot management)
-- [x] P12.07 — Thin shell (PATH resolve, ELF exec) (exec_binary, path_resolve, shell loop in OS kernel)
-- [x] P12.08 — Module loader (.ko ELF load, mod_init call) (TARGET_MODULE, module loading infrastructure)
-- [x] P12.09 — In-memory boot FS (fs_open, fs_read, fs_readdir_root with inode table)
-- [x] P12.10 — Phase 12 Verification & Cleanup (15 standalone binaries compile, OS boots in QEMU, shell works)
+- [ ] P12.01 — Comprehensive REQUIREMENTS.md with all feature areas
+- [ ] P12.02 — Language specification document with code snippets
+- [ ] P12.03 — OS pipeline mapping for every compiler feature
+- [ ] P12.04 — STATUS.md updated with new phases
 
-> **Active issue**: Binary execution from shell crashes QEMU. Boot page tables
-> extended from 32MB to 128MB mapping (boot.ae: 16→64 PD entries) to cover BIN_BASE
-> at 0x2000000. Fix applied, needs re-testing.
+## Phase 13 — Concurrency & Fibers 🔴 NOT STARTED
 
-## Phase 13 — Language Specification & Requirements 🔴 NOT STARTED
+- [ ] P13.01 — `spawn` keyword parsing and codegen
+- [ ] P13.02 — `Chan<T>` channel type
+- [ ] P13.03 — `Mutex` synchronization primitive
+- [ ] P13.04 — Fiber scheduler runtime
+- [ ] P13.05 — Cooperative multitasking with explicit yield
+- [ ] P13.06 — Per-fiber stack allocation
+- [ ] P13.07 — Phase 13 Verification & Cleanup
 
-- [ ] P13.01 — Comprehensive REQUIREMENTS.md with all feature areas
-- [ ] P13.02 — Language specification document with code snippets
-- [ ] P13.03 — OS pipeline mapping for every compiler feature
-- [ ] P13.04 — STATUS.md updated with new phases
+## Phase 14 — Advanced OS Language Features 🔴 NOT STARTED
 
-## Phase 14 — OS Memory & Process Management 🔴 NOT STARTED (OS repo)
+Compiler language features for OS development. Not OS implementation — that's in the OS repo.
 
-- [ ] P14.01 — Virtual memory manager (paging, page faults)
-- [ ] P14.02 — Process/task management (multitasking)
-- [ ] P14.03 — Interrupt handling (IDT, IRQ handlers)
-- [ ] P14.04 — Syscall interface (0x5000 page) — partial (syscall_init exists, needs expansion)
-- [ ] P14.05 — Module loading and registry — partial (infrastructure exists)
-- [ ] P14.06 — User mode switching
-- [ ] P14.07 — Phase 14 Verification & Cleanup
+- [ ] P14.01 — `bootchain` declarative boot chain generation
+- [ ] P14.02 — `interrupt` handler generation (frame save/restore, EOI, stack switching)
+- [ ] P14.03 — `@metadata` self-documenting binary format (ELF note sections)
+- [ ] P14.04 — `@requires` capability tracking and verification
+- [ ] P14.05 — `@units` compile-time physical unit checking
+- [ ] P14.06 — Phase 14 Verification & Cleanup
 
-## Phase 15 — Concurrency & Fibers 🔴 NOT STARTED
+## Phase 15 — Goal-Oriented I/O & Query Fusion 🔴 NOT STARTED
 
-- [ ] P15.01 — `spawn` keyword parsing and codegen
-- [ ] P15.02 — `Chan<T>` channel type
-- [ ] P15.03 — `Mutex` synchronization primitive
-- [ ] P15.04 — Fiber scheduler runtime
-- [ ] P15.05 — Cooperative multitasking with explicit yield
-- [ ] P15.06 — Per-fiber stack allocation
-- [ ] P15.07 — Phase 15 Verification & Cleanup
+- [ ] P15.01 — `from path read Type` goal-oriented I/O syntax
+- [ ] P15.02 — Compiler generates optimal read path based on target
+- [ ] P15.03 — Query fusion: chain operations fused into single loop
+- [ ] P15.04 — Pattern-based metaprogramming (match on types)
+- [ ] P15.05 — Phase 15 Verification & Cleanup
 
-## Phase 16 — Advanced OS Integration 🔴 NOT STARTED
+## Phase 16 — Protocol Generation & Hardware Configuration 🔴 NOT STARTED
 
-- [ ] P16.01 — `bootchain` declarative boot chain generation
-- [ ] P16.02 — `interrupt` handler generation (frame save/restore, EOI, stack switching)
-- [ ] P16.03 — `@metadata` self-documenting binary format (ELF note sections)
-- [ ] P16.04 — `@requires` capability tracking and verification
-- [ ] P16.05 — `@units` compile-time physical unit checking
-- [ ] P16.06 — Phase 16 Verification & Cleanup
+- [ ] P16.01 — `protocol` declarative hardware interface generation (NODE_PROTOCOL_DECL in parser — parsing only, no codegen)
+- [ ] P16.02 — Automatic bit-banging code from protocol declarations
+- [ ] P16.03 — `#run` compile-time hardware detection and code emission (NODE_RUN_BLOCK in parser — parsing only)
+- [ ] P16.04 — Phase 16 Verification & Cleanup
 
-## Phase 17 — Goal-Oriented I/O & Query Fusion 🔴 NOT STARTED
+## Phase 17 — `.aelib` Library Format 🟡 DESIGNED, not implemented
 
-- [ ] P17.01 — `from path read Type` goal-oriented I/O syntax
-- [ ] P17.02 — Compiler generates optimal read path based on target
-- [ ] P17.03 — Query fusion: chain operations fused into single loop
-- [ ] P17.04 — Pattern-based metaprogramming (match on types)
-- [ ] P17.05 — Phase 17 Verification & Cleanup
-
-## Phase 18 — Protocol Generation & Hardware Configuration 🔴 NOT STARTED
-
-- [ ] P18.01 — `protocol` declarative hardware interface generation (NODE_PROTOCOL_DECL in parser — parsing only, no codegen)
-- [ ] P18.02 — Automatic bit-banging code from protocol declarations
-- [ ] P18.03 — `#run` compile-time hardware detection and code emission (NODE_RUN_BLOCK in parser — parsing only)
-- [ ] P18.04 — Phase 18 Verification & Cleanup
+Closed-source library distribution without reverse engineering risk.
 
 ---
 
@@ -297,7 +275,7 @@
 
 ---
 
-## Known Issues (as of 2026-06-23)
+## Known Issues (as of 2026-06-24)
 
 1. **test_match** — fails to compile. Match statement codegen has a bug.
 2. **Tokenizer "all operators" test** — expects 22 operator tokens, gets different count.
@@ -305,24 +283,31 @@
 4. **Inheritance/vtables** — `virtual` keyword is tokenized, NODE_CLASS_DECL exists, but no vtable
    emission or `super` call codegen. Classes work as structs with auto-drop, not as OOP inheritance.
 5. **Conditional compilation** (`#if`/`#elif`/`#else`/`#end`) — not found in source.
-6. **OS binary execution** — QEMU crashes when shell calls `exec_binary`. Boot page table
-   mapping was extended (16→64 PD entries) to cover BIN_BASE at 0x2000000. Needs re-testing.
-7. **Optimizer inline pass** — `opt_inline` function exists but likely a stub.
+6. **Optimizer inline pass** — `opt_inline` function exists but likely a stub.
+
+> **Note**: OS implementation issues (binary execution, page tables, etc.) live in
+> the OS repo's STATUS.md. This file is compiler-only.
 
 ## Recent Changes (2026-06-24)
 
-5. **Phase 19 `.aelib` library format designed** — Archive format containing compiled
+5. **Phase 17 `.aelib` library format designed** — Archive format containing compiled
    code (`.o` files) + metadata section with type signatures, class layouts, export table.
    Enables closed-source library distribution without reverse engineering risk. Import
    syntax: `import "lib" : ClassName`. Build with `aether build --target lib`.
    Implementation deferred to a new feature branch — docs only this commit.
 
-6. **Auto-generated test dispatcher** — When `@test` functions exist but no `main()` is
+6. **STATUS.md scoped to compiler only** — Removed OS implementation phases
+   (Phase 12 OS Boot & Shell, Phase 14 OS Memory & Process Management). Renumbered
+   remaining phases: Language Spec → 12, Concurrency → 13, Advanced OS Lang → 14,
+   Goal-Oriented I/O → 15, Protocol → 16, .aelib → 17. OS issues now live in
+   the OS repo's STATUS.md.
+
+7. **Auto-generated test dispatcher** — When `@test` functions exist but no `main()` is
    provided, the compiler emits a `main:` that takes the function name as argv[1],
    looks it up in the `@test` list, calls it, and returns its exit code. This makes
    tests self-contained — no need to write a dispatcher in each fixture.
 
-7. **DCE `@test` protection** — Optimizer's dead code elimination was removing
+8. **DCE `@test` protection** — Optimizer's dead code elimination was removing
    `@test` functions because nothing called them. Added `has_test` to the DCE's
    "is_entry" check so test functions are preserved for the auto-generated dispatcher.
 
@@ -371,21 +356,19 @@
 
 ## Priority Queue (Next to Build)
 
-1. **Fix OS binary execution**: Verify boot page table fix resolves QEMU crash
-2. **Phase 19**: `.aelib` library format (NEW — designed, awaiting feature branch)
-3. **Phase 13**: Language specification & requirements (REQUIREMENTS.md + spec document)
-4. **Fix test_match**: Match statement compilation failure
-5. **Phase 9 remaining**: Escape analysis, devirtualization, loop unrolling, actionable errors
-6. **Phase 7**: Self-hosting — compiler compiles itself
-7. **Phase 14** (OS): OS memory & process management (paging, multitasking, interrupts)
-8. **Phase 15**: Concurrency & fibers (spawn, channels, mutex, scheduler)
-9. **Phase 16**: Advanced OS integration (bootchain, interrupt handlers, metadata)
-10. **Phase 17**: Goal-oriented I/O & query fusion
-11. **Phase 18**: Protocol generation & hardware configuration
+1. **Phase 17**: `.aelib` library format (DESIGNED, awaiting feature branch)
+2. **Phase 12**: Language specification & requirements (REQUIREMENTS.md + spec document)
+3. **Fix test_match**: Match statement compilation failure
+4. **Phase 9 remaining**: Escape analysis, devirtualization, loop unrolling, actionable errors
+5. **Phase 7**: Self-hosting — compiler compiles itself
+6. **Phase 13**: Concurrency & fibers (spawn, channels, mutex, scheduler)
+7. **Phase 14**: Advanced OS language features (bootchain, interrupt handlers, metadata)
+8. **Phase 15**: Goal-oriented I/O & query fusion
+9. **Phase 16**: Protocol generation & hardware configuration
 
 ---
 
-## Phase 19 — `.aelib` Library Format (🟡 DESIGNED, not implemented)
+## Phase 17 — `.aelib` Library Format (🟡 DESIGNED, not implemented)
 
 Closed-source library distribution without reverse engineering risk.
 
