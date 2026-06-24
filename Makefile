@@ -145,7 +145,8 @@ TEST_FIXTURES = \
 	tests/fixtures/test_null_concat.ae \
 	tests/fixtures/test_logical_keywords.ae \
 	tests/fixtures/test_aelib_import.ae \
-	tests/fixtures/test_std_test.ae
+	tests/fixtures/test_std_test.ae \
+	tests/fixtures/test_variadic.ae
 
 # .aelib library fixtures — must be built before test-host
 AELIB_FIXTURES = \
@@ -157,7 +158,7 @@ LIBAETHER_AELIB = build/lib/libaether.aelib
 
 $(LIBAETHER_AELIB): aether-cli $(LIBAETHER_SRCS)
 	@echo "=== Building libaether.aelib ==="
-	@mkdir -p build/lib /tmp/kernel
+	@mkdir -p build/lib 
 	@cat $(LIBAETHER_SRCS) > /tmp/libaether_combined.ae
 	@./$(BUILD_DIR)/aether --target lib /tmp/libaether_combined.ae -o $(LIBAETHER_AELIB) 2>/dev/null >/dev/null && echo "  libaether.aelib built OK" || echo "  FAILED"
 

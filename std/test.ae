@@ -1,7 +1,7 @@
 // std/test.ae — Testing: assertEquals, assertTrue
 // JUnit-style assertions using Aether's string interpolation and exit() built-in.
 
-func assertEquals(actualValue: u64, expectedValue: u64, message: string) {
+func assertEquals(actualValue: u64, expectedValue: u64, message: string?) {
     if actualValue != expectedValue {
         print("  FAIL: {message} (got {actualValue}, expected {expectedValue})\n")
         exit(1)
@@ -9,7 +9,7 @@ func assertEquals(actualValue: u64, expectedValue: u64, message: string) {
     print("  PASS: {message}\n")
 }
 
-func assertTrue(condition: bool, message: string) {
+func assertTrue(condition: bool, message: string?) {
     if !condition {
         print("  FAIL: {message}\n")
         exit(1)

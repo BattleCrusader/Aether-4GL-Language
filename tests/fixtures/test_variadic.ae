@@ -1,4 +1,6 @@
 // test_variadic.ae — test variadic function syntax
+import "std/test"
+
 func sum(values: ...u64): u64 {
     let mut total = 0
     for i in 0..5 {
@@ -8,5 +10,6 @@ func sum(values: ...u64): u64 {
 }
 
 func main(): u64 {
+    assertEquals(15, sum(1, 2, 3, 4, 5), "Error")
     return sum(1, 2, 3, 4, 5)
 }
