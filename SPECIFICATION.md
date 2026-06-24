@@ -334,12 +334,45 @@ func example(): u64 {
 
 ### 4.1 Primitive Types
 
+Aether provides a full set of primitive types. All type names are lowercase keywords:
+
+| Type | Description | Size |
+|------|-------------|------|
+| `bool` | Boolean (true/false) | 1 byte |
+| `byte` | Raw byte (u8 alias) | 1 byte |
+| `u8` | Unsigned 8-bit integer | 1 byte |
+| `u16` | Unsigned 16-bit integer | 2 bytes |
+| `u32` | Unsigned 32-bit integer | 4 bytes |
+| `u64` | Unsigned 64-bit integer | 8 bytes |
+| `i8` | Signed 8-bit integer | 1 byte |
+| `i16` | Signed 16-bit integer | 2 bytes |
+| `i32` | Signed 32-bit integer | 4 bytes |
+| `i64` | Signed 64-bit integer | 8 bytes |
+| `f32` | IEEE 754 32-bit float (always signed) | 4 bytes |
+| `f64` | IEEE 754 64-bit double (always signed) | 8 bytes |
+| `string` | Null-terminated string (pointer + length header) | 8 bytes (pointer) |
+
+**Notes:**
+- All integer types (u8-u64, i8-i64) support arithmetic, bitwise, and comparison operations.
+- Signed integers (i8-i64) use two's complement representation.
+- Floating point types (f32, f64) follow IEEE 754. There are no "unsigned" float variants — all floats have a sign bit.
+- `bool` values are 0 (false) or 1 (true).
+- `byte` is an alias for `u8`.
+- There is no implicit `int` type — all types must be explicit in declarations.
+
 ```aether
 let a: u8 = 255          // unsigned 8-bit
 let b: u16 = 65535       // unsigned 16-bit
 let c: u32 = 4294967295  // unsigned 32-bit
 let d: u64 = 18446744073709551615  // unsigned 64-bit
 let e: bool = true       // boolean
+let f: byte = 0xFF       // raw byte
+let g: i8 = -128         // signed 8-bit
+let h: i16 = -32768      // signed 16-bit
+let i: i32 = -2147483648 // signed 32-bit
+let j: i64 = -9223372036854775808 // signed 64-bit
+let k: f32 = 3.14        // 32-bit float
+let l: f64 = 3.141592653589793 // 64-bit float
 ```
 
 ### 4.2 Compound Types

@@ -1,11 +1,35 @@
-// test_types.ae — typed variables: u8, u16, u32, u64, bool, byte
+// test_types.ae — comprehensive typed variable tests
+// Tests all primitive types: u8, u16, u32, u64, i8, i16, i32, i64, bool, byte, string
+// Float types (f32, f64) are parsed but codegen is basic (returns bits as u64)
 @test(expect=200)
 func main(): u64 {
+    // Unsigned integers
     let a: u8 = 200
     let b: u16 = 40000
     let c: u32 = 3000000
     let d: u64 = 50000000000
+    let e: u64 = 0
+
+    // Signed integers
+    let signedPositive: i8 = 100
+    let signedNegative: i16 = -20000
+    let signedBig: i32 = 2000000
+    let signedHuge: i64 = 40000000000
+
+    // Booleans and bytes
     let flag: bool = true
     let raw: byte = 128
-    return a + b + c + d
+    let greeting: string = "hello"
+
+    // Arithmetic with mixed types
+    let unsignedSum: u64 = a + b + c + d
+    let signedSum: i64 = signedPositive + signedNegative + signedBig + signedHuge
+
+    // Boolean logic
+    let andResult: bool = flag and true
+    let orResult: bool = flag or false
+    let notResult: bool = not flag
+
+    // Return value (must be < 256 for shell exit code)
+    return unsignedSum
 }
