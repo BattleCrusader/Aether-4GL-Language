@@ -1,4 +1,4 @@
-# test_enum.ae — test enum declaration, layout, and construction
+// test_enum.ae — test enum declaration, layout, and construction
 enum Option {
     Some(int)
     None

@@ -1,4 +1,4 @@
-# test_std_test.ae — verify std/test.ae works
+// test_std_test.ae — verify std/test.ae works
 import "std/test"
 
 @test

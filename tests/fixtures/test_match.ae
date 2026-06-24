@@ -1,4 +1,4 @@
-# test_match.ae — test match expression
+// test_match.ae — test match expression
 @test(expect=30)
 func main(): int {
     let x = 2;

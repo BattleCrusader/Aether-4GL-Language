@@ -1,6 +1,6 @@
-# std/mem.ae — Memory operations: copy, zero, alloc, free
-# Uses asm for pointer operations (Aether cannot express byte-level pointer access natively).
-# Uses Aether's heap keyword for allocation.
+// std/mem.ae — Memory operations: copy, zero, alloc, free
+// Uses asm for pointer operations (Aether cannot express byte-level pointer access natively).
+// Uses Aether's heap keyword for allocation.
 
 func copyMemory(destination: u64, source: u64, byteCount: u64) {
     asm {
@@ -25,7 +25,7 @@ func alloc(byteCount: u64): u64 {
 }
 
 func free(pointer: u64) {
-    # bump allocator: no-op
+    // bump allocator: no-op
 }
 
 func memset(destination: u64, value: byte, byteCount: u64) {

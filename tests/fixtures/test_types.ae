@@ -1,4 +1,4 @@
-# test_types.ae — typed variables: u8, u16, u32, u64, bool, byte
+// test_types.ae — typed variables: u8, u16, u32, u64, bool, byte
 @test(expect=200)
 func main(): u64 {
     let a: u8 = 200

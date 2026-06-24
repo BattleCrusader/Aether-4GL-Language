@@ -1,6 +1,6 @@
-# std/io.ae — I/O operations: print, format, write
-# print() calls through the syscall page (slot 1 = puts).
-# println() adds a newline.
+// std/io.ae — I/O operations: print, format, write
+// print() calls through the syscall page (slot 1 = puts).
+// println() adds a newline.
 
 sys func puts(s: string) at(1)
 

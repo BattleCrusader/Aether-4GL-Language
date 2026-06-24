@@ -1,4 +1,4 @@
-# test_export.ae — @export attribute for kernel modules
+// test_export.ae — @export attribute for kernel modules
 @export func mod_init(): int {
     return 0
 }

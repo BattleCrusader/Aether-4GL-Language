@@ -1,29 +1,30 @@
-# test_mem.ae — comprehensive tests for std/mem.ae
-# Tests: copyMemory, zeroMemory, alloc, free, memset, memcmp
+// test_mem.ae — comprehensive tests for std/mem.ae
+// Tests: copyMemory, zeroMemory, alloc, free, memset, memcmp
 
 import "std/test"
+import "std/mem"
 
 @test
 func main() {
-    # alloc and free (bump allocator, just verify they don't crash)
+    // alloc and free (bump allocator, just verify they don't crash)
     let ptr: u64 = alloc(64)
     assertTrue(ptr != 0, "alloc returns non-zero pointer")
     free(ptr)
 
-    # copyMemory - copy data and verify
+    // copyMemory - copy data and verify
     let src: u64 = alloc(16)
     let dst: u64 = alloc(16)
-    # write some pattern to src using memset
+    // write some pattern to src using memset
     memset(src, 0xAB, 16)
-    # copy from src to dst
+    // copy from src to dst
     copyMemory(dst, src, 16)
-    # verify they match
+    // verify they match
     let cmpResult: i64 = memcmp(src, dst, 16)
     assertEquals(cmpResult, 0, "copyMemory: memcmp after copy equals 0")
     free(src)
     free(dst)
 
-    # zeroMemory
+    // zeroMemory
     let buf: u64 = alloc(16)
     memset(buf, 0xFF, 16)
     zeroMemory(buf, 16)
@@ -34,7 +35,7 @@ func main() {
     free(buf)
     free(zeroBuf)
 
-    # memset
+    // memset
     let buf2: u64 = alloc(8)
     memset(buf2, 0x42, 8)
     let refBuf: u64 = alloc(8)
@@ -44,7 +45,7 @@ func main() {
     free(buf2)
     free(refBuf)
 
-    # memcmp equal
+    // memcmp equal
     let a: u64 = alloc(4)
     let b: u64 = alloc(4)
     memset(a, 0x01, 4)
@@ -54,7 +55,7 @@ func main() {
     free(a)
     free(b)
 
-    # memcmp not equal (first < second)
+    // memcmp not equal (first < second)
     let c: u64 = alloc(4)
     let d: u64 = alloc(4)
     memset(c, 0x01, 4)
@@ -64,7 +65,7 @@ func main() {
     free(c)
     free(d)
 
-    # memcmp not equal (first > second)
+    // memcmp not equal (first > second)
     let e: u64 = alloc(4)
     let f: u64 = alloc(4)
     memset(e, 0x02, 4)
@@ -74,7 +75,7 @@ func main() {
     free(e)
     free(f)
 
-    # memcmp zero bytes
+    // memcmp zero bytes
     let g: u64 = alloc(4)
     let h: u64 = alloc(4)
     memset(g, 0xFF, 4)

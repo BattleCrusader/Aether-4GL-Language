@@ -1,5 +1,5 @@
-# std/fs.ae — AetherFS syscall wrappers
-# Uses Aether's sys keyword for syscall declarations.
+// std/fs.ae — AetherFS syscall wrappers
+// Uses Aether's sys keyword for syscall declarations.
 
 sys func fsOpen(path: *u8, flags: u64): u64 at(10)
 sys func fsRead(fileDescriptor: u64, buffer: *u8, count: u64): u64 at(11)

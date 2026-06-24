@@ -1,5 +1,5 @@
-# std/collections.ae — Simple collections: Array, List
-# Pure Aether structs.
+// std/collections.ae — Simple collections: Array, List
+// Pure Aether structs.
 
 struct Array {
     data: u64

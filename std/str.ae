@@ -1,6 +1,6 @@
-# std/str.ae — String operations: concat, split, trim, toUpper, toLower, strEq
-# Uses Aether's + operator for string concatenation.
-# strEq uses Aether string indexing (no asm needed).
+// std/str.ae — String operations: concat, split, trim, toUpper, toLower, strEq
+// Uses Aether's + operator for string concatenation.
+// strEq uses Aether string indexing (no asm needed).
 
 func concat(firstString: string, secondString: string): string {
     return firstString + secondString
@@ -125,9 +125,9 @@ func toLower(inputString: string): string {
     return result
 }
 
-# strEq(a: string, b: string): bool
-# Returns true if both strings contain the same characters.
-# Pure Aether using string indexing — no asm needed.
+// strEq(a: string, b: string): bool
+// Returns true if both strings contain the same characters.
+// Pure Aether using string indexing — no asm needed.
 func strEq(a: string, b: string): bool {
     let i: u64 = 0
     while true {

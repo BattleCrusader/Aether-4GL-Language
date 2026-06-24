@@ -1,26 +1,26 @@
-# test_collections.ae — comprehensive tests for std/collections.ae
-# Tests: Array, List, HashMap (put, get, containsKey, remove, len),
-#        Set (put, contains, remove, len), Queue (enqueue, dequeue, isEmpty, len)
+// test_collections.ae — comprehensive tests for std/collections.ae
+// Tests: Array, List, HashMap (put, get, containsKey, remove, len),
+//        Set (put, contains, remove, len), Queue (enqueue, dequeue, isEmpty, len)
 
 import "std/test"
 
 @test
 func main() {
-    # Array
+    // Array
     let arr: Array = newArray()
     assertEquals(arr.length, 0, "newArray length 0")
     assertEquals(arr.capacity, 0, "newArray capacity 0")
 
-    # List
+    // List
     let lst: List = newList()
     assertEquals(lst.length, 0, "newList length 0")
     assertEquals(lst.capacity, 0, "newList capacity 0")
 
-    # HashMap
+    // HashMap
     let map: HashMap = newHashMap(16)
     assertEquals(hashMapLen(&map), 0, "newHashMap len 0")
 
-    # put and get
+    // put and get
     hashMapPut(&map, "one", 1)
     hashMapPut(&map, "two", 2)
     hashMapPut(&map, "three", 3)
@@ -29,30 +29,30 @@ func main() {
     assertEquals(hashMapGet(&map, "two"), 2, "hashMap get two")
     assertEquals(hashMapGet(&map, "three"), 3, "hashMap get three")
 
-    # containsKey
+    // containsKey
     assertTrue(hashMapContainsKey(&map, "one"), "hashMap containsKey one")
     assertTrue(hashMapContainsKey(&map, "two"), "hashMap containsKey two")
     assertTrue(!hashMapContainsKey(&map, "four"), "hashMap containsKey four (absent)")
 
-    # update existing key
+    // update existing key
     hashMapPut(&map, "one", 100)
     assertEquals(hashMapGet(&map, "one"), 100, "hashMap update value")
     assertEquals(hashMapLen(&map), 3, "hashMap len after update (same)")
 
-    # remove
+    // remove
     hashMapRemove(&map, "two")
     assertEquals(hashMapLen(&map), 2, "hashMap len after remove")
     assertTrue(!hashMapContainsKey(&map, "two"), "hashMap containsKey after remove")
     assertEquals(hashMapGet(&map, "two"), 0, "hashMap get after remove returns 0")
 
-    # remove non-existent key
+    // remove non-existent key
     hashMapRemove(&map, "nonexistent")
     assertEquals(hashMapLen(&map), 2, "hashMap len after remove non-existent")
 
-    # get non-existent key
+    // get non-existent key
     assertEquals(hashMapGet(&map, "nonexistent"), 0, "hashMap get non-existent returns 0")
 
-    # Set
+    // Set
     let set: Set = newSet(16)
     assertEquals(setLen(&set), 0, "newSet len 0")
 
@@ -65,20 +65,20 @@ func main() {
     assertTrue(setContains(&set, "banana"), "set contains banana")
     assertTrue(!setContains(&set, "durian"), "set does not contain durian")
 
-    # duplicate put
+    // duplicate put
     setPut(&set, "apple")
     assertEquals(setLen(&set), 3, "set len after duplicate put")
 
-    # remove
+    // remove
     setRemove(&set, "banana")
     assertEquals(setLen(&set), 2, "set len after remove")
     assertTrue(!setContains(&set, "banana"), "set does not contain after remove")
 
-    # remove non-existent
+    // remove non-existent
     setRemove(&set, "nonexistent")
     assertEquals(setLen(&set), 2, "set len after remove non-existent")
 
-    # Queue
+    // Queue
     let queue: Queue = newQueue(8)
     assertTrue(queueIsEmpty(&queue), "newQueue isEmpty true")
     assertEquals(queueLen(&queue), 0, "newQueue len 0")
@@ -89,17 +89,17 @@ func main() {
     assertTrue(!queueIsEmpty(&queue), "queue not empty after enqueues")
     assertEquals(queueLen(&queue), 3, "queue len after 3 enqueues")
 
-    # dequeue in FIFO order
+    // dequeue in FIFO order
     assertEquals(queueDequeue(&queue), 10, "queue dequeue first")
     assertEquals(queueDequeue(&queue), 20, "queue dequeue second")
     assertEquals(queueDequeue(&queue), 30, "queue dequeue third")
     assertTrue(queueIsEmpty(&queue), "queue empty after all dequeues")
     assertEquals(queueLen(&queue), 0, "queue len 0 after all dequeues")
 
-    # dequeue from empty queue
+    // dequeue from empty queue
     assertEquals(queueDequeue(&queue), 0, "queue dequeue empty returns 0")
 
-    # wrap-around behavior
+    // wrap-around behavior
     let queue2: Queue = newQueue(4)
     queueEnqueue(&queue2, 1)
     queueEnqueue(&queue2, 2)

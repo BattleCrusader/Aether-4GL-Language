@@ -1,4 +1,4 @@
-# test_interp_concat.ae — interpolation combined with explicit concat
+// test_interp_concat.ae — interpolation combined with explicit concat
 @test(expect=42)
 func main(): u64 {
     let name = "Aether"

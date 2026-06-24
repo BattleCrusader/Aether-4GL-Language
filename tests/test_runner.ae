@@ -1,19 +1,19 @@
-# test_runner.ae — Aether Test Runner (written in pure Aether)
+// test_runner.ae — Aether Test Runner (written in pure Aether)
 #
-# Scans tests/fixtures/*.ae for @test(expect=N) annotations,
-# compiles each with the aether compiler, runs it, compares exit code.
+// Scans tests/fixtures/*.ae for @test(expect=N) annotations,
+// compiles each with the aether compiler, runs it, compares exit code.
 #
-# Build: aether --target host tests/test_runner.ae -o /tmp/kernel/test_runner
-# Run:   /tmp/kernel/test_runner [fixtures_dir] [aether_bin]
+// Build: aether --target host tests/test_runner.ae -o /tmp/kernel/test_runner
+// Run:   /tmp/kernel/test_runner [fixtures_dir] [aether_bin]
 #
-# Uses inline asm ONLY for host syscalls that Aether can't express yet:
-#   - read_file: open+read (macOS syscalls 2, 3)
-#   - run_process: fork+exec+wait (macOS syscalls 2, 59, 7)
-# Everything else is pure Aether.
+// Uses inline asm ONLY for host syscalls that Aether can't express yet:
+//   - read_file: open+read (macOS syscalls 2, 3)
+//   - run_process: fork+exec+wait (macOS syscalls 2, 59, 7)
+// Everything else is pure Aether.
 
-# ============================================================
-# String functions (pure Aether)
-# ============================================================
+// ============================================================
+// String functions (pure Aether)
+// ============================================================
 
 func strlen(s: string): u64 {
     let len: u64 = 0
@@ -58,7 +58,7 @@ func strfind(haystack: string, needle: string): i64 {
     return -1
 }
 
-# Parse decimal number from string starting at position
+// Parse decimal number from string starting at position
 func parse_num_at(s: string, pos: u64): i64 {
     let result: i64 = 0
     let found: bool = false
@@ -83,7 +83,7 @@ func parse_num_at(s: string, pos: u64): i64 {
     return result
 }
 
-# Extract @test(expect=N) from source string
+// Extract @test(expect=N) from source string
 func extract_expect(src: string): i64 {
     let marker: string = "@test(expect="
     let pos: i64 = strfind(src, marker)
@@ -93,7 +93,7 @@ func extract_expect(src: string): i64 {
     return parse_num_at(src, pos + 13)
 }
 
-# Check if string ends with suffix
+// Check if string ends with suffix
 func ends_with(s: string, suffix: string): bool {
     let slen: u64 = strlen(s)
     let suffixlen: u64 = strlen(suffix)
@@ -110,18 +110,18 @@ func ends_with(s: string, suffix: string): bool {
     return true
 }
 
-# ============================================================
-# Host syscalls (asm — only where Aether has no alternative)
-# ============================================================
+// ============================================================
+// Host syscalls (asm — only where Aether has no alternative)
+// ============================================================
 
-# Static buffer for file reading
+// Static buffer for file reading
 asm {
     section .bss
     file_buf: resb 65536
 }
 
-# Read a file into a static buffer. Returns pointer to buffer, or 0 on failure.
-# macOS: open=2, read=3, close=6
+// Read a file into a static buffer. Returns pointer to buffer, or 0 on failure.
+// macOS: open=2, read=3, close=6
 func read_file(path: string): string {
     asm {
         mov rax, 2          ; macOS open
@@ -159,7 +159,7 @@ func read_file(path: string): string {
     }
 }
 
-# Static buffers for exec arguments
+// Static buffers for exec arguments
 asm {
     section .bss
     cmd_buf:        resb 512
@@ -170,9 +170,9 @@ asm {
     status_buf:     resq 1
 }
 
-# Compile a fixture: runs "aether --target host <fixture> -o /tmp/kernel/<name>"
-# Returns 0 on success, nonzero on failure.
-# macOS: fork=2, execve=59, wait4=7
+// Compile a fixture: runs "aether --target host <fixture> -o /tmp/kernel/<name>"
+// Returns 0 on success, nonzero on failure.
+// macOS: fork=2, execve=59, wait4=7
 func compile_fixture(fixture_path: string, out_path: string, aether_bin: string): i64 {
     asm {
         ; Build argv array for execve
@@ -268,7 +268,7 @@ func compile_fixture(fixture_path: string, out_path: string, aether_bin: string)
     }
 }
 
-# Run a compiled binary. Returns exit code.
+// Run a compiled binary. Returns exit code.
 func run_binary(binary_path: string): i64 {
     asm {
         ; Build argv: [binary_path, NULL]
@@ -314,11 +314,11 @@ func run_binary(binary_path: string): i64 {
     }
 }
 
-# ============================================================
-# Main test runner
-# ============================================================
+// ============================================================
+// Main test runner
+// ============================================================
 
-# Static buffers for path building
+// Static buffers for path building
 asm {
     section .bss
     fixture_path_buf: resb 256
@@ -326,7 +326,7 @@ asm {
     name_buf:         resb 128
 }
 
-# Copy string src into dst, return length
+// Copy string src into dst, return length
 func strcopy(dst: string, src: string): u64 {
     let i: u64 = 0
     while src[i] != 0 {
@@ -337,7 +337,7 @@ func strcopy(dst: string, src: string): u64 {
     return i
 }
 
-# Concatenate: appends src to dst at position pos. Returns new pos.
+// Concatenate: appends src to dst at position pos. Returns new pos.
 func strappend(dst: string, pos: u64, src: string): u64 {
     let i: u64 = 0
     while src[i] != 0 {
@@ -348,8 +348,8 @@ func strappend(dst: string, pos: u64, src: string): u64 {
     return pos + i
 }
 
-# Copy basename without .ae extension into name_buf
-# e.g. "tests/fixtures/hello.ae" -> "hello"
+// Copy basename without .ae extension into name_buf
+// e.g. "tests/fixtures/hello.ae" -> "hello"
 func extract_name(path: string): string {
     let i: u64 = 0
     let last_slash: u64 = 0
@@ -359,7 +359,7 @@ func extract_name(path: string): string {
         }
         i = i + 1
     }
-    # Copy from last_slash to i-4 (strip .ae)
+    // Copy from last_slash to i-4 (strip .ae)
     let name_len: u64 = i - last_slash - 3
     let j: u64 = 0
     while j < name_len {
@@ -370,7 +370,7 @@ func extract_name(path: string): string {
     return name_buf
 }
 
-# Build output path: /tmp/kernel/<name>
+// Build output path: /tmp/kernel/<name>
 func build_out_path(name: string): string {
     let pos: u64 = strcopy(out_path_buf2, "/tmp/kernel/")
     strappend(out_path_buf2, pos, name)
@@ -381,7 +381,7 @@ func main(inputString: string): u64 {
     print("=== Aether Test Runner ===\n")
     print("Written in pure Aether. Dogfooding.\n\n")
 
-    # Read a test fixture to verify @Test parsing works
+    // Read a test fixture to verify @Test parsing works
     let src: string = read_file("tests/fixtures/hello.ae")
     if src == "" {
         print("ERROR: could not read tests/fixtures/hello.ae\n")
@@ -394,7 +394,7 @@ func main(inputString: string): u64 {
         return 1
     }
 
-    # Verify the expected value parsed correctly
+    // Verify the expected value parsed correctly
     if expected == 42 {
         print("PASS: @test(expect=42) parsed correctly from hello.ae\n")
     } else {
@@ -402,7 +402,7 @@ func main(inputString: string): u64 {
         return 1
     }
 
-    # Test extract_name
+    // Test extract_name
     let name: string = extract_name("tests/fixtures/hello.ae")
     if streq(name, "hello") {
         print("PASS: extract_name works correctly\n")

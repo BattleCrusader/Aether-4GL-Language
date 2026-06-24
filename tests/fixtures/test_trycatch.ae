@@ -1,4 +1,4 @@
-# test_trycatch.ae — basic try/catch/throw
+// test_trycatch.ae — basic try/catch/throw
 @test(expect=42)
 func main(): u64 {
     let mut result: u64 = 0

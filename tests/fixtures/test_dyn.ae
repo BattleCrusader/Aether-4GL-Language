@@ -1,4 +1,4 @@
-# test_dyn.ae — dynamic dispatch with dyn Trait
+// test_dyn.ae — dynamic dispatch with dyn Trait
 trait Drawable {
     func draw(self)
 }

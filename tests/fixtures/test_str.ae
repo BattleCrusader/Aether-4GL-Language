@@ -1,23 +1,24 @@
-# test_str.ae — comprehensive tests for std/str.ae
-# Tests: concat, strlen, strcmp, strEq, split, trim, toUpper, toLower,
-#        substring, startsWith, endsWith, contains, replace, join
+// test_str.ae — comprehensive tests for std/str.ae
+// Tests: concat, strlen, strcmp, strEq, split, trim, toUpper, toLower,
+//        substring, startsWith, endsWith, contains, replace, join
 
 import "std/test"
+import "std/str"
 
 @test
 func main() {
-    # concat
+    // concat
     assertEquals(concat("hello", "world"), "helloworld", "concat basic")
     assertEquals(concat("", "test"), "test", "concat empty first")
     assertEquals(concat("test", ""), "test", "concat empty second")
 
-    # strlen
+    // strlen
     assertEquals(strlen("hello"), 5, "strlen basic")
     assertEquals(strlen(""), 0, "strlen empty")
     assertEquals(strlen("a"), 1, "strlen single")
     assertEquals(strlen("hello world"), 11, "strlen with space")
 
-    # strcmp / strEq
+    // strcmp / strEq
     assertTrue(strcmp("abc", "abc"), "strcmp equal")
     assertTrue(!strcmp("abc", "def"), "strcmp not equal")
     assertTrue(strcmp("", ""), "strcmp both empty")
@@ -25,7 +26,7 @@ func main() {
     assertTrue(!strEq("hello", "world"), "strEq not equal")
     assertTrue(strEq("", ""), "strEq both empty")
 
-    # split
+    // split
     let parts1: [string] = split("a,b,c", ",")
     assertEquals(#parts1, 3, "split count 3")
     assertEquals(parts1[0], "a", "split part 0")
@@ -46,7 +47,7 @@ func main() {
     assertEquals(parts4[1], "", "split empty middle 1")
     assertEquals(parts4[2], "b", "split empty middle 2")
 
-    # trim
+    // trim
     assertEquals(trim("  hello  "), "hello", "trim both sides")
     assertEquals(trim("hello"), "hello", "trim no whitespace")
     assertEquals(trim("  "), "", "trim all whitespace")
@@ -54,55 +55,55 @@ func main() {
     assertEquals(trim("  hello world  "), "hello world", "trim with internal space")
     assertEquals(trim("\thello\n"), "hello", "trim tab and newline")
 
-    # toUpper
+    // toUpper
     assertEquals(toUpper("hello"), "HELLO", "toUpper basic")
     assertEquals(toUpper("Hello World"), "HELLO WORLD", "toUpper mixed")
     assertEquals(toUpper(""), "", "toUpper empty")
     assertEquals(toUpper("123"), "123", "toUpper numbers")
     assertEquals(toUpper("HELLO"), "HELLO", "toUpper already upper")
 
-    # toLower
+    // toLower
     assertEquals(toLower("HELLO"), "hello", "toLower basic")
     assertEquals(toLower("Hello World"), "hello world", "toLower mixed")
     assertEquals(toLower(""), "", "toLower empty")
     assertEquals(toLower("123"), "123", "toLower numbers")
     assertEquals(toLower("hello"), "hello", "toLower already lower")
 
-    # substring
+    // substring
     assertEquals(substring("hello", 0, 5), "hello", "substring full")
     assertEquals(substring("hello", 1, 4), "ell", "substring middle")
     assertEquals(substring("hello", 0, 0), "", "substring empty")
     assertEquals(substring("hello", 2, 5), "llo", "substring end")
 
-    # startsWith
+    // startsWith
     assertTrue(startsWith("hello", "he"), "startsWith true")
     assertTrue(!startsWith("hello", "el"), "startsWith false")
     assertTrue(startsWith("hello", ""), "startsWith empty prefix")
     assertTrue(startsWith("hello", "hello"), "startsWith full string")
     assertTrue(!startsWith("hello", "hello!"), "startsWith longer prefix")
 
-    # endsWith
+    // endsWith
     assertTrue(endsWith("hello", "lo"), "endsWith true")
     assertTrue(!endsWith("hello", "el"), "endsWith false")
     assertTrue(endsWith("hello", ""), "endsWith empty suffix")
     assertTrue(endsWith("hello", "hello"), "endsWith full string")
     assertTrue(!endsWith("hello", "!hello"), "endsWith longer suffix")
 
-    # contains
+    // contains
     assertTrue(contains("hello world", "world"), "contains true")
     assertTrue(!contains("hello world", "xyz"), "contains false")
     assertTrue(contains("hello", ""), "contains empty needle")
     assertTrue(contains("hello", "hello"), "contains full string")
     assertTrue(contains("aaa", "aa"), "contains overlapping")
 
-    # replace
+    // replace
     assertEquals(replace("hello world", "world", "there"), "hello there", "replace basic")
     assertEquals(replace("hello", "x", "y"), "hello", "replace not found")
     assertEquals(replace("hello", "", "x"), "hello", "replace empty search")
     assertEquals(replace("abab", "a", "c"), "cbcb", "replace multiple")
     assertEquals(replace("hello", "hello", "hi"), "hi", "replace full string")
 
-    # join
+    // join
     let arr1: [string] = ["a", "b", "c"]
     assertEquals(join(arr1, ","), "a,b,c", "join basic")
     let arr2: [string] = ["hello"]

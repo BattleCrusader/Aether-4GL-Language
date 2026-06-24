@@ -1,4 +1,4 @@
-# test_interp_none.ae — no interpolation (plain string, should still work)
+// test_interp_none.ae — no interpolation (plain string, should still work)
 @test(expect=42)
 func main(): u64 {
     let msg = "Hello World"

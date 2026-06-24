@@ -1,6 +1,6 @@
-# test_top_level_asm.ae — Top-level asm block test
-# Tests that asm { } at file level emits section directives correctly
-# and that extern declarations are hoisted properly
+// test_top_level_asm.ae — Top-level asm block test
+// Tests that asm { } at file level emits section directives correctly
+// and that extern declarations are hoisted properly
 
 asm {
     section .bss

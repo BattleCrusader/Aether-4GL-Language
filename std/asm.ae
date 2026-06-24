@@ -1,5 +1,5 @@
-# std/asm.ae — Low-level CPU operations
-# Only uses asm for things Aether cannot express: port I/O, CPU control, memory barriers.
+// std/asm.ae — Low-level CPU operations
+// Only uses asm for things Aether cannot express: port I/O, CPU control, memory barriers.
 
 @force_inline
 func fenceMemory() {

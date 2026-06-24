@@ -1,4 +1,4 @@
-# hello.ae — minimal Aether test program
+// hello.ae — minimal Aether test program
 @test(expect=42)
 func main(): u64 {
     return 42

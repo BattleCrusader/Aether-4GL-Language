@@ -1,4 +1,4 @@
-# test_monomorph.ae — generics monomorphization
+// test_monomorph.ae — generics monomorphization
 func identity<T>(value: T): T {
     return value
 }

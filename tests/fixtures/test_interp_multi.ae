@@ -1,4 +1,4 @@
-# test_interp_multi.ae — multiple interpolations in one string
+// test_interp_multi.ae — multiple interpolations in one string
 @test(expect=42)
 func main(): u64 {
     let a = "hello"

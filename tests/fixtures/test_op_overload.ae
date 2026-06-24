@@ -1,4 +1,4 @@
-# test_op_overload.ae — operator overloading
+// test_op_overload.ae — operator overloading
 struct Vector {
     x: int
     y: int

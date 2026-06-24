@@ -1,22 +1,23 @@
-# test_io.ae — comprehensive tests for std/io.ae
-# Tests: print, println, printHex, printDecimal
-# Note: readLine and formatString are not easily testable in a fixture
-#       (readLine requires stdin, formatString is a stub)
+// test_io.ae — comprehensive tests for std/io.ae
+// Tests: print, println, printHex, printDecimal
+// Note: readLine and formatString are not easily testable in a fixture
+//       (readLine requires stdin, formatString is a stub)
 
 import "std/test"
+import "std/io"
 
 @test
 func main() {
-    # print - just verify it doesn't crash (output goes to stdout)
+    // print - just verify it doesn't crash (output goes to stdout)
     print("hello")
     print("")
     print("world")
 
-    # println - verify it doesn't crash
+    // println - verify it doesn't crash
     println("hello")
     println("")
 
-    # printHex - verify it doesn't crash
+    // printHex - verify it doesn't crash
     printHex(0)
     printHex(255)
     printHex(0xDEADBEEF)
@@ -25,7 +26,7 @@ func main() {
     printHex(16)
     printHex(255)
 
-    # printDecimal - verify it doesn't crash
+    // printDecimal - verify it doesn't crash
     printDecimal(0)
     printDecimal(1)
     printDecimal(42)
@@ -34,6 +35,6 @@ func main() {
     printDecimal(123456789)
     printDecimal(0xFFFFFFFFFFFFFFFF)
 
-    # All tests pass if we reach here (no crash)
+    // All tests pass if we reach here (no crash)
     assertTrue(true, "io functions executed without crash")
 }

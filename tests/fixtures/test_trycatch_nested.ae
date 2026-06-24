@@ -1,4 +1,4 @@
-# test_trycatch_nested.ae — nested try/catch
+// test_trycatch_nested.ae — nested try/catch
 func inner_throw(): u64 throws {
     throw 1
     return 0

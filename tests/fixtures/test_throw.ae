@@ -1,4 +1,4 @@
-# test_throw.ae — throw and catch
+// test_throw.ae — throw and catch
 func do_throw(): u64 throws {
     throw 99
     return 0

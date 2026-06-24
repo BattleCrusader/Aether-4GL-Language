@@ -1,4 +1,4 @@
-# test_interp_basic.ae — basic string interpolation with variables
+// test_interp_basic.ae — basic string interpolation with variables
 @test(expect=42)
 func main(): u64 {
     let name = "World"

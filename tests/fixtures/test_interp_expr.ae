@@ -1,4 +1,4 @@
-# test_interp_expr.ae — interpolation with numeric expressions
+// test_interp_expr.ae — interpolation with numeric expressions
 @test(expect=42)
 func main(): u64 {
     let x: u64 = 40

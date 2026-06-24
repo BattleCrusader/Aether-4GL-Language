@@ -327,21 +327,21 @@ static bool skip_line(Tokenizer *t) {
  * ================================================================ */
 
 static Token scan_comment(Tokenizer *t) {
-    /* Already consumed '#', consume rest of line */
+    /* Already consumed '//', consume rest of line */
     skip_line(t);
     /* Return the next real token (recursive but depth-limited by line count) */
     return tokenizer_next(t);
 }
 
 static Token scan_block_comment(Tokenizer *t) {
-    /* Already consumed '#{', consume until matching '}#' (nestable) */
+    /* Already consumed slash-star, consume until matching star-slash (nestable) */
     int depth = 1;
     while (t->pos < t->end && depth > 0) {
-        if (t->pos + 1 < t->end && t->pos[0] == '}' && t->pos[1] == '#') {
+        if (t->pos + 1 < t->end && t->pos[0] == '*' && t->pos[1] == '/') {
             depth--;
             t->pos += 2;
             t->col += 2;
-        } else if (t->pos + 1 < t->end && t->pos[0] == '#' && t->pos[1] == '{') {
+        } else if (t->pos + 1 < t->end && t->pos[0] == '/' && t->pos[1] == '*') {
             depth++;
             t->pos += 2;
             t->col += 2;
@@ -350,13 +350,7 @@ static Token scan_block_comment(Tokenizer *t) {
         }
     }
     if (depth > 0) {
-        return error_token(t, "Unclosed block comment '#{ ... }#'");
-    }
-    /* Consume trailing newline if present, so we don't get an extra NEWLINE token */
-    if (t->pos < t->end && *t->pos == '\n') {
-        t->pos++;
-        t->line++;
-        t->col = 1;
+        return error_token(t, "Unclosed block comment '/* ... */'");
     }
     return tokenizer_next(t);
 }
@@ -576,9 +570,29 @@ Token tokenizer_next(Tokenizer *t) {
             return make_token(t, TOKEN_BACKSLASH);
         }
 
-        /* Comments — but check for #run first (compile-time execution) */
+        /* Comments: slash-slash line comments and slash-star block comments */
+        if (c == '/') {
+            if (t->pos + 1 < t->end && t->pos[1] == '/') {
+                /* slash-slash line comment */
+                t->pos += 2;
+                t->col += 2;
+                return scan_comment(t);
+            }
+            if (t->pos + 1 < t->end && t->pos[1] == '*') {
+                /* slash-star block comment */
+                t->pos += 2;
+                t->col += 2;
+                return scan_block_comment(t);
+            }
+            if (t->pos + 1 < t->end && t->pos[1] == '=') {
+                t->pos++; t->col++; return make_token(t, TOKEN_SLASH_EQ);
+            }
+            return make_token(t, TOKEN_SLASH);
+        }
+
+        /* # — array length prefix operator or #run compile-time execution */
         if (c == '#') {
-            /* Check if this is #run (not a comment) */
+            /* Check if this is #run (compile-time execution) */
             if (t->pos + 3 < t->end &&
                 t->pos[1] == 'r' && t->pos[2] == 'u' && t->pos[3] == 'n' &&
                 (t->pos + 4 >= t->end || !is_ident_continue(t->pos[4]))) {
@@ -591,13 +605,13 @@ Token tokenizer_next(Tokenizer *t) {
                 tok.text = SV("#");
                 return tok;
             }
-            if (t->pos + 1 < t->end && t->pos[1] == '{') {
-                t->pos += 2;
-                t->col += 2;
-                return scan_block_comment(t);
-            }
+            /* # followed by identifier = array length prefix operator */
             t->pos++; t->col++;
-            return scan_comment(t);
+            Token tok;
+            tok.type = TOKEN_HASH;
+            tok.loc = (Location){t->filename, t->line, t->col - 1, 1};
+            tok.text = SV("#");
+            return tok;
         }
 
         /* Identifiers and keywords */

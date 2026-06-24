@@ -1,6 +1,6 @@
-# test_logical_keywords.ae — test not/and/or keyword operators
-# Each @test function is self-contained (no params). The compiler
-# auto-generates a dispatcher that takes the function name as argv[1].
+// test_logical_keywords.ae — test not/and/or keyword operators
+// Each @test function is self-contained (no params). The compiler
+// auto-generates a dispatcher that takes the function name as argv[1].
 
 @test(expect=1)
 func test_not(): u64 {

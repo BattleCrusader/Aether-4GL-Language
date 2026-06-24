@@ -1,35 +1,35 @@
-# test_math.ae — comprehensive tests for std/math.ae
-# Tests: absoluteValue, min, max, clamp, integerSquareRoot, power,
-#        isPrime, greatestCommonDivisor, leastCommonMultiple
+// test_math.ae — comprehensive tests for std/math.ae
+// Tests: absoluteValue, min, max, clamp, integerSquareRoot, power,
+//        isPrime, greatestCommonDivisor, leastCommonMultiple
 
 import "std/test"
 import "std/math"
 
 @test
 func main() {
-    # absoluteValue
+    // absoluteValue
     assertEquals(absoluteValue(5), 5, "absoluteValue positive")
     assertEquals(absoluteValue(-5), 5, "absoluteValue negative")
     assertEquals(absoluteValue(0), 0, "absoluteValue zero")
 
-    # min
+    // min
     assertEquals(min(3, 7), 3, "min first smaller")
     assertEquals(min(7, 3), 3, "min second smaller")
     assertEquals(min(5, 5), 5, "min equal")
 
-    # max
+    // max
     assertEquals(max(3, 7), 7, "max first larger")
     assertEquals(max(7, 3), 7, "max second larger")
     assertEquals(max(5, 5), 5, "max equal")
 
-    # clamp
+    // clamp
     assertEquals(clamp(5, 0, 10), 5, "clamp within range")
     assertEquals(clamp(-5, 0, 10), 0, "clamp below range")
     assertEquals(clamp(15, 0, 10), 10, "clamp above range")
     assertEquals(clamp(0, 0, 10), 0, "clamp at lower bound")
     assertEquals(clamp(10, 0, 10), 10, "clamp at upper bound")
 
-    # integerSquareRoot
+    // integerSquareRoot
     assertEquals(integerSquareRoot(0), 0, "integerSquareRoot 0")
     assertEquals(integerSquareRoot(1), 1, "integerSquareRoot 1")
     assertEquals(integerSquareRoot(4), 2, "integerSquareRoot 4")
@@ -41,7 +41,7 @@ func main() {
     assertEquals(integerSquareRoot(2), 1, "integerSquareRoot 2 (floor)")
     assertEquals(integerSquareRoot(10), 3, "integerSquareRoot 10 (floor)")
 
-    # power
+    // power
     assertEquals(power(2, 0), 1, "power exponent 0")
     assertEquals(power(2, 1), 2, "power exponent 1")
     assertEquals(power(2, 3), 8, "power 2^3")
@@ -50,7 +50,7 @@ func main() {
     assertEquals(power(5, 4), 625, "power 5^4")
     assertEquals(power(1, 100), 1, "power 1^n")
 
-    # isPrime
+    // isPrime
     assertTrue(!isPrime(0), "isPrime 0 false")
     assertTrue(!isPrime(1), "isPrime 1 false")
     assertTrue(isPrime(2), "isPrime 2 true")
@@ -69,7 +69,7 @@ func main() {
     assertTrue(isPrime(97), "isPrime 97 true")
     assertTrue(!isPrime(100), "isPrime 100 false")
 
-    # greatestCommonDivisor
+    // greatestCommonDivisor
     assertEquals(greatestCommonDivisor(12, 8), 4, "gcd 12,8")
     assertEquals(greatestCommonDivisor(54, 24), 6, "gcd 54,24")
     assertEquals(greatestCommonDivisor(7, 13), 1, "gcd 7,13 (coprime)")
@@ -77,7 +77,7 @@ func main() {
     assertEquals(greatestCommonDivisor(0, 5), 5, "gcd 0,5")
     assertEquals(greatestCommonDivisor(5, 0), 5, "gcd 5,0")
 
-    # leastCommonMultiple
+    // leastCommonMultiple
     assertEquals(leastCommonMultiple(12, 8), 24, "lcm 12,8")
     assertEquals(leastCommonMultiple(7, 13), 91, "lcm 7,13")
     assertEquals(leastCommonMultiple(4, 6), 12, "lcm 4,6")

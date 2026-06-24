@@ -1,4 +1,4 @@
-# test_struct.ae — struct declaration, field access
+// test_struct.ae — struct declaration, field access
 struct Point {
     x: int
     y: int
@@ -7,6 +7,6 @@ struct Point {
 @test
 func main(): int {
     let p: Point
-    # Can't construct struct literals yet, but struct types compile
+    // Can't construct struct literals yet, but struct types compile
     return 0
 }

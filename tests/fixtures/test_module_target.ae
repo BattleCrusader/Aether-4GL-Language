@@ -1,5 +1,5 @@
-# test_module_target.ae — Module target test
-# Basic hello returning 42
+// test_module_target.ae — Module target test
+// Basic hello returning 42
 
 func module_init(): u64 {
     return 42

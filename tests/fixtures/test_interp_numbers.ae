@@ -1,4 +1,4 @@
-# test_interp_numbers.ae — interpolation with numeric values
+// test_interp_numbers.ae — interpolation with numeric values
 @test(expect=42)
 func main(): u64 {
     let count: u64 = 42

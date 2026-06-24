@@ -1,4 +1,4 @@
-# test_iflet.ae — if let pattern binding for optionals
+// test_iflet.ae — if let pattern binding for optionals
 @test(expect=42)
 func main(): u64 {
     let x: u64? = none

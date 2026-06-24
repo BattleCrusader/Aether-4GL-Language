@@ -1,4 +1,4 @@
-# test_import.ae — test import functionality
+// test_import.ae — test import functionality
 import "test_lib.ae"
 
 @test(expect=42)

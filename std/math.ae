@@ -1,5 +1,5 @@
-# std/math.ae — Basic math: absoluteValue, min, max, clamp
-# Pure Aether — no asm blocks needed for simple arithmetic.
+// std/math.ae — Basic math: absoluteValue, min, max, clamp
+// Pure Aether — no asm blocks needed for simple arithmetic.
 
 pub func absoluteValue(value: int): int {
     if value < 0 { return -value }

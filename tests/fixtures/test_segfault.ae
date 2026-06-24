@@ -1,10 +1,10 @@
-# test_segfault.ae — catch a segfault with try/catch
+// test_segfault.ae — catch a segfault with try/catch
 @test(expect=42)
 func main(): u64 {
     let mut result: u64 = 0
 
     try {
-        # Trigger SIGSEGV by dereferencing null via inline asm
+        // Trigger SIGSEGV by dereferencing null via inline asm
         asm {
             mov rax, 0
             mov rax, [rax]

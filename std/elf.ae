@@ -1,5 +1,5 @@
-# std/elf.ae — ELF64 reader/writer
-# Pure Aether struct definitions.
+// std/elf.ae — ELF64 reader/writer
+// Pure Aether struct definitions.
 
 struct Elf64Header {
     magic: u64
@@ -47,6 +47,6 @@ struct Elf64Symbol {
 }
 
 func verifyElfMagic(header: ref Elf64Header): bool {
-    # little-endian ELF64 magic
+    // little-endian ELF64 magic
     return header.magic == 0x00010102464C457F
 }

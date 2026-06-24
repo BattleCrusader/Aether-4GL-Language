@@ -1,5 +1,5 @@
-# std/test.ae — Testing: assertEquals, assertTrue
-# JUnit-style assertions using Aether's string interpolation and exit() built-in.
+// std/test.ae — Testing: assertEquals, assertTrue
+// JUnit-style assertions using Aether's string interpolation and exit() built-in.
 
 func assertEquals(actualValue: u64, expectedValue: u64, message: string) {
     if actualValue != expectedValue {

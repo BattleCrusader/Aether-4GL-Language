@@ -1,4 +1,4 @@
-# test_trycatch_catch_var.ae — catch with variable binding
+// test_trycatch_catch_var.ae — catch with variable binding
 func do_throw(): u64 throws {
     throw 42
     return 0

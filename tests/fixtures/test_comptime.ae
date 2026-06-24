@@ -1,4 +1,4 @@
-# test_comptime.ae — compile-time execution with #run
+// test_comptime.ae — compile-time execution with #run
 #run {
     let x = 42
 }

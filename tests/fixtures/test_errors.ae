@@ -1,4 +1,4 @@
-# test_errors.ae — custom error types with enum variants and discriminant matching
+// test_errors.ae — custom error types with enum variants and discriminant matching
 enum MyError {
     NotFound
     PermissionDenied

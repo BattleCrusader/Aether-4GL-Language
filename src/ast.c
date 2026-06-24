@@ -426,6 +426,7 @@ const char *unaryop_name(UnaryOp op) {
         case UNARY_NEG: return "-"; case UNARY_NOT: return "!"; case UNARY_BIT_NOT: return "~";
         case UNARY_REF: return "ref"; case UNARY_DEREF: return "*";
         case UNARY_ADDR: return "&"; case UNARY_OWNED: return "owned"; case UNARY_MUT: return "mut";
+        case UNARY_ARRAY_LEN: return "#";
     }
     return "?";
 }
