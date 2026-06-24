@@ -1253,6 +1253,17 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             break;
         }
 
+        case NODE_LITERAL_FLOAT: {
+            /* Float literal: store the 64-bit pattern in the constant pool and load it.
+               For now, just emit the integer pattern of the float bits. */
+            uint64_t val;
+            memcpy(&val, &node->data.literal.float_val, sizeof(val));
+            char buf[64];
+            snprintf(buf, sizeof(buf), "mov rax, 0x%016llx", (unsigned long long)val);
+            cg_inst(cg, buf);
+            break;
+        }
+
         case NODE_LITERAL_BOOL:
             cg_inst1(cg, "mov", node->data.literal.bool_val ? "rax, 1" : "rax, 0");
             break;

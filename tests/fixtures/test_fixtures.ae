@@ -1,8 +1,8 @@
 // test_fixtures.ae — comprehensive Phase 1 test
-// Compile with: aether build tests/fixtures/test_fixtures.ae -o test_fixtures.elf
+// Tests: unsigned types, signed types, control flow, structs, enums, match, bitwise, comparison, unary
 
-// Primitive types
-func test_types(): int {
+// Unsigned integer types: u8, u16, u32, u64
+func test_unsignedTypes(): u64 {
     let a: u8 = 200
     let b: u16 = 40000
     let c: u32 = 3000000
@@ -10,54 +10,63 @@ func test_types(): int {
     return a + b + c + d
 }
 
-// Control flow
-func test_if(x: int): int {
+// Signed integer types: i8, i16, i32, i64
+func test_signedTypes(): i64 {
+    let a: i8 = 100
+    let b: i16 = 20000
+    let c: i32 = 2000000
+    let d: i64 = 40000000000
+    return a + b + c + d
+}
+
+// If/elif/else control flow
+func test_if(x: i64): i64 {
     if x > 0 { return 1 } elif x < 0 { return -1 }
     return 0
 }
 
 // Function calls
-func add(a: int, b: int): int { return a + b }
-func test_call(): int { return add(10, 20) }
+func add(a: i64, b: i64): i64 { return a + b }
+func test_call(): i64 { return add(10, 20) }
 
 // While loop
-func test_while(n: int): int {
-    let mut i = 0
-    let mut s = 0
+func test_while(n: i64): i64 {
+    let mut i: i64 = 0
+    let mut s: i64 = 0
     while i < n { s = s + i; i = i + 1 }
     return s
 }
 
 // For loop
-func test_for(): int {
-    let mut s = 0
+func test_for(): i64 {
+    let mut s: i64 = 0
     for i in 0..10 { s = s + i }
     return s
 }
 
 // Struct
-struct Point { x: int; y: int }
+struct Point { x: i64; y: i64 }
 
 // Enum
-enum Option { Some(int); None }
+enum Option { Some(i64); None }
 
-// Match
-func test_match(x: int): int {
-    match x {
+// Match as expression
+func test_match(x: i64): i64 {
+    return match x {
         case 0 -> 42
         case _ -> 0
     }
 }
 
-// Bitwise
-func test_bitwise(a: int, b: int): int { return a & b | a ^ b }
+// Bitwise operators (on unsigned integers)
+func test_bitwise(a: u64, b: u64): u64 { return a & b | a ^ b }
 
 // Comparison
-func test_cmp(a: int, b: int): bool { return a < b and b > 0 }
+func test_cmp(a: i64, b: i64): bool { return a < b and b > 0 }
 
-// Unary
-func test_unary(x: int): int { return -x }
+// Unary negation
+func test_unary(x: i64): i64 { return -x }
 
-func main(): int {
-    return test_types()
+func main(): i64 {
+    return test_unsignedTypes()
 }
