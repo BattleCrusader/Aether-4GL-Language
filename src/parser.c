@@ -1625,6 +1625,33 @@ static AstNode *parse_prefix(Parser *p) {
             parser_advance(p);
             return node_ident(p->arena, loc, SV("self"));
 
+        case TOKEN_KW_MATCH: {
+            parser_advance(p);
+            AstNode *value = parse_expr(p);
+            AstNode *match_node = node_match(p->arena, p->previous.loc, value);
+
+            if (parser_match(p, TOKEN_LBRACE)) {
+                while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
+                    if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
+                        parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
+
+                    /* Skip optional 'case' keyword */
+                    parser_match(p, TOKEN_KW_CASE);
+                    AstNode *pattern = parse_pattern(p);
+                    AstNode *body = NULL;
+                    if (parser_match(p, TOKEN_ARROW)) {
+                        /* `=>` token? Use ARROW (->) */
+                        body = parse_expr(p);
+                    }
+                    AstNode *arm = node_match_arm(p->arena, pattern->loc, pattern, body);
+                    node_list_append(&match_node->data.match_node.arms, arm);
+                }
+                parser_expect(p, TOKEN_RBRACE, "match body");
+            }
+
+            return match_node;
+        }
+
         case TOKEN_IDENT:
             parser_advance(p);
             return node_ident(p->arena, loc, token.text);
