@@ -1863,7 +1863,7 @@ aether build --target universal-all --output kernel.elf
 
 ## 21. Standard Library
 
-> **Implementation status**: ⚠️ Partially implemented — `std.io` (print, println), `std.mem` (alloc, free), `std.serial` (COM1, putc, puts), `std.test` (assert, test_runner) are implemented. Other modules are planned.
+> **Implementation status**: ⚠️ Partially implemented — `std.io` (print, println, printHex, printDecimal, readLine), `std.mem` (alloc, free, copyMemory, zeroMemory, memset, memcmp), `std.str` (concat, strlen, strcmp/strEq, split, trim, toUpper, toLower, substring, startsWith, endsWith, contains, replace, join), `std.math` (absoluteValue, min, max, clamp, integerSquareRoot, power, isPrime, greatestCommonDivisor, leastCommonMultiple), `std.collections` (HashMap, Set, Queue), `std.serial` (COM1, putc, puts), `std.test` (assertEquals, assertTrue, test_runner), `std.asm` (NASM helper macros), `std.arch` (architecture detection), `std.elf` (ELF64 reader), `std.fs` (file system helpers) are implemented. `formatString` in std.io is a stub (variadic template requires compiler support).
 
 The compiler ships a freestanding standard library:
 
@@ -1885,20 +1885,18 @@ The compiler ships a freestanding standard library:
 
 ## 22. Build System
 
-> **Implementation status**: ⚠️ Partially implemented — `aether build`, `aether run`, and `aether test` CLI commands work. Other commands (`fmt`, `doc`, `asm`, `inspect`, `init`) are planned.
+> **Implementation status**: ⚠️ Partially implemented — `aether build`, `aether run`, `aether asm`, and `aether inspect` CLI commands work. `aether test` is not a separate command (tests run via `make test-host`). `aether fmt`, `aether doc`, `aether init`/`aether new` are planned.
 
 ### 22.1 `aether` CLI
 
 ```
-aether new      <name>          # Create new project
-aether build    [--target=...]   # Compile project
+aether build    [--target=...]   # Compile source file
 aether run      [--target=...]   # Build and run
-aether test     [--target=...]   # Run unit tests
-aether fmt      [files...]       # Format source
-aether doc      [files...]       # Generate documentation
-aether asm      [file.ae]        # Show generated assembly
+aether asm      [--target=...]   # Show generated assembly
 aether inspect  [binary]         # Inspect ELF metadata
-aether init     [--lib|--bin]    # Init project structure
+aether init|new <name>           # Scaffold new project (planned)
+aether fmt      [files...]       # Format source (planned)
+aether doc      [files...]       # Generate documentation (planned)
 ```
 
 ### 22.2 Project Structure
@@ -1957,11 +1955,13 @@ std = { path = "/lib/aether/std" }
 
 ## 24. Think Outside the Box: Unique Aether Innovations
 
-> **Implementation status**: ⚠️ Mostly aspirational — compile-time OS knowledge (§24.1) and zero-cost error context (§24.10) are partially implemented. Most other features in this section (§24.2–§24.12) are aspirational/planned.
+> **Implementation status**: ❌ Mostly aspirational — most features in this section (§24.2–§24.12) are aspirational/planned and not yet implemented. Compile-time OS knowledge (§24.1) and zero-cost error context (§24.10) are partially implemented. See individual subsections for details.
 
 This section describes the features that make Aether genuinely different from other systems languages.
 
 ### 24.1 Compile-Time OS Knowledge
+
+> **✅ Implemented** — The compiler has baked-in knowledge of the Aether OS memory map, syscall table layout, and boot chain requirements. `@layout` and `@kernel_layout` attributes are implemented and verified.
 
 The compiler has baked-in knowledge of the Aether OS architecture. It knows the memory map, the syscall table layout, the module registry structure, and the boot chain requirements. This means:
 
@@ -2172,6 +2172,8 @@ interrupt keyboard at(0x21) {
 
 ## 25. Concurrency and Fibers
 
+> **Implementation status**: ❌ Not yet implemented — all features in this section (spawn, mutex, channels, fiber scheduler) are aspirational/planned. No concurrency primitives exist in the compiler or standard library.
+
 ### 25.1 Spawn
 
 ```aether
@@ -2212,6 +2214,8 @@ The compiler generates code compatible with the Aether OS fiber scheduler:
 ---
 
 ## 26. Advanced OS Integration
+
+> **Implementation status**: ❌ Not yet implemented — all features in this section (boot chain generation, interrupt handlers, self-documenting binaries, capability-based security, unit checking) are aspirational/planned. None are implemented in the compiler.
 
 ### 26.1 Automatic Boot Chain Generation
 
@@ -2299,6 +2303,8 @@ func speed(d: f64, t: f64): f64 {
 
 ## 27. Goal-Oriented I/O and Query Fusion
 
+> **Implementation status**: ❌ Not yet implemented — all features in this section (goal-oriented I/O, query fusion, pattern-based metaprogramming) are aspirational/planned. None are implemented in the compiler.
+
 ### 27.1 Goal-Oriented I/O
 
 Instead of describing *how* to read a file, describe *what* you want:
@@ -2349,6 +2355,8 @@ impl<T> trait Hashable {
 ---
 
 ## 28. Protocol Generation and Hardware Configuration
+
+> **Implementation status**: ❌ Not yet implemented — all features in this section (automatic protocol generation, compile-time hardware configuration) are aspirational/planned. The `protocol` keyword is parsed but codegen is a comment stub.
 
 ### 28.1 Automatic Protocol Generation
 
@@ -2521,7 +2529,7 @@ var, where, while, yield
 | Comment | `#` to end of line |
 | Block comment | `#{` ... `}#` (nestable) |
 | String | Double-quoted, escape sequences: `\n`, `\t`, `\\`, `\"`, `\xNN` |
-| Multi-line string | `"""` ... `"""` (preserves newlines and indentation) |
+| Multi-line string | ❌ Not yet implemented — `"""` ... `"""` syntax is reserved |
 | Char | Single-quoted: `'a'`, `'\n'`, `'\x41'` |
 | Integer | Decimal: `42`, Hex: `0xFF`, Binary: `0b1010`, Octal: `0o77` |
 | Float | `3.14`, `1e10`, `0xFF.0p-3` |
