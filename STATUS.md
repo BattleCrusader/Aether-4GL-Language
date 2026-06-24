@@ -1,7 +1,7 @@
 # Aether Compiler — Implementation Status
 
 > **Last updated**: 2026-06-24
-> **Current state**: 46/47 host-native tests passing. 15/16 tokenizer tests passing.
+> **Current state**: 47/47 host-native tests passing. 15/16 tokenizer tests passing.
 > Compiler builds clean. All major language features through Phase 11 are
 > implemented and tested. Phase 17 (.aelib library format) is implemented and
 > working end-to-end. Phase 18 (standard library in pure Aether) is complete.
@@ -10,6 +10,8 @@
 > set rax as a return value work correctly. `.aelib` archives now always use ELF64
 > format (universal, not host-specific). `print()` built-in now uses 0x5008 syscall
 > page on freestanding targets.
+> Match expressions now work in expression context (let x = match ... { ... };
+> return match ... { ... };). Added match to parse_prefix and cg_expr.
 > Test fixtures use `@test` function attributes (bare or with `expect=N`).
 > Standard library provides `std/test.ae` with JUnit-style `assertEquals`/`assertTrue`.
 > STATUS.md is compiler-only — OS implementation phases live in the OS repo's STATUS.md.

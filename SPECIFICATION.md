@@ -3,6 +3,8 @@
 **Version**: 1.0 (Comprehensive)
 **Status**: Living Document — Last updated: 2026-06-24 — Comprehensive audit complete. See annotations for implementation status.
 
+> **AUDIT NOTE (2026-06-24)**: This specification has been audited against the compiler source code. Discrepancies between spec and implementation are annotated with `⚠️` (partially implemented), `❌` (not implemented), or `🔧` (spec mismatch — implementation differs from spec). See individual sections for details.
+
 ---
 
 ## Table of Contents
@@ -106,12 +108,14 @@ aether run hello.ae
 
 ### 3.1 Comments
 
+> **🔧 SPEC MISMATCH**: The spec documents `//` and `/* */` comment syntax. The actual implementation uses `#` for line comments and `#{ }#` for nestable block comments. This section has been corrected to match the implementation.
+
 ```aether
-// Line comment
+# Line comment
 
-/* Block comment */
+#{ Block comment }#
 
-/* Nested /* block */ comments */
+#{ Nested #{ block }# comments }#
 ```
 
 ### 3.2 Identifiers
@@ -146,17 +150,19 @@ u128        while
 ### 3.4 Operators
 
 ```aether
-Arithmetic:     +   -   *   /   %   **
+Arithmetic:     +   -   *   /   %
 Comparison:     ==  !=  <   >   <=  >=
-Logical:        &&  ||  !
+Logical:        &&  ||  !   and or not
 Bitwise:        &   |   ^   <<  >>
 Assignment:     =   +=  -=  *=  /=  %=  &=  |=  ^=  <<=  >>=
 Member:         .   ->
 Scope:          ::
-Arrow:          =>
-Range:          ..
+Arrow:          ->
+Range:          ..  ..=
 Pattern:        |   ..=
 ```
+
+> **🔧 SPEC MISMATCH**: The spec previously listed `**` (power operator) and `=>` (arrow). The `**` operator is not implemented in the tokenizer. The arrow syntax is `->` (TOKEN_ARROW), not `=>`. The `and`, `or`, `not` keyword operators are also supported alongside `&&`, `||`, `!`.
 
 **String Concatenation with `+`**: The `+` operator is overloaded at the language level. When either operand is a string, `+` performs string concatenation instead of numeric addition. This is detected at codegen time by the `is_string_expr()` helper.
 
@@ -203,10 +209,9 @@ let s = "count = {n}"           // "count = 42" (auto-converted via __aether_ito
 let sum = "total: {x + y}"      // expressions work too
 
 // Multi-line strings
-"""
-This is a
-multi-line string
-"""
+// ❌ NOT YET IMPLEMENTED — Triple-quoted string syntax is not supported.
+// Use string concatenation or interpolation instead.
+// """ ... """ syntax is reserved for future implementation.
 
 // Character literals
 'a'
@@ -318,10 +323,13 @@ let none_val: u64? = none
 
 ### 4.3 Type Aliases
 
+> **❌ NOT YET IMPLEMENTED** — The `type` keyword is tokenized but not handled in the parser. `NODE_TYPE_ALIAS` exists in the AST but no parser code creates these nodes. Type aliases are reserved for future implementation.
+
 ```aether
-type Result = u64
-type ErrorCode = i32
-type Callback = func(u64): bool
+// ❌ NOT YET IMPLEMENTED
+// type Result = u64
+// type ErrorCode = i32
+// type Callback = func(u64): bool
 ```
 
 ### 4.4 Structs
@@ -401,7 +409,8 @@ if let val = x {
 }
 
 // Unwrap with default
-let val = x or 0
+// ❌ NOT YET IMPLEMENTED — The `or` operator for optional unwrap is not supported.
+// let val = x or 0
 ```
 
 ---
@@ -566,9 +575,10 @@ for val in arr {
 }
 
 // With index
-for i, val in arr {
-    print("arr[{i}] = {val}")
-}
+// ❌ NOT YET IMPLEMENTED — Index+value iteration syntax is not supported.
+// for i, val in arr {
+//     print("arr[{i}] = {val}")
+// }
 ```
 
 ### 7.4 Break and Continue
@@ -585,20 +595,22 @@ for i in 0..100 {
 
 ```aether
 match value {
-    case 0 => print("zero")
-    case 1..9 => print("single digit")
-    case > 100 => print("big")
-    case string(s) => print("got string: {s}")
-    case _ => print("default")
+    case 0 -> print("zero")
+    // ❌ Range patterns (case 1..9) not yet implemented
+    // ❌ Guard patterns (case > 100) not yet implemented
+    // ❌ Enum destructuring (case string(s)) not yet implemented
+    case _ -> print("default")
 }
 
 // Match as expression
 let description = match value {
-    case 0 => "zero"
-    case 1..9 => "small"
-    case _ => "large"
+    case 0 -> "zero"
+    // ❌ Range patterns not yet implemented
+    case _ -> "large"
 }
 ```
+
+> **🔧 SPEC MISMATCH**: The spec previously used `=>` for match arms. The actual syntax uses `->` (TOKEN_ARROW). Range patterns (`case 1..9`), guard patterns (`case > 100`), and enum destructuring (`case string(s)`) are not yet implemented — only literal int and wildcard (`_`) patterns work.
 
 ### 7.6 Defer
 
@@ -701,7 +713,7 @@ let y = x or 0
 
 ### 8.7 Pointers (Opt-In, Unsafe)
 
-Raw pointers exist for hardware interaction, DMA, and inline assembly. They require an `unsafe` block.
+> **⚠️ PARSED BUT NO-OP CODEGEN** — `unsafe` blocks are parsed into `NODE_UNSAFE` AST nodes. The codegen emits the body without any special handling — no memory protection changes, no bounds-check suppression. Full unsafe semantics are reserved for future implementation.
 
 ```aether
 func read_mmio(addr: ptr u64): u64 {
