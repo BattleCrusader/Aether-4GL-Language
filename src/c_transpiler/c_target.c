@@ -57,6 +57,32 @@ int c_compile(CCodegen *cg, const char *c_path, const char *output_path) {
             ret = system(cmd);
             break;
 
+        case TARGET_UNIVERSAL:
+            /* Universal binary: compile for x86_64 + ARM64, lipo together */
+            snprintf(cmd, sizeof(cmd),
+                "gcc -std=c11 -O%d -arch x86_64 -c -o /tmp/aether_univ_x86_64.o \"%s\" && "
+                "gcc -std=c11 -O%d -arch arm64 -c -o /tmp/aether_univ_arm64.o \"%s\" && "
+                "lipo -create /tmp/aether_univ_x86_64.o /tmp/aether_univ_arm64.o -output \"%s\" && "
+                "rm -f /tmp/aether_univ_x86_64.o /tmp/aether_univ_arm64.o 2>&1",
+                cg->opt_level, c_path, cg->opt_level, c_path, output_path);
+            ret = system(cmd);
+            break;
+
+        case TARGET_UNIVERSAL_ALL:
+            /* Universal binary: all available architectures */
+            snprintf(cmd, sizeof(cmd),
+                "gcc -std=c11 -O%d -arch x86_64 -arch arm64 -c -o /tmp/aether_univ_all.o \"%s\" && "
+                "lipo -create /tmp/aether_univ_all.o -output \"%s\" && "
+                "rm -f /tmp/aether_univ_all.o 2>&1",
+                cg->opt_level, c_path, output_path);
+            ret = system(cmd);
+            break;
+
+        case TARGET_LIB:
+            /* .aelib library — handled by aelib.c, not here */
+            fprintf(stderr, "C: TARGET_LIB not supported in c_compile\n");
+            return 1;
+
         default:
             /* Fallback to host compilation */
             snprintf(cmd, sizeof(cmd),

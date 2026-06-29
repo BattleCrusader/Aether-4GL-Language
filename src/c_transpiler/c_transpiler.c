@@ -41,6 +41,7 @@ void c_emit_expr(CCodegen *cg, AstNode *node);
 void c_emit_stmt(CCodegen *cg, AstNode *node);
 void c_emit_block(CCodegen *cg, AstNode *node);
 void c_emit_func_decl(CCodegen *cg, AstNode *node);
+void c_emit_func_prototype(CCodegen *cg, AstNode *node);
 void c_emit_runtime(CCodegen *cg);
 void c_emit_target_preamble(CCodegen *cg);
 void c_emit_target_postamble(CCodegen *cg);
@@ -63,7 +64,15 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     /* Emit runtime helpers */
     c_emit_runtime(cg);
 
-    /* Emit all top-level declarations */
+    /* Pass 1: Emit function prototypes (forward declarations) */
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        if (decl->type == NODE_FUNC_DECL) {
+            c_emit_func_prototype(cg, decl);
+        }
+    }
+
+    /* Pass 2: Emit all top-level declarations */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
         switch (decl->type) {
@@ -81,7 +90,6 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
             case NODE_STRUCT_DECL:
             case NODE_CLASS_DECL:
             case NODE_ENUM_DECL:
-                /* Type declarations emitted as typedefs */
                 c_emit_stmt(cg, decl);
                 break;
             default:

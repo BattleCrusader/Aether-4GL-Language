@@ -11,6 +11,10 @@ C_TRANSPILER_SRCS = \
 	src/c_transpiler/c_stmt.c \
 	src/c_transpiler/c_func.c \
 	src/c_transpiler/c_runtime.c \
+	src/c_transpiler/c_string.c \
+	src/c_transpiler/c_asm.c \
+	src/c_transpiler/c_error.c \
+	src/c_transpiler/c_contract.c \
 	src/c_transpiler/c_target.c
 
 GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
