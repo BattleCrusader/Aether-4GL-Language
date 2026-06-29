@@ -1,5 +1,5 @@
 HOST_CC = gcc
-HOST_CFLAGS = -std=c11 -Wall -Wextra -g -O0 -Iinclude -D_GNU_SOURCE \
+HOST_CFLAGS = -std=c23 -Wall -Wextra -g -O0 -Iinclude -D_GNU_SOURCE \
 	-DLD='"x86_64-elf-ld"' \
 	-DSEGFAULT_HELPER='"$(CURDIR)/build/segfault_helper.o"'
 

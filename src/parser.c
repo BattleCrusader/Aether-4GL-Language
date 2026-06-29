@@ -1865,6 +1865,9 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         parser_advance(p);
         AstNode *call = node_call(p->arena, loc, left);
         while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+            /* Skip newlines between arguments */
+            while (parser_match(p, TOKEN_NEWLINE));
+            if (parser_check(p, TOKEN_RPAREN)) break;
             /* Handle empty arg: , , or leading , — means "none" for optional variadics */
             if (parser_check(p, TOKEN_COMMA)) {
                 /* Empty argument — emit a NONE literal (0) */
@@ -1945,7 +1948,7 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         case TOKEN_GT_EQ: op = BIN_GE; break;
         case TOKEN_AND_AND: case TOKEN_KW_AND: op = BIN_AND; break;
         case TOKEN_PIPE_PIPE: op = BIN_OR; break;
-        case TOKEN_KW_OR: op = BIN_OR_ELSE; break;
+        case TOKEN_KW_OR: op = BIN_OR; break;
         case TOKEN_AMPERSAND: op = BIN_BIT_AND; break;
         case TOKEN_PIPE: op = BIN_BIT_OR; break;
         case TOKEN_CARET: op = BIN_BIT_XOR; break;

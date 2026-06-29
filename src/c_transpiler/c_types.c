@@ -52,7 +52,7 @@ const char *c_type_name(AstNode *type_node) {
             return "void*";
         }
         case NODE_TYPE_ARRAY:
-            return "void*";  /* placeholder */
+            return "slice";  /* dynamic array → slice */
         case NODE_TYPE_SLICE:
             return "slice";
         case NODE_TYPE_OPTIONAL: {
