@@ -10,8 +10,10 @@ void c_emit_runtime(CCodegen *cg) {
     /* Emit string type */
     fputs("typedef struct { uint64_t len; const char *ptr; } string;\n\n", cg->out);
 
-    /* Emit optional type */
-    fputs("typedef struct { uint8_t has_value; uint64_t value; } optional;\n\n", cg->out);
+    /* Emit optional type — for T? parameters.
+     * In C, we use the value type directly. Optionality is handled
+     * by checking if ptr == NULL (for strings) or value == 0 (for ints). */
+    fputs("typedef string optional;\n\n", cg->out);
 
     /* Emit slice type */
     fputs("typedef struct { void *ptr; uint64_t len; } slice;\n\n", cg->out);
