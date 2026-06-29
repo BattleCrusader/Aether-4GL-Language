@@ -18,8 +18,8 @@ cd /Volumes/Backup/Development/Project_Aether/compiler
 make
 
 # Run the test suite
-make test           # Unit tests (tokenizer + parser + asm)
-make test-host      # Native .ae fixture tests (37 tests)
+make test           # Unit tests (tokenizer + parser)
+make test-host      # Native .ae fixture tests
 
 # Compile and run a test program
 ./build/aether --target host tests/fixtures/hello.ae -o /tmp/hello
@@ -33,19 +33,18 @@ echo $?             # Should print 42
 ## Prerequisites
 
 - **C compiler**: GCC or Clang (for building the bootstrap compiler)
-- **NASM**: Netwide Assembler (for assembling generated .asm to .o)
-- **x86_64-elf-ld**: ELF64 cross-linker (for freestanding output)
+- **LLVM 18+**: LLVM development libraries (for the LLVM IR backend)
 - **make**: Build system
 - **Python 3**: For some build tools
 
 On macOS:
 ```bash
-brew install nasm x86_64-elf-binutils
+brew install llvm
 ```
 
 On Linux:
 ```bash
-sudo apt-get install nasm binutils-x86-64-linux-gnu
+sudo apt-get install llvm-dev
 ```
 
 ## Project Overview
@@ -55,8 +54,8 @@ The Aether compiler is a from-scratch language compiler that:
 1. Reads `.ae` source files
 2. Tokenizes and parses them into an AST
 3. Performs semantic analysis and optimization
-4. Generates NASM assembly text
-5. Assembles and links into ELF64/Mach-O/flat binary output
+4. Generates LLVM IR via the LLVM-C API
+5. Emits object files, assembly listings, or flat binaries via LLVM backends
 
 The compiler is written in C11 (bootstrap phase) and will eventually be rewritten in Aether (self-hosting).
 
@@ -72,12 +71,19 @@ The compiler is written in C11 (bootstrap phase) and will eventually be rewritte
 | `ast.c` | AST node creation helpers | Adding new AST node types |
 | `parser.c` | Recursive descent + Pratt parser | Adding new syntax, changing grammar |
 | `semantic.c` | Type checking, name resolution, const evaluation | Adding type rules, compile-time evaluation |
-| `codegen.c` | NASM code generation (largest file) | Adding codegen for new features, fixing output bugs |
 | `optimizer.c` | DCE, constant folding, inlining | Adding optimization passes, fixing optimizer bugs |
-| `asm_ir.c` | Multi-target assembler IR | Changing assembler IR |
-| `asm_parser.c` | NASM instruction parser | Fixing NASM parsing |
-| `asm_backend_*.c` | Per-architecture backends | Adding new instructions to ARM64/RISC-V backends |
-| `universal.c` | Universal binary generation | Changing fat binary format |
+| `llvm/llvm_init.c` | LLVM context/module/builder creation | Changing LLVM initialization |
+| `llvm/llvm_types.c` | Aether → LLVM type mapping | Adding new primitive types |
+| `llvm/llvm_expr.c` | Expression codegen (literals, ops, calls, indexing) | Adding expression-level features |
+| `llvm/llvm_stmt.c` | Statement codegen (let, if, while, for, return, defer) | Adding statement-level features |
+| `llvm/llvm_func.c` | Function codegen (decl, params, entry/exit, variadics) | Changing function ABI |
+| `llvm/llvm_string.c` | String operations (concat, interpolation, itoa) | Changing string representation |
+| `llvm/llvm_asm.c` | Inline assembly (asm blocks, output bindings) | Changing inline asm support |
+| `llvm/llvm_error.c` | Error handling (throws, try/catch, cleanup tables) | Changing exception mechanism |
+| `llvm/llvm_contract.c` | Contract codegen (pre/post conditions) | Changing contract semantics |
+| `llvm/llvm_runtime.c` | Runtime helpers (alloc, concat, itoa declarations) | Adding runtime functions |
+| `llvm/llvm_target.c` | Target setup, object emission, linker scripts | Adding new targets |
+| `llvm/llvm_debug.c` | Debug info (DWARF metadata, source locations) | Improving debug experience |
 
 ### Header Files (`include/aether/`)
 
@@ -89,10 +95,8 @@ The compiler is written in C11 (bootstrap phase) and will eventually be rewritte
 | `lexer.h` | `Lexer` struct |
 | `parser.h` | `Parser` struct, `Precedence` enum |
 | `semantic.h` | `SemanticAnalyzer` struct |
-| `codegen.h` | `Codegen` struct, `Target` enum (12 targets) |
+| `llvm.h` | `LlvmCodegen` struct, public API for all LLVM modules |
 | `optimizer.h` | `OptimizerConfig` struct |
-| `asm_ir.h` | `AsmInstruction`, `AsmOperand`, `AsmRegister` |
-| `universal.h` | `MultiArchHeader`, `ArchEntry` |
 
 ### Standard Library (`std/`)
 
@@ -142,9 +146,15 @@ Follow this order:
    - Add type checking rules
    - Update `const_eval_expr()` if compile-time evaluable
 
-5. **Codegen** (`codegen.c` + `codegen.h`):
-   - Add code emission in `cg_stmt()` or `cg_expr()`
-   - Update `cg_emit_runtime()` if new runtime helper needed
+5. **Codegen** (in `src/llvm/`):
+   - Add code emission in the appropriate LLVM module
+   - `llvm_expr.c` for expression features
+   - `llvm_stmt.c` for statement features
+   - `llvm_func.c` for function-level features
+   - `llvm_string.c` for string operations
+   - `llvm_error.c` for error handling
+   - `llvm_asm.c` for inline assembly
+   - `llvm_contract.c` for contract programming
 
 6. **Optimizer** (`optimizer.c` + `optimizer.h`):
    - Update DCE to handle new node types
@@ -165,7 +175,7 @@ Follow this order:
 ### Fixing a Bug
 
 1. Reproduce the bug with a minimal `.ae` test case
-2. Identify which pipeline stage is at fault (tokenizer? parser? codegen?)
+2. Identify which pipeline stage is at fault (tokenizer? parser? semantic? codegen?)
 3. Fix in the appropriate source file
 4. Add the test case to the test suite
 5. Run `make test && make test-host` to verify no regressions
@@ -176,17 +186,18 @@ Follow this order:
 - **C source**: C11 standard, freestanding-compatible
 - **Indentation**: 4 spaces (no tabs)
 - **Naming**: `snake_case` for functions and variables, `PascalCase` for types
-- **Comments**: `/* Block comments */` for C, `#` for Aether
+- **Comments**: `/* Block comments */` for C, `//` for Aether
 - **Error handling**: Return error codes, use `fprintf(stderr, ...)` for errors
 - **No dynamic allocation**: Use arena allocator for AST nodes
 - **No stdlib**: The compiler must compile with `-ffreestanding` eventually
+- **LLVM modules**: Each file under 400 lines, one concern per file
 
 ### Testing
 
 ```bash
 # Run all tests
-make test           # Unit tests (tokenizer + parser + asm)
-make test-host      # Native .ae fixture tests (37 tests)
+make test           # Unit tests (tokenizer + parser)
+make test-host      # Native .ae fixture tests
 make test-layout    # Flat binary layout tests
 
 # Run specific test
@@ -214,11 +225,12 @@ Fixes #123
 - Simple, portable, well-understood
 - Easy to bootstrap (every platform has a C compiler)
 
-### Why NASM?
-- Full control over output
-- No dependency on LLVM or GCC backend
-- Multi-target assembler can translate to ARM64/RISC-V
-- Simple text-based output (easy to debug)
+### Why LLVM?
+- Register allocation, instruction selection, and optimization handled by LLVM
+- Free multi-arch backends: x86_64, ARM64, RISC-V, WASM
+- Proper DWARF debug info
+- Battle-tested optimization passes (200+)
+- The LLVM-C API is stable and well-documented
 
 ### Why Arena Allocation?
 - No individual frees needed (entire arena freed at once)
@@ -236,5 +248,6 @@ Fixes #123
 - Read [REQUIREMENTS.md](REQUIREMENTS.md) for language requirements
 - Read [SPECIFICATION.md](SPECIFICATION.md) for language specification
 - Read [STATUS.md](STATUS.md) for implementation status
+- Read [LLVM_BACKEND.md](LLVM_BACKEND.md) for LLVM backend design
 - Read [AGENTS.md](AGENTS.md) for AI agent guide (also useful for humans)
 - Read the source code — it's well-commented

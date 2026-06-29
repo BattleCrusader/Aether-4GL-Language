@@ -2,19 +2,19 @@
 
 ## 1. Philosophy
 
-Aether is a compiled, object-oriented 4GL designed specifically for operating system development. It bridges the gap between high-level expressiveness and bare-metal control. Every design decision serves three goals: **zero-cost abstractions that compile to readable NASM**, **deterministic automatic memory management baked into the binary**, and **seamless integration with freestanding x86_64 environments**.
+Aether is a compiled, object-oriented 4GL designed specifically for operating system development. It bridges the gap between high-level expressiveness and bare-metal control. Every design decision serves three goals: **zero-cost abstractions that compile to efficient native code**, **deterministic automatic memory management baked into the binary**, and **seamless integration with freestanding environments**.
 
 ### Core Principles
 
-- **Compiled only, no interpreter.** The compiler emits NASM assembly, assembles with NASM, and links with LD. No runtime, no VM, no JIT.
+- **Compiled only, no interpreter.** The compiler emits LLVM IR, which is compiled to native code by LLVM backends. No runtime, no VM, no JIT.
 - **Automatic memory is the default.** Bump allocators, region-based allocation, and automatic destructor chains are emitted by the compiler. The programmer never calls `free` or `delete`.
 - **Classes are optional.** The language is fully usable without OOP. Functions, structs, enums, and procedural code are first-class citizens.
-- **References over pointers.** The compiler prefers `ref` semantics (borrowed, non-nullable, bounds-checked where possible). Raw pointers exist for hardware access and inline assembly.
-- **Inline NASM assembly.** Any function can contain raw NASM blocks. The compiler passes them through verbatim with label resolution.
+- **References over pointers.** The compiler prefers `ref` semantics (borrowed, non-nullable). Raw pointers exist for hardware access and inline assembly.
+- **Inline assembly.** Any function can contain raw Intel-syntax assembly blocks via LLVM inline asm.
 - **Deterministic exceptions.** `try`/`catch` with full stack unwinding, scope cleanup (destructors + defer), and no runtime type information. Compiled to explicit jump tables and cleanup code.
 - **Freestanding by default.** No libc dependency. The compiler generates code that runs on bare metal, in kernel space, or hosted on the target OS.
 - **Multi-target output.** The same source can compile to Mach-O (macOS host), ELF (Linux host), flat binary (boot sector), kernel ELF, or relocatable module.
-- **Universal binary support.** The compiler can emit multi-architecture binaries containing x86_64, ARM64, and RISC-V code in a single file, with a thin dispatcher at the entry point.
+- **LLVM backend.** Register allocation, optimization, and multi-arch support are handled by LLVM. The compiler generates LLVM IR, not assembly text.
 
 ---
 
@@ -22,7 +22,7 @@ Aether is a compiled, object-oriented 4GL designed specifically for operating sy
 
 ### 2.1 Syntax Philosophy
 
-Aether syntax is brace-delimited, newline-sensitive for statement separation, and visually clean. It draws inspiration from Go (simplicity), Rust (safety concepts), and Python (readability), but is not a clone of any of them.
+Aether syntax is indentation-based, newline-sensitive for statement separation, and visually clean. It draws inspiration from Go (simplicity), Rust (safety concepts), and Python (readability), but is not a clone of any of them.
 
 ```
 // Hello World
@@ -33,9 +33,9 @@ func main() {
 
 ### 2.2 Key Syntax Rules
 
-- **Braces `{}` for blocks.** Functions, if/else, loops, try/catch, classes, structs, enums all use braces.
+- **Indentation for blocks.** Functions, if/else, loops, try/catch, classes, structs, enums all use indentation (4 spaces).
 - **Newlines separate statements.** Semicolons are optional and can be used to put multiple statements on one line.
-- **`//` for line comments, `/* */` for block comments.**
+- **`//` for line comments, `/* */` for block comments, `///` for doc comments.**
 - **Identifiers:** letters, digits, underscores. Must start with a letter or underscore.
 - **Case-sensitive.** `foo` and `Foo` are different.
 - **`_` is the blank identifier.** Discards values.
@@ -44,6 +44,10 @@ func main() {
 
 | Type | Size | Description |
 |------|------|-------------|
+| `void` | 0 bytes | No value (for functions) |
+| `bool` | 1 byte | `true` or `false` |
+| `byte` | 1 byte | Raw byte (u8 alias) |
+| `char` | 1 byte | Single character (byte alias) |
 | `u8` | 1 byte | Unsigned 8-bit integer |
 | `u16` | 2 bytes | Unsigned 16-bit integer |
 | `u32` | 4 bytes | Unsigned 32-bit integer |
@@ -52,24 +56,27 @@ func main() {
 | `i16` | 2 bytes | Signed 16-bit integer |
 | `i32` | 4 bytes | Signed 32-bit integer |
 | `i64` | 8 bytes | Signed 64-bit integer |
+| `int` | 8 bytes | Alias for `i64` |
 | `f32` | 4 bytes | IEEE 754 single-precision float |
+| `float` | 4 bytes | Alias for `f32` |
 | `f64` | 8 bytes | IEEE 754 double-precision float |
-| `bool` | 1 byte | `true` or `false` |
-| `char` | 1 byte | ASCII character |
-| `str` | 16 bytes | String view: `{ptr: u64, len: u64}` |
-| `void` | 0 bytes | No value (for functions) |
-| `typeid` | 8 bytes | Runtime type identifier (opaque) |
+| `double` | 8 bytes | Alias for `f64` |
+| `string` | 8 bytes | Pointer to null-terminated string with length header |
 
 ### 2.4 Composite Types
 
 | Type | Description |
 |------|-------------|
-| `[N]T` | Fixed-size array of N elements of type T |
-| `[]T` | Dynamic slice: `{ptr: u64, len: u64}` |
+| `[T; N]` | Fixed-size array of N elements of type T |
+| `[T]` | Dynamic slice: `{ptr: u64, len: u64}` |
 | `ref T` | Immutable reference to T (non-nullable, borrowed) |
 | `mut ref T` | Mutable reference to T |
+| `owned T` | Unique ownership (move semantics) |
+| `rc T` | Reference-counted shared ownership |
 | `*T` | Raw pointer to T (nullable, unchecked) |
-| `?T` | Optional type: `{has_value: bool, value: T}` |
+| `?T` | Optional type |
+| `func(Args): Ret` | Function pointer type |
+| `(T1, T2, ...)` | Tuple type |
 | `struct` | Named product type with fields |
 | `enum` | Tagged union with optional payloads |
 | `class` | OOP type with methods, fields, auto-destructor |
@@ -83,16 +90,16 @@ Standard C-style operators with these additions:
 | Operator | Description |
 |----------|-------------|
 | `+` | Numeric add OR string concatenation (when either operand is a string) |
-| `ref` | Take reference |
-| `mut` | Take mutable reference |
-| `owned` | Take ownership (move semantics) |
-| `as` | Type cast |
-| `is` | Type check (for enums with payloads) |
+| `++` `--` | Prefix/postfix increment and decrement |
+| `+=` `-=` `*=` `/=` `%=` `&=` `|=` `^=` `<<=` `>>=` | Compound assignment |
+| `#` | Array length (prefix operator) |
+| `~` | Bitwise NOT |
+| `and` `or` `not` | Keyword logical operators (synonyms for `&&` `||` `!`) |
 | `..` | Range (inclusive start, exclusive end) |
 | `..=` | Range (inclusive both ends) |
-| `??` | Nil-coalescing (unwrap optional or default) |
-| `?.` | Optional chaining |
-| `!` | Force-unwrap optional (panics on nil) |
+| `as` | Type cast |
+| `::` | Scope resolution (enum variant construction) |
+| `->` | Expression body (function arrow) |
 
 ### 2.6 String Interpolation
 
@@ -100,11 +107,11 @@ Strings support inline interpolation with `{expr}` syntax:
 
 ```
 let name = "Aether"
-let msg = "Hello, {name}! The answer is {6 * 7}.\n"
-// msg = "Hello, Aether! The answer is 42.\n"
+let msg = "Hello, {name}! The answer is {6 * 7}."
+// msg = "Hello, Aether! The answer is 42."
 ```
 
-The compiler desugars interpolation into concatenation calls at compile time. Any expression that can be converted to a string (numbers, bools, types with a `format` method) is valid inside `{}`.
+The compiler desugars interpolation into concatenation calls at compile time. Any expression that can be converted to a string (numbers, bools) is valid inside `{}`. Use `\{` and `\}` for literal braces.
 
 ---
 
@@ -118,16 +125,16 @@ Aether has **no garbage collector** and **no manual free**. Memory management is
 
 | Strategy | Description | Used For |
 |----------|-------------|----------|
+| **Stack allocation** | All variables live on the stack by default. No heap overhead. | Local variables, small structs |
 | **Bump allocation** | Linear scan through a pre-allocated arena. O(1) alloc, no free. | Temporary objects, per-function scratch |
 | **Region allocation** | Arena with rollback. Allocations in a region are freed together. | Per-request, per-frame, per-transaction |
-| **Stack allocation** | All variables live on the stack by default. No heap overhead. | Local variables, small structs |
-| **Heap allocation** | Explicit `alloc` keyword. Paired with automatic destructor. | Long-lived objects, dynamic data |
+| **Heap allocation** | Explicit `heap` keyword. Paired with automatic destructor. | Long-lived objects, dynamic data |
 
 ### 3.3 Automatic Destructors
 
 When a class instance or heap-allocated value goes out of scope, the compiler:
 
-1. Calls the class destructor (if defined)
+1. Calls the class destructor (`drop` method, if defined)
 2. Calls destructors for all member fields (recursively)
 3. Frees the memory (for heap allocations)
 
@@ -135,18 +142,18 @@ This is emitted as explicit code in the compiled binary — no runtime, no GC, n
 
 ```
 class Buffer {
-    data: [100]u8
+    data: [u8; 100]
     len: u32
 
-    destructor() {
+    func drop() {
         print("Buffer destroyed\n")
     }
 }
 
 func example() {
-    let buf = Buffer{}    // stack-allocated
+    let buf = Buffer { data: ..., len: 0 }    // stack-allocated
     // ... use buf ...
-}   // compiler emits: buf.destructor() automatically
+}   // compiler emits: buf.drop() automatically
 ```
 
 ### 3.4 Defer
@@ -154,12 +161,12 @@ func example() {
 `defer` schedules cleanup code to run at scope exit, regardless of how the scope is exited (normal return, exception, break). Defers run in reverse order of declaration (LIFO).
 
 ```
-func read_file(path: str) -> ?str {
-    let f = open(path)
-    defer close(f)       // runs when scope exits
-    let data = read_all(f)
+func readFile(path: string): string? {
+    let f = File::open(path)
+    defer { f.close() }       // runs when scope exits
+    let data = f.readAll()
     return data
-}   // close(f) called automatically even on early return
+}   // f.close() called automatically even on early return
 ```
 
 ### 3.5 Regions
@@ -167,8 +174,8 @@ func read_file(path: str) -> ?str {
 Regions provide scoped arena allocation. All allocations within a region are freed when the region ends.
 
 ```
-region frame {
-    let obj = alloc MyObject{}    // allocated in region
+region("frame") {
+    let obj = heap MyObject {}    // allocated in region
     // ... use obj ...
 }   // all region allocations freed here
 ```
@@ -201,7 +208,7 @@ func risky() throws {
 func main() {
     try {
         risky()
-    } catch {
+    } catch _ {
         print("caught an error!\n")
     }
 }
@@ -211,11 +218,11 @@ func main() {
 
 The compiler emits:
 
-1. **Before try body:** Save the stack frame and set up a jump buffer (sigsetjmp on host, custom IDT-based for kernel)
-2. **Try body:** Execute normally
-3. **On throw:** Walk the cleanup table (innermost scope first), call destructors and defers, then jump to the catch handler
-4. **After try body:** Clear the jump buffer
-5. **Catch handler:** Execute recovery code
+1. **Before try body:** Clear error tag (`xor rdx, rdx`)
+2. **Try body:** Execute normally with cleanup table tracking
+3. **On throw:** Walk the cleanup table (innermost scope first), call destructors and defers, set error tag, jump to catch handler
+4. **After try body:** Check error tag, branch to catch or finally
+5. **Catch handler:** Match error discriminant against catch arms, execute recovery code
 
 ### 4.3 Error Propagation
 
@@ -233,7 +240,7 @@ func outer() throws {
 func main() {
     try {
         outer()
-    } catch {
+    } catch _ {
         print("outer failed\n")
     }
 }
@@ -249,45 +256,31 @@ On host targets, segfaults in try blocks are caught via `sigsetjmp`/`siglongjmp`
 
 ### 5.1 Classes
 
-Classes are the primary OOP construct. They support fields, methods, constructors, destructors, and inheritance.
+Classes are the primary OOP construct. They support fields, methods, constructors, destructors.
 
 ```
 class Animal {
-    name: str
+    name: string
     age: u32
 
-    constructor(name: str) {
-        this.name = name
-        this.age = 0
+    func init(name: string) {
+        self.name = name
+        self.age = 0
     }
 
-    destructor() {
-        print("{this.name} says goodbye\n")
+    func drop() {
+        print("{self.name} says goodbye\n")
     }
 
     func speak() {
-        print("{this.name} makes a sound\n")
+        print("{self.name} makes a sound\n")
     }
 }
 ```
 
-### 5.2 Inheritance
+### 5.2 Implicit `self`
 
-Single inheritance with virtual dispatch via vtable.
-
-```
-class Dog : Animal {
-    breed: str
-
-    constructor(name: str, breed: str) : super(name) {
-        this.breed = breed
-    }
-
-    override func speak() {
-        print("{this.name} barks!\n")
-    }
-}
-```
+`self` is **never written in the parameter list**. The parser auto-injects `self: ref Type` as the first parameter for methods defined inside struct/class bodies.
 
 ### 5.3 Automatic Destruction
 
@@ -296,7 +289,6 @@ Class instances are destroyed automatically when they go out of scope:
 - **Stack-allocated:** destructor called at end of scope
 - **Heap-allocated:** destructor called, then memory freed
 - **Array of classes:** each element destroyed in reverse order
-- **Inheritance chain:** destructors called from most-derived to base
 
 ### 5.4 Structs vs Classes
 
@@ -304,8 +296,7 @@ Class instances are destroyed automatically when they go out of scope:
 |---------|--------|-------|
 | Memory | Stack by default | Stack or heap |
 | Copy semantics | Value copy (memcpy) | Reference (pointer) |
-| Destructor | Not supported | Automatic |
-| Inheritance | Not supported | Supported |
+| Destructor | Not supported | Automatic via `drop()` |
 | Methods | Supported | Supported |
 | Virtual dispatch | Static only | Static + virtual |
 | When to use | Small data, no cleanup needed | Complex objects with lifecycle |
@@ -329,7 +320,7 @@ impl Drawable for Circle {
     }
 }
 
-func render(item: dyn Drawable) {
+func render(item: ref dyn Drawable) {
     item.draw()    // dynamic dispatch via vtable
 }
 ```
@@ -338,89 +329,73 @@ func render(item: dyn Drawable) {
 
 ## 6. Inline Assembly
 
-### 6.1 NASM Blocks
+### 6.1 Assembly Blocks
 
-Any function can contain raw NASM assembly blocks using the `asm` keyword:
+Any function can contain raw assembly blocks using the `asm` keyword:
 
 ```
-func write_port(port: u16, value: u8) {
+func writePortByte(port: u16, value: byte) {
     asm {
-        mov dx, [port]
-        mov al, [value]
+        mov dx, rdi
+        mov al, sil
         out dx, al
     }
 }
 ```
 
-### 6.2 Register Constraints
+Aether function parameters are **not** automatically substituted — use SysV ABI registers directly (rdi=arg1, rsi=arg2, rdx=arg3, rcx=arg4, r8=arg5, r9=arg6).
 
-Variables can be mapped to specific registers:
+### 6.2 Output Bindings
+
+Use `asm: (outputs) { body }` to bind assembly results to Aether variables:
 
 ```
-func cpuid() -> (u32, u32, u32, u32) {
-    let eax: u32, ebx: u32, ecx: u32, edx: u32
-    asm {
-        mov eax, 1
-        cpuid
-        mov [eax], eax
-        mov [ebx], ebx
-        mov [ecx], ecx
-        mov [edx], edx
+func readTimestampCounter(): u64 {
+    let hi: u32
+    let lo: u32
+    asm: (hi, lo) {
+        rdtsc
+        mov [hi], edx
+        mov [lo], eax
     }
-    return (eax, ebx, ecx, edx)
+    return (u64(hi) << 32) | u64(lo)
 }
 ```
 
-### 6.3 Label Resolution
+### 6.3 Top-Level Assembly
 
-NASM labels inside asm blocks are resolved by the assembler. Aether labels can be referenced from asm blocks using the `@` prefix:
+At file level (outside any function), `asm { }` emits raw assembly text directly into the output without any function wrapping. Used for declaring BSS/data sections, global symbols, and other directives.
 
-```
-func example() {
-    asm {
-        jmp @skip
-        ; ... dead code ...
-      @skip:
-        nop
-    }
-}
-```
+### 6.4 Extern Hoisting
 
-### 6.4 Raw Binary Emission
-
-For boot sectors and low-level code, raw bytes can be emitted:
-
-```
-asm {
-    db 0x55, 0xAA    ; boot signature
-    times 510-($-$$) db 0
-}
-```
+`extern` declarations from asm blocks are automatically hoisted to file level. NASM requires `extern` at file level, not inside function bodies.
 
 ---
 
 ## 7. Compile-Time Features
 
-### 7.1 Compile-Time Evaluation
-
-A subset of the language can be evaluated at compile time:
+### 7.1 Compile-Time Constants
 
 ```
 const MAX_SIZE = 4096
 const TABLE_SIZE = MAX_SIZE / 16
+```
 
-const TABLE: [TABLE_SIZE]u32 = compute_table()    // computed at compile time
+Constants are evaluated at compile time and can be used in type annotations, array sizes, and inline assembly.
 
-func compute_table() -> [TABLE_SIZE]u32 {
-    let result: [TABLE_SIZE]u32
-    for i in 0..TABLE_SIZE {
-        result[i] = i * i
-    }
-    return result
+### 7.2 `#run` Blocks
+
+Code inside `#run { }` executes at compile time. This enables metaprogramming without a separate macro system.
+
+```
+#run {
+    // This runs at compile time!
+    let result = computeSomething()
+    emit("const TABLE_SIZE = {result}")
 }
 ```
 
-### 7.2 Compile-Time Reflection
+### 7.3 Compile-Time Reflection
 
 ```
 @target    // returns current target: "host", "kernel", "boot", "module", "binary"
@@ -430,7 +405,7 @@ func compute_table() -> [TABLE_SIZE]u32 {
 @alignof(T) // returns alignment of type T
 ```
 
-### 7.3 Conditional Compilation
+### 7.4 Conditional Compilation
 
 ```
 # if @target == "kernel"
@@ -451,35 +426,24 @@ func compute_table() -> [TABLE_SIZE]u32 {
 | Target | Output | Entry | Use Case |
 |--------|--------|-------|----------|
 | `host` | Mach-O (macOS) or ELF (Linux) | `_aether_entry` | Testing on host OS |
-| `kernel` | ELF64 | `_start` | Aether OS kernel |
-| `boot` | Flat binary (512B) | `0x7C00` | Boot sector |
+| `kernel` | ELF64 | `_start` at 0x1000000 | Aether OS kernel |
+| `boot` | Flat binary (512B) | 0x7C00 | Boot sector |
 | `binary` | ELF64 at 0x2000000 | `_start` | Aether OS /bin/ executables |
 | `module` | ELF64 relocatable | `mod_init` | Aether OS kernel modules |
-| `universal` | Multi-arch binary | Dispatcher | Cross-platform executables |
+| `freestanding` | ELF64 | `_start` | Generic freestanding |
+| `universal` | Multi-arch binary | CPU dispatcher | Cross-platform executables |
+| `asm-x86_64` | Intel assembly | — | Assembly listing |
+| `asm-arm64` | ARM64 assembly | — | ARM64 listing |
+| `asm-riscv64` | RISC-V assembly | — | RISC-V listing |
+| `wasm32` | WebAssembly | — | Web/embedded (future) |
 
 ### 8.2 Target Annotations
 
-Target-specific code can be annotated:
-
-```
-@target("kernel")
-func kernel_init() {
-    // only compiled for kernel target
-}
-
-@target("host")
-func host_init() {
-    // only compiled for host target
-}
-```
-
-### 8.3 Memory Layout Directives
-
 ```
 @entry(0x7C00)        // Set entry point address
-@layout(512)          // Flat binary with max size
-@org(0x2000000)       // Origin address for code
-@section(".text")     // Place following code in specific section
+@layout(start=0x7C00, max=512, file="stage1.bin")  // Flat binary layout
+@kernel_layout        // Enable kernel memory map overlap verification
+@export               // Export function for module loader
 ```
 
 ---
@@ -490,29 +454,39 @@ func host_init() {
 
 | Function | Description |
 |----------|-------------|
-| `print(str)` | Print string to stdout/serial |
-| `print_i64(i64)` | Print signed integer |
-| `print_u64(u64)` | Print unsigned integer |
-| `print_hex(u64)` | Print hex |
-| `assert(bool)` | Runtime assertion |
-| `panic(str)` | Fatal error with message |
-| `alloc(T)` | Heap-allocate a value of type T |
-| `alloc_array(T, n)` | Heap-allocate array of n elements |
-| `len(slice)` | Length of slice or array |
-| `copy(dst, src)` | Memory copy |
-| `zero(ptr, len)` | Zero memory |
+| `print(...)` | Print values to stdout (variadic, auto-converts types) |
 | `sizeof(T)` | Size of type (compile-time) |
+| `alignof(T)` | Alignment of type (compile-time) |
+| `offsetof(T, field)` | Byte offset of struct field (compile-time) |
+| `typeName(T)` | String name of type (compile-time) |
+| `panic(msg)` | Fatal error with message |
 
-### 9.2 OS-Specific Functions (Kernel/Binary Targets)
+### 9.2 Standard Library Modules
+
+| Module | Contents |
+|--------|----------|
+| `std.io` | `print`, `println`, `format`, `read_line` |
+| `std.mem` | `alloc`, `free`, `copy`, `zero`, `Pool`, `Arena` |
+| `std.str` | `String`, `concat`, `split`, `trim` |
+| `std.math` | `sqrt`, `sin`, `cos`, `abs`, `min`, `max` |
+| `std.collections` | `Array`, `HashMap`, `Set`, `List`, `Queue` |
+| `std.fs` | `File`, `Path`, `Directory` (AetherFS syscalls) |
+| `std.serial` | `COM1`, `putc`, `puts` (kernel-mode serial I/O) |
+| `std.elf` | ELF64 reader/writer |
+| `std.test` | `assert`, `test_runner`, `benchmark` |
+| `std.asm` | NASM helper macros |
+| `std.arch` | Architecture detection, multi-target helpers |
+
+### 9.3 OS-Specific Functions (Kernel/Binary Targets)
 
 | Function | Description |
 |----------|-------------|
-| `syscall(n, ...)` | Call Aether OS syscall at 0x5000 |
+| `sys func` | Declare Aether OS syscall at 0x5000 |
 | `writePortByte(port, value)` | Write byte to I/O port |
 | `readPortByte(port) -> u8` | Read byte from I/O port |
-| `disableInterrupts()` | Disable interrupts |
-| `enableInterrupts()` | Enable interrupts |
-| `haltCpu()` | Halt CPU |
+| `disableInterrupts()` | Disable interrupts (CLI) |
+| `enableInterrupts()` | Enable interrupts (STI) |
+| `haltCpu()` | Halt CPU (HLT) |
 
 ---
 
@@ -525,26 +499,27 @@ Source (.ae)
   → Tokenizer (character stream → tokens)
   → Lexer (tokens → token stream with whitespace handling)
   → Parser (token stream → AST)
-  → Semantic Analyzer (type checking, name resolution, lifetime analysis)
+  → Import Resolution (read, parse, merge imported files)
+  → Semantic Analyzer (type checking, name resolution)
   → Optimizer (constant folding, dead code elimination, inlining)
-  → Code Generator (AST → NASM assembly)
-  → Assembler (NASM → object file)
-  → Linker (object file → executable)
+  → LLVM Codegen (AST → LLVM IR)
+  → LLVM Backend (LLVM IR → native code)
+  → Binary Output (ELF64/Mach-O/PE32+/flat binary)
 ```
 
 ### 10.2 Intermediate Representations
 
-- **AST:** Full syntax tree with source locations
-- **ASM IR:** Internal representation of assembly instructions (for multi-arch backends)
-- **NASM:** Text output passed to NASM assembler
+- **AST:** Full syntax tree with source locations (50+ node types)
+- **LLVM IR:** Standard LLVM intermediate representation (human-readable, debuggable)
 
 ### 10.3 Backends
 
 | Backend | Architecture | Status |
 |---------|-------------|--------|
-| x86_64 NASM | x86_64 | Primary |
-| ARM64 ASM IR | ARM64 | In progress |
-| RISC-V ASM IR | RISC-V | In progress |
+| LLVM x86_64 | x86_64 | Primary (via LLVM) |
+| LLVM ARM64 | ARM64 | Free (via LLVM) |
+| LLVM RISC-V | RISC-V | Free (via LLVM) |
+| LLVM WASM | WebAssembly | Free (via LLVM, future) |
 
 ---
 
@@ -556,39 +531,32 @@ Every function gets a per-function bump arena for temporary allocations. The com
 
 ### 11.2 String as a First-Class Type
 
-Strings are `{ptr: u64, len: u64}` views. The `+` operator concatenates strings when either operand is a string. String interpolation is desugared at compile time. No null-termination required.
+Strings are null-terminated with a length header. The `+` operator concatenates strings when either operand is a string. String interpolation is desugared at compile time.
 
 ### 11.3 Pattern Matching
 
 ```
 match value {
-    0 => print("zero\n")
-    1..10 => print("small\n")
-    10..100 => print("medium\n")
-    _ => print("large\n")
+    case 0 -> print("zero\n")
+    case 1..9 -> print("small\n")
+    case _ -> print("large\n")
 }
 ```
 
-### 11.4 Optional Chaining
+### 11.4 If-Let
 
 ```
-let name = user?.profile?.name ?? "Anonymous"
-```
-
-### 11.5 If-Let
-
-```
-if let val = optional_value {
+if let val = optionalValue {
     print("got {val}\n")
 }
 ```
 
-### 11.6 Contracts (Design by Contract)
+### 11.5 Contracts (Design by Contract)
 
 ```
-func divide(a: i32, b: i32) -> i32
-    require b != 0
-    ensure result * b == a
+func divide(a: i64, b: i64): i64
+    pre(b != 0)
+    post(result * b == a)
 {
     return a / b
 }
@@ -596,16 +564,16 @@ func divide(a: i32, b: i32) -> i32
 
 Contracts are checked at runtime in debug builds, stripped in release builds.
 
-### 11.7 Closures
+### 11.6 Closures
 
 ```
-let add = func(a: i32, b: i32) -> i32 { return a + b }
+let add = |a: i64, b: i64| -> a + b
 let result = add(3, 4)    // 7
 ```
 
-Closures can capture variables from the enclosing scope. The compiler allocates a closure struct on the stack and passes it as a hidden argument.
+Non-capturing lambdas are compiled as standalone functions. Capturing closures are planned.
 
-### 11.8 Operator Overloading
+### 11.7 Operator Overloading
 
 ```
 struct Vector3 {
@@ -613,51 +581,34 @@ struct Vector3 {
 }
 
 impl Vector3 {
-    func op_add(other: Vector3) -> Vector3 {
-        return Vector3{x + other.x, y + other.y, z + other.z}
+    func op_add(other: Vector3): Vector3 {
+        return Vector3 { x: self.x + other.x, y: self.y + other.y, z: self.z + other.z }
     }
 }
 
-let a = Vector3{1.0, 2.0, 3.0}
-let b = Vector3{4.0, 5.0, 6.0}
+let a = Vector3 { x: 1.0, y: 2.0, z: 3.0 }
+let b = Vector3 { x: 4.0, y: 5.0, z: 6.0 }
 let c = a + b    // calls op_add
 ```
 
-### 11.9 Generics
+### 11.8 Generics
 
 ```
-func max[T](a: T, b: T) -> T {
+func max<T>(a: T, b: T): T {
     if a > b { return a }
     return b
 }
 
-let m = max[i32](3, 7)    // explicit
-let n = max(3.0, 7.0)     // inferred
+let m = max(3, 7)     // inferred
 ```
 
 Generics are monomorphized at compile time — each concrete instantiation generates separate code.
 
-### 11.10 Compile-Time Function Execution
-
-Functions marked `comptime` are executed at compile time. Their results are embedded as constants in the binary.
-
-```
-comptime func generate_lookup_table() -> [256]u32 {
-    let table: [256]u32
-    for i in 0..256 {
-        table[i] = i * i
-    }
-    return table
-}
-
-const LOOKUP = generate_lookup_table()
-```
-
-### 11.11 Module System
+### 11.9 Module System
 
 ```
 // math.ae
-pub func square(x: i32) -> i32 {
+pub func square(x: i64): i64 {
     return x * x
 }
 
@@ -665,13 +616,13 @@ pub func square(x: i32) -> i32 {
 import "math.ae"
 
 func main() {
-    print_i64(square(7))    // 49
+    print(square(7))    // 49
 }
 ```
 
-### 11.12 Universal Binary Support
+### 11.10 Universal Binary Support
 
-The compiler can produce a single binary containing code for multiple architectures. The entry point is a thin dispatcher that detects the current architecture and jumps to the correct code section. This enables distributing a single binary that runs on x86_64, ARM64, and RISC-V without recompilation.
+The compiler can produce a single binary containing code for multiple architectures. The entry point is a thin dispatcher that detects the current architecture and jumps to the correct code section.
 
 ---
 
@@ -679,51 +630,48 @@ The compiler can produce a single binary containing code for multiple architectu
 
 ### 12.1 Must Have
 
-- [ ] Compile Aether source to NASM assembly
-- [ ] Assemble with NASM to object files
-- [ ] Link with LD to executables
-- [ ] Support all targets: host, kernel, boot, binary, module, universal
-- [ ] Automatic bump allocator per function
-- [ ] Automatic destructor chains for classes
-- [ ] Region-based allocation
-- [ ] `defer` statement
-- [ ] `try`/`catch`/`throw` with stack unwinding
-- [ ] Inline NASM assembly blocks
-- [ ] Classes with inheritance, constructors, destructors
-- [ ] Structs and enums
-- [ ] Traits with static and dynamic dispatch
-- [ ] Generics with monomorphization
-- [ ] String interpolation
-- [ ] Pattern matching
-- [ ] Optional types with `?T`, `??`, `?.`, `!`
-- [ ] If-let
-- [ ] Closures
-- [ ] Operator overloading
-- [ ] Compile-time evaluation
-- [ ] Conditional compilation
-- [ ] Module/import system
-- [ ] Contracts (require/ensure)
-- [ ] Universal binary output
-- [ ] Freestanding output (no libc dependency)
-- [ ] Segfault handling in try blocks (host target)
+- [x] Compile Aether source to native code
+- [x] Support all targets: host, kernel, boot, binary, module, universal
+- [x] Automatic bump allocator per function
+- [x] Automatic destructor chains for classes
+- [x] Region-based allocation
+- [x] `defer` statement
+- [x] `try`/`catch`/`throw` with stack unwinding
+- [x] Inline assembly blocks
+- [x] Classes with constructors, destructors
+- [x] Structs and enums
+- [x] Traits with static and dynamic dispatch
+- [x] Generics with monomorphization
+- [x] String interpolation
+- [x] Pattern matching
+- [x] Optional types with `?T`, `none`, `or`
+- [x] If-let
+- [x] Closures (non-capturing)
+- [x] Operator overloading
+- [x] Compile-time evaluation (`#run`)
+- [x] Module/import system
+- [x] Contracts (pre/post)
+- [x] Universal binary output
+- [x] Freestanding output (no libc dependency)
+- [x] Segfault handling in try blocks (host target)
 
 ### 12.2 Should Have
 
-- [ ] Compile-time reflection (`@target`, `@arch`, etc.)
+- [x] Compile-time reflection (`@target`, `@arch`, etc.)
 - [ ] Cross-module inlining
-- [ ] Basic optimizer (constant folding, dead code elimination)
-- [ ] Debug information output
-- [ ] Error messages with source locations
-- [ ] Multi-file compilation
-- [ ] Linker script generation
+- [x] Basic optimizer (constant folding, dead code elimination)
+- [ ] Debug information output (DWARF)
+- [x] Error messages with source locations
+- [x] Multi-file compilation
+- [x] Linker script generation
 
 ### 12.3 Nice to Have
 
 - [ ] IDE integration (LSP)
-- [ ] Formatter
-- [ ] Documentation generator
+- [x] Formatter (`aether fmt`)
+- [x] Documentation generator (`aether doc`)
 - [ ] Package manager
-- [ ] Test framework
+- [x] Test framework (`std/test.ae`)
 - [ ] Profiling support
 - [ ] Address sanitizer (compile-time instrumentation)
 

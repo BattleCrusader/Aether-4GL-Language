@@ -1,20 +1,11 @@
 # Aether Compiler — Implementation Status
 
-> **Last updated**: 2026-06-24
+> **Last updated**: 2026-06-29
 > **Current state**: 47/47 host-native tests passing. 15/16 tokenizer tests passing.
 > Compiler builds clean. All major language features through Phase 11 are
 > implemented and tested. Phase 17 (.aelib library format) is implemented and
 > working end-to-end. Phase 18 (standard library in pure Aether) is complete.
-> Asm-block rax preservation fix: functions whose last statement is an asm block
-> no longer get `xor rax, rax` inserted before the epilogue, so asm helpers that
-> set rax as a return value work correctly. `.aelib` archives now always use ELF64
-> format (universal, not host-specific). `print()` built-in now uses 0x5008 syscall
-> page on freestanding targets.
-> Match expressions now work in expression context (let x = match ... { ... };
-> return match ... { ... };). Added match to parse_prefix and cg_expr.
-> Test fixtures use `@test` function attributes (bare or with `expect=N`).
-> Standard library provides `std/test.ae` with JUnit-style `assertEquals`/`assertTrue`.
-> STATUS.md is compiler-only — OS implementation phases live in the OS repo's STATUS.md.
+> Phase 19 (LLVM backend migration) is designed but not yet implemented.
 
 ---
 
@@ -27,118 +18,112 @@
 - [x] P00.05 — AST Definitions (65+ node types in ast.h)
 - [x] P00.06 — Parser (recursive descent, Pratt parsing, all declarations + statements)
 - [x] P00.07 — Semantic Analysis (semantic_analyze with symbol resolution)
-- [x] P00.08 — NASM Code Generation (3046-line codegen.c, full statement + expr coverage)
+- [x] P00.08 — Code Generation (NASM codegen, full statement + expr coverage)
 - [x] P00.09 — ELF64 Output (freestanding, host-ELF64, kernel, binary, module, boot targets)
-- [x] P00.10 — NASM Assembler Integration (nasm → ld/clang pipeline per target)
+- [x] P00.10 — Assembler Integration (nasm → ld/clang pipeline per target)
 - [x] P00.11 — `aether` CLI (build, run, init, fmt, asm, inspect, doc subcommands)
 - [x] P00.12 — `hello.ae` End-to-End (compiles and runs on macOS + Linux)
-- [x] P00.13 — Phase 0 Verification & Cleanup (15/16 tokenizer tests, 40/41 host tests)
+- [x] P00.13 — Phase 0 Verification & Cleanup
 
 ## Phase 1 — Core Language (Minimum Viable Compiler) ✅ COMPLETE
 
-- [x] P01.01 — Codegen: Proper Variable Stack Slots (cg_load_var, cg_store_var with offset/size)
+- [x] P01.01 — Codegen: Proper Variable Stack Slots
 - [x] P01.02 — Codegen: Full Type Support (u8/u16/u32/u64, i8-i64, f32/f64, bool, byte, string, char)
-- [x] P01.03 — Codegen: Structs and Field Access (StructLayout tracker, field offset lookup)
-- [x] P01.04 — Codegen: Arrays and Indexing (NODE_INDEX, NODE_ARRAY_LIT, NODE_SLICE)
-- [x] P01.05 — Codegen: String Literals (quote stripping, escape decoding, .rodata emission)
-- [x] P01.06 — Codegen: Inline NASM (NODE_ASM_BLOCK, raw text passthrough to NASM)
-- [x] P01.07 — Codegen: Function Calls with SysV ABI (rdi/rsi/rdx/rcx/r8/r9 arg passing)
-- [x] P01.08 — Codegen: For Loops and Ranges (NODE_FOR with iterable iteration)
-- [x] P01.09 — Codegen: Match Statements (NODE_MATCH with arm dispatch)
-- [x] P01.10 — Codegen: Enums with Payloads (EnumLayout tracker, variant discriminants, tagged unions)
-- [x] P01.11 — Full Expression Coverage (binary ops, unary ops, ternary, cast, call, index, slice, field access, array lit, lambda)
-- [x] P01.12 — Error Handling in Codegen (cg_error, cg_warn with source locations)
-- [x] P01.13 — Self-Host Test Suite Expansion (41 host-native test fixtures)
+- [x] P01.03 — Codegen: Structs and Field Access
+- [x] P01.04 — Codegen: Arrays and Indexing
+- [x] P01.05 — Codegen: String Literals
+- [x] P01.06 — Codegen: Inline NASM
+- [x] P01.07 — Codegen: Function Calls with SysV ABI
+- [x] P01.08 — Codegen: For Loops and Ranges
+- [x] P01.09 — Codegen: Match Statements
+- [x] P01.10 — Codegen: Enums with Payloads
+- [x] P01.11 — Full Expression Coverage
+- [x] P01.12 — Error Handling in Codegen
+- [x] P01.13 — Self-Host Test Suite Expansion
 - [x] P01.14 — Phase 1 Verification & Cleanup
 
 ## Phase 2 — Host-Native Output ✅ COMPLETE
 
-- [x] P02.01 — Target enum + codegen.h types (13 targets: FREESTANDING, MACHO64, HOST, ELF64_HOST, KERNEL, MODULE, BINARY, BOOT, ASM_X86_64, ASM_ARM64, ASM_RISCV64, UNIVERSAL, UNIVERSAL_ALL)
-- [x] P02.02 — `--target` CLI flag (host, macho64, elf64-host, kernel, module, binary, boot, asm-x86_64, asm-arm64, asm-riscv64, universal, universal-all)
-- [x] P02.03 — `codegen_set_target()` / `codegen_detect_host()` (auto-detect macOS vs Linux)
-- [x] P02.04 — Mach-O 64 entry point (`_aether_entry` / `_main`, macOS syscall exit)
-- [x] P02.05 — NASM `-f macho64` + `clang -arch x86_64` linkage
-- [x] P02.06 — Freestanding ELF64 path (linker script, `x86_64-elf-ld`)
-- [x] P02.07 — `codegen_assemble()` — multi-target assemble/link pipeline
-- [x] P02.08 — Host-native `print()` built-in with write syscall (macOS + Linux)
-- [x] P02.09 — String literal processing (strip quotes, decode escapes)
-- [x] P02.10 — `aether run <file.ae>` — compile + execute in one step
-- [x] P02.11 — Host-native test runner (`make test-host` — 40/41 passing)
-- [x] P02.12 — `aether.toml` project manifest (parse_aether_toml, target config)
+- [x] P02.01 — Target enum + codegen types
+- [x] P02.02 — `--target` CLI flag
+- [x] P02.03 — Target detection (auto-detect macOS vs Linux)
+- [x] P02.04 — Mach-O 64 entry point
+- [x] P02.05 — NASM + clang linkage
+- [x] P02.06 — Freestanding ELF64 path
+- [x] P02.07 — Multi-target assemble/link pipeline
+- [x] P02.08 — Host-native `print()` built-in
+- [x] P02.09 — String literal processing
+- [x] P02.10 — `aether run <file.ae>`
+- [x] P02.11 — Host-native test runner
+- [x] P02.12 — `aether.toml` project manifest
 - [x] P02.13 — Phase 2 Verification & Cleanup
 
 ## Phase 3 — Memory Management ✅ COMPLETE
 
-- [x] P03.01 — `defer` — scope-exit execution (LIFO order, return-safe, cg_defer_push/cg_emit_defers/cg_defer_clear)
-- [x] P03.02 — Heap allocation via `alloc` keyword (TOKEN_KW_HEAP)
-- [x] P03.03 — Bump allocator runtime (__aether_alloc with region + heap fallback, per-function arena, auto-grow)
-- [x] P03.04 — Reference types: `ref T`, `mut ref T`, `owned T` (NODE_TYPE_REF, TOKEN_KW_REF, TOKEN_KW_OWNED)
-- [x] P03.05 — `region { }` — stack-arena allocation with rollback (NODE_REGION, region save/restore in codegen)
-- [x] P03.06 — Optional types `?T` with `none`, `??`, `?.`, `!` (NODE_TYPE_OPTIONAL, NODE_LITERAL_NONE, if-let binding)
-- [x] P03.07 — Automatic destructor chains for classes (AutoDrop linked list, auto-inserted drop calls at scope exit)
-- [x] P03.08 — Ownership and borrowing rules (TOKEN_KW_OWNED, ref/owned type parsing)
-- [x] P03.09 — Phase 3 Verification & Cleanup (test_defer, test_region, test_optional, test_heap all pass)
+- [x] P03.01 — `defer` — scope-exit execution (LIFO order)
+- [x] P03.02 — Heap allocation via `alloc` keyword
+- [x] P03.03 — Bump allocator runtime
+- [x] P03.04 — Reference types: `ref T`, `mut ref T`, `owned T`
+- [x] P03.05 — `region { }` — stack-arena allocation with rollback
+- [x] P03.06 — Optional types `?T` with `none`, if-let binding
+- [x] P03.07 — Automatic destructor chains for classes
+- [x] P03.08 — Ownership and borrowing rules
+- [x] P03.09 — Phase 3 Verification & Cleanup
 
 ## Phase 4 — OOP and Type System ✅ COMPLETE
 
-- [x] P04.01 — Struct methods: parsing, self keyword, field access in methods (parse_struct_decl with method list, TOKEN_KW_SELF)
-- [x] P04.02 — Classes: `class` keyword, fields, constructors, destructors (NODE_CLASS_DECL, StructLayout.is_class flag, init/drop)
-- [x] P04.03 — Auto-destructor insertion: AutoDrop list, default drop stubs (cg->auto_drops linked list, `call {class}_drop` at scope exit, default drop stub generation)
-- [x] P04.04 — Inheritance: single inheritance, `super` keyword — ⚠️ NOT IMPLEMENTED (no vtable/inheritance code found)
-- [x] P04.05 — Virtual methods and vtables — ⚠️ NOT IMPLEMENTED (TOKEN_KW_VIRTUAL exists in tokenizer but no codegen)
-- [x] P04.06 — Access modifiers: `pub`, `private`, `internal` (TOKEN_KW_PUB, TOKEN_KW_PRIVATE, TOKEN_KW_INTERNAL in tokenizer)
-- [x] P04.07 — Traits: `trait` keyword, `impl` blocks, static dispatch (NODE_TRAIT_DECL, NODE_IMPL_BLOCK in parser + AST)
-- [x] P04.08 — Dynamic dispatch: `dyn Trait` — fat pointer + vtable (TOKEN_KW_DYN, test_dyn fixture passing)
-- [x] P04.09 — Generics: `func Name[T](params)` with monomorphization (test_generic + test_monomorph fixtures passing)
-- [x] P04.10 — `if let` pattern binding for optionals (is_if_let flag, tag byte check, value binding)
-- [x] P04.11 — Operator overloading (`op_add`, `op_sub`, etc.) (test_op_overload fixture passing)
+- [x] P04.01 — Struct methods: parsing, self keyword, field access
+- [x] P04.02 — Classes: `class` keyword, fields, constructors, destructors
+- [x] P04.03 — Auto-destructor insertion
+- [x] P04.04 — Inheritance: single inheritance, `super` keyword — ⚠️ NOT IMPLEMENTED
+- [x] P04.05 — Virtual methods and vtables — ⚠️ NOT IMPLEMENTED
+- [x] P04.06 — Access modifiers: `pub`, `private`, `internal`
+- [x] P04.07 — Traits: `trait` keyword, `impl` blocks, static dispatch
+- [x] P04.08 — Dynamic dispatch: `dyn Trait` — fat pointer + vtable
+- [x] P04.09 — Generics: `func Name[T](params)` with monomorphization
+- [x] P04.10 — `if let` pattern binding for optionals
+- [x] P04.11 — Operator overloading (`op_add`, `op_sub`, etc.)
 - [x] P04.12 — Phase 4 Verification & Cleanup
 
-> **Note**: P04.04 (inheritance/super) and P04.05 (virtual methods/vtables) are marked
-> complete because the tokenizer + AST nodes exist, but the codegen does not emit vtables
-> or super calls. The `virtual` keyword is tokenized but has no codegen path. These are
-> stub-level — parsing exists, codegen does not. Downgrading to PARTIAL.
+> **Note**: P04.04 (inheritance/super) and P04.05 (virtual methods/vtables) are parsing-only. No vtable emission or super call codegen exists.
 
 ## Phase 5 — Advanced Language Features ✅ MOSTLY COMPLETE
 
-- [x] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen (NODE_TRY, NODE_THROW, NODE_CATCH_ARM, finally blocks)
-- [x] P05.02 — Proper stack unwinding with destructor calls in try body (cleanup table, innermost-first scope walking, cg_emit_cleanup_range)
-- [x] P05.03 — Error propagation through `throws` function calls (TOKEN_KW_THROWS, rdx error flag checking)
-- [x] P05.04 — Segfault handling (sigsetjmp/siglongjmp for host — segfault_helper.c, aether_setJmpBuf/clearJmpBuf/initSegfault)
-- [x] P05.05 — IDT-based fault handling for kernel target — ⚠️ KERNEL-SIDE (OS repo, not compiler)
-- [x] P05.06 — Cleanup table generation (innermost-first scope walking, destructor + defer emission)
-- [x] P05.07 — Nested try/catch (test_trycatch_nested fixture)
-- [x] P05.08 — Compile-time execution (`comptime` functions) (TOKEN_KW entry, test_comptime passing)
-- [x] P05.09 — Compile-time constant evaluation (`const`) (NODE_CONST_DECL, test_const passing)
-- [x] P05.10 — Compile-time reflection (`@target`, `@arch`, `@sizeof`, etc.) (NODE_ATTR, @layout/@entry/@export/@org/@section attributes)
-- [x] P05.11 — Conditional compilation (`# if / # elif / # else / # end`) — ⚠️ NOT FOUND in source
-- [x] P05.12 — Contract programming: `require` / `ensure` on functions (pre_conditions, post_conditions in codegen, test_contract passing)
-- [x] P05.13 — Closures and lambdas (`func(args) { body }`) (NODE_LAMBDA — non-capturing only, capturing deferred)
-- [x] P05.14 — Properties: `get`/`set` syntactic sugar (NODE_PROPERTY, TOKEN_KW_PROP in tokenizer)
-- [x] P05.15 — Pattern matching with ranges and enum destructuring (NODE_MATCH, NODE_MATCH_ARM, test_match fixture — ⚠️ FAILS to compile)
-- [x] P05.16 — String interpolation (`"Hello {name}"`) (parser scans for `{expr}`, __aether_concat + __aether_itoa runtime helpers)
-- [x] P05.17 — `+` operator does string concat when either operand is a string (BIN_CONCAT in codegen, test_null_concat passing)
+- [x] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen
+- [x] P05.02 — Proper stack unwinding with destructor calls
+- [x] P05.03 — Error propagation through `throws` function calls
+- [x] P05.04 — Segfault handling (sigsetjmp/siglongjmp for host)
+- [x] P05.05 — IDT-based fault handling for kernel target — ⚠️ KERNEL-SIDE
+- [x] P05.06 — Cleanup table generation
+- [x] P05.07 — Nested try/catch
+- [x] P05.08 — Compile-time execution (`comptime` functions)
+- [x] P05.09 — Compile-time constant evaluation (`const`)
+- [x] P05.10 — Compile-time reflection (`@target`, `@arch`, `@sizeof`, etc.)
+- [x] P05.11 — Conditional compilation (`# if / # elif / # else / # end`) — ⚠️ NOT FOUND
+- [x] P05.12 — Contract programming: `require` / `ensure`
+- [x] P05.13 — Closures and lambdas (non-capturing only)
+- [x] P05.14 — Properties: `get`/`set` syntactic sugar
+- [x] P05.15 — Pattern matching with ranges and enum destructuring
+- [x] P05.16 — String interpolation (`"Hello {name}"`)
+- [x] P05.17 — `+` operator does string concat when either operand is a string
 - [x] P05.18 — Phase 5 Verification & Cleanup
 
-> **Known issues**:
-> - P05.11 (conditional compilation `#if`/`#elif`/`#else`/`#end`) — not found in source
-> - P05.15 (match) — test_match fixture fails to compile
-> - P05.13 (closures) — non-capturing lambdas only; capturing lambdas return placeholder 0
+> **Known issues**: P05.11 (conditional compilation) not found in source. P05.15 (match) — test_match fixture fails to compile. P05.13 (closures) — non-capturing only.
 
 ## Phase 6 — Aether OS Integration ✅ COMPLETE
 
-- [x] P06.01 — `syscall` keyword — direct syscall page calls (0x5000 table) (TOKEN_KW_SYS, sys stubs in OS kernel)
-- [x] P06.02 — `module` keyword — generates kernel module `.ko` ELF (NODE_MODULE_DECL, TARGET_MODULE)
-- [x] P06.03 — `@export` attribute — marks symbols for module loader (TOKEN_KW_EXPORT, NODE_ATTR)
-- [x] P06.04 — `@entry(addr)` attribute — sets entry point address (TOKEN_KW_ENTRY, @layout annotation)
-- [x] P06.05 — `@layout(max)` — flat binary size constraint (TOKEN_KW_LAYOUT, cg_verify_kernel_layout)
-- [x] P06.06 — `@org(addr)` — code origin address (TOKEN_KW_AT, @layout(start=0, bits=32) in boot.ae)
-- [x] P06.07 — `@section(name)` — section placement (section directives in asm blocks)
-- [x] P06.08 — Target-specific code generation (kernel vs binary vs module vs boot — distinct entry points, runtime, linker)
-- [x] P06.09 — Freestanding standard library (no libc dependency) (std/*.ae: arch, asm, collections, elf, fs, io, math, mem, serial, str, test)
-- [x] P06.10 — Linker script generation for each target (kernel.ld, binary.ld, module.ld, boot flat)
-- [x] P06.11 — Project manifest: `aether.toml` support (parse_aether_toml in aether.c)
-- [x] P06.12 — Phase 6 Verification & Cleanup (test_binary_target, test_kernel, test_module_target, test_boot_target all compile)
+- [x] P06.01 — `syscall` keyword — direct syscall page calls
+- [x] P06.02 — `module` keyword — generates kernel module `.ko` ELF
+- [x] P06.03 — `@export` attribute — marks symbols for module loader
+- [x] P06.04 — `@entry(addr)` attribute — sets entry point address
+- [x] P06.05 — `@layout(max)` — flat binary size constraint
+- [x] P06.06 — `@org(addr)` — code origin address
+- [x] P06.07 — `@section(name)` — section placement
+- [x] P06.08 — Target-specific code generation
+- [x] P06.09 — Freestanding standard library (no libc dependency)
+- [x] P06.10 — Linker script generation for each target
+- [x] P06.11 — Project manifest: `aether.toml` support
+- [x] P06.12 — Phase 6 Verification & Cleanup
 
 ## Phase 7 — Self-Hosting 🔴 NOT STARTED
 
@@ -154,70 +139,74 @@
 
 ## Phase 8 — Multi-Target Assembler ✅ COMPLETE
 
-- [x] P08.01 — ASM IR definition (AsmIRBlock, AsmInstruction, AsmOperand, AsmElement in asm_ir.h)
-- [x] P08.02 — ASM parser (asm_parser.c — extracts instructions, operands, directives from asm blocks)
-- [x] P08.03 — x86_64 backend (asm_backend_x86_64.c — direct NASM passthrough)
-- [x] P08.04 — ARM64 backend (asm_backend_arm64.c — instruction mapping)
-- [x] P08.05 — RISC-V backend (asm_backend_riscv64.c — instruction mapping)
-- [x] P08.06 — Register translation layer (NASM regs → target regs)
+- [x] P08.01 — ASM IR definition
+- [x] P08.02 — ASM parser
+- [x] P08.03 — x86_64 backend
+- [x] P08.04 — ARM64 backend
+- [x] P08.05 — RISC-V backend
+- [x] P08.06 — Register translation layer
 - [x] P08.07 — Addressing mode translation
-- [x] P08.08 — Directive translation (align, section, etc.)
+- [x] P08.08 — Directive translation
 - [x] P08.09 — Pseudo-instruction expansion
-- [x] P08.10 — Multi-target test suite (test_asm fixture)
-- [x] P08.11 — Integration with `--target` CLI flag (asm-x86_64, asm-arm64, asm-riscv64 targets)
+- [x] P08.10 — Multi-target test suite
+- [x] P08.11 — Integration with `--target` CLI flag
 - [x] P08.12 — Phase 8 Verification & Cleanup
+
+> **Note**: Phase 8 is superseded by Phase 19 (LLVM backend). The multi-target assembler will be retired once the LLVM backend is complete.
 
 ## Phase 9 — Optimization & Polish 🟡 PARTIAL
 
-- [x] P09.01 — Constant folding and propagation (opt_constant_fold in optimizer.c)
-- [x] P09.02 — Dead code elimination (opt_dead_code_elim with symbol table collection)
-- [x] P09.03 — Inlining (heuristic + `@force_inline`) — ⚠️ opt_inline exists but likely stub
+- [x] P09.01 — Constant folding and propagation
+- [x] P09.02 — Dead code elimination
+- [x] P09.03 — Inlining (heuristic + `@force_inline`) — ⚠️ likely stub
 - [ ] P09.04 — Escape analysis-based heap/stack promotion
 - [ ] P09.05 — Region inference → arena elision
 - [ ] P09.06 — Devirtualization
 - [ ] P09.07 — Loop unrolling and optimization
 - [ ] P09.08 — Memory operation fusion
-- [x] P09.09 — `aether fmt` — source code formatter (cmd_fmt in aether.c)
-- [x] P09.10 — `aether doc` — documentation generator (cmd_doc in aether.c)
-- [x] P09.11 — `aether asm` — show generated assembly listing (cmd_asm in aether.c)
-- [x] P09.12 — `aether inspect` — ELF binary inspection tool (cmd_inspect in aether.c)
+- [x] P09.09 — `aether fmt` — source code formatter
+- [x] P09.10 — `aether doc` — documentation generator
+- [x] P09.11 — `aether asm` — show generated assembly listing
+- [x] P09.12 — `aether inspect` — ELF binary inspection tool
 - [ ] P09.13 — Actionable error messages with suggested fixes
 - [ ] P09.14 — Performance benchmarking suite
 - [ ] P09.15 — Phase 9 Verification & Cleanup
 
 ## Phase 10 — Universal Binary & Multi-Arch Dispatch ✅ COMPLETE
 
-- [x] P10.01 — Fat binary container format (UniversalBuilder, UniversalConfig in universal.c)
-- [x] P10.02 — CPU detection trampoline (CPUID → dispatch to arch entry) (universal_trampoline_x86_64, arm64, riscv64)
-- [x] P10.03 — Dual compilation pipeline (NASM → IR → per-arch backends → merge)
-- [x] P10.04 — ARM64/RISC-V ELF64 assembler integration (asm_backend_arm64.c, asm_backend_riscv64.c)
+- [x] P10.01 — Fat binary container format
+- [x] P10.02 — CPU detection trampoline
+- [x] P10.03 — Dual compilation pipeline
+- [x] P10.04 — ARM64/RISC-V ELF64 assembler integration
 - [x] P10.05 — `--target universal` and `--target universal-all` CLI flags
 - [x] P10.06 — Shared section deduplication
-- [x] P10.07 — Architecture-specific init (trampoline dispatches to arch entry points)
+- [x] P10.07 — Architecture-specific init
 - [x] P10.08 — Multi-arch test suite
 - [x] P10.09 — Cross-compilation toolchain detection
 - [x] P10.10 — Integration with `aether.toml` for multi-arch builds
 - [x] P10.11 — Phase 10 Verification & Cleanup
 
+> **Note**: Phase 10 is superseded by Phase 19 (LLVM backend). LLVM handles multi-arch natively.
+
 ## Phase 11 — String Interpolation & Imports ✅ COMPLETE
 
-- [x] P11.01 — Parser: scan string literals for `{expr}` patterns (interpolation detection in parser)
-- [x] P11.02 — Codegen: string interpolation desugaring (concat chain with __aether_concat calls)
-- [x] P11.03 — Runtime: `__aether_concat` helper (full implementation in codegen.c lines 2466-2560)
-- [x] P11.04 — Runtime: `__aether_itoa` u64-to-string conversion (full implementation in codegen.c lines 2561+)
-- [x] P11.05 — `+` operator does string concat when either operand is a string (BIN_CONCAT, test_null_concat passing)
-- [x] P11.06 — `import "path.ae"` resolution: reads file, parses, merges decls (NODE_IMPORT, test_import passing)
-- [x] P11.07 — Two-pass semantic analysis: declare all names first, then visit bodies (semantic_analyze)
-- [x] P11.08 — Module system: `pub`/private visibility across files (TOKEN_KW_PUB, TOKEN_KW_PRIVATE)
-- [x] P11.09 — Standard library module path resolution (std/*.ae: arch, asm, collections, elf, fs, io, math, mem, serial, str, test)
-- [x] P11.10 — Phase 11 Verification & Cleanup (test_interp_* — 8 fixtures all passing)
+- [x] P11.01 — Parser: scan string literals for `{expr}` patterns
+- [x] P11.02 — Codegen: string interpolation desugaring
+- [x] P11.03 — Runtime: `__aether_concat` helper
+- [x] P11.04 — Runtime: `__aether_itoa` u64-to-string conversion
+- [x] P11.05 — `+` operator does string concat when either operand is a string
+- [x] P11.06 — `import "path.ae"` resolution
+- [x] P11.07 — Two-pass semantic analysis
+- [x] P11.08 — Module system: `pub`/private visibility across files
+- [x] P11.09 — Standard library module path resolution
+- [x] P11.10 — Phase 11 Verification & Cleanup
 
-## Phase 12 — Language Specification & Requirements 🔴 NOT STARTED
+## Phase 12 — Language Specification & Requirements ✅ COMPLETE
 
-- [ ] P12.01 — Comprehensive REQUIREMENTS.md with all feature areas
-- [ ] P12.02 — Language specification document with code snippets
-- [ ] P12.03 — OS pipeline mapping for every compiler feature
-- [ ] P12.04 — STATUS.md updated with new phases
+- [x] P12.01 — Comprehensive REQUIREMENTS.md with all feature areas
+- [x] P12.02 — Language specification document with code snippets
+- [x] P12.03 — OS pipeline mapping for every compiler feature
+- [x] P12.04 — STATUS.md updated with all phases
 
 ## Phase 13 — Concurrency & Fibers 🔴 NOT STARTED
 
@@ -231,11 +220,9 @@
 
 ## Phase 14 — Advanced OS Language Features 🔴 NOT STARTED
 
-Compiler language features for OS development. Not OS implementation — that's in the OS repo.
-
 - [ ] P14.01 — `bootchain` declarative boot chain generation
-- [ ] P14.02 — `interrupt` handler generation (frame save/restore, EOI, stack switching)
-- [ ] P14.03 — `@metadata` self-documenting binary format (ELF note sections)
+- [ ] P14.02 — `interrupt` handler generation
+- [ ] P14.03 — `@metadata` self-documenting binary format
 - [ ] P14.04 — `@requires` capability tracking and verification
 - [ ] P14.05 — `@units` compile-time physical unit checking
 - [ ] P14.06 — Phase 14 Verification & Cleanup
@@ -250,44 +237,70 @@ Compiler language features for OS development. Not OS implementation — that's 
 
 ## Phase 16 — Protocol Generation & Hardware Configuration 🔴 NOT STARTED
 
-- [ ] P16.01 — `protocol` declarative hardware interface generation (NODE_PROTOCOL_DECL in parser — parsing only, no codegen)
+- [ ] P16.01 — `protocol` declarative hardware interface generation
 - [ ] P16.02 — Automatic bit-banging code from protocol declarations
-- [ ] P16.03 — `#run` compile-time hardware detection and code emission (NODE_RUN_BLOCK in parser — parsing only)
+- [ ] P16.03 — `#run` compile-time hardware detection and code emission
 - [ ] P16.04 — Phase 16 Verification & Cleanup
 
 ## Phase 17 — `.aelib` Library Format ✅ COMPLETE
 
-Closed-source library distribution without reverse engineering risk.
-
 - [x] P17.01 — Add `TARGET_LIB` to Target enum and CLI (`--target lib`)
-- [x] P17.02 — AelibWriter: write `.aelib` binary format (header, code section, metadata section)
-- [x] P17.03 — Metadata extraction from AST (function signatures, struct/class/enum layouts)
-- [x] P17.04 — Codegen for `--target lib` (assemble to .o, extract metadata, write .aelib)
-- [x] P17.05 — Import resolution for `.aelib` files (try .ae first, then .aelib)
-- [x] P17.06 — Synthetic AST nodes from metadata (extern function decls with params/return types)
-- [x] P17.07 — Linking `.o` from `.aelib` archives (extract .o, add to linker command)
-- [x] P17.08 — Test fixture: `lib_math.ae` → `.aelib` → import → compile → run (returns 42)
+- [x] P17.02 — AelibWriter: write `.aelib` binary format
+- [x] P17.03 — Metadata extraction from AST
+- [x] P17.04 — Codegen for `--target lib`
+- [x] P17.05 — Import resolution for `.aelib` files
+- [x] P17.06 — Synthetic AST nodes from metadata
+- [x] P17.07 — Linking `.o` from `.aelib` archives
+- [x] P17.08 — Test fixture: `lib_math.ae` → `.aelib` → import → compile → run
 - [x] P17.09 — Documentation and cleanup
 
----
+## Phase 18 — Standard Library Implementation ✅ COMPLETE
 
-## Phase 18 — Standard Library Implementation & `libaether.aelib` ✅ COMPLETE
-
-All 11 std/*.ae files rewritten in pure Aether. Only asm where genuinely necessary (port I/O, CPU control, byte-level memory copy). `libaether.aelib` builds to `build/lib/` — out of source tree.
-
-- [x] P18.01 — `std/math.ae` — pure Aether arithmetic (absValue, min, max, clamp)
-- [x] P18.02 — `std/mem.ae` — asm rep movsb/stosb for byte copy; Aether `heap` for alloc
-- [x] P18.03 — `std/str.ae` — Aether `+` operator for concat; split/trim/toUpper/toLower stubs
-- [x] P18.04 — `std/io.ae` — Aether `print()` built-in for println
-- [x] P18.05 — `std/arch.ae` — asm CPUID detection; pure Aether constants
-- [x] P18.06 — `std/asm.ae` — asm port I/O, barriers, CPU control, rdtsc
-- [x] P18.07 — `std/collections.ae` — pure Aether structs (Array, List)
-- [x] P18.08 — `std/elf.ae` — pure Aether struct definitions + verify function
+- [x] P18.01 — `std/math.ae` — pure Aether arithmetic
+- [x] P18.02 — `std/mem.ae` — asm rep movsb/stosb for byte copy
+- [x] P18.03 — `std/str.ae` — Aether `+` operator for concat
+- [x] P18.04 — `std/io.ae` — Aether `print()` built-in
+- [x] P18.05 — `std/arch.ae` — asm CPUID detection
+- [x] P18.06 — `std/asm.ae` — asm port I/O, barriers, CPU control
+- [x] P18.07 — `std/collections.ae` — pure Aether structs
+- [x] P18.08 — `std/elf.ae` — pure Aether struct definitions
 - [x] P18.09 — `std/fs.ae` — Aether `sys` keyword for syscall declarations
 - [x] P18.10 — `std/serial.ae` — asm port I/O for COM1
-- [x] P18.11 — `libaether.aelib` combined archive (build/lib/)
-- [x] P18.12 — Codegen fixes for TARGET_LIB (runtime helpers, built-ins)
-- [x] P18.13 — Build output hygiene (.aelib gitignored, install only binary + lib)
+- [x] P18.11 — `libaether.aelib` combined archive
+- [x] P18.12 — Codegen fixes for TARGET_LIB
+- [x] P18.13 — Build output hygiene
+
+## Phase 19 — LLVM Backend Migration 🔴 NOT STARTED
+
+- [ ] P19.01 — Install LLVM, verify `llvm-config` works
+- [ ] P19.02 — Create `src/llvm/llvm_init.c` — LLVM context/module/builder
+- [ ] P19.03 — Create `src/llvm/llvm_types.c` — type mapping
+- [ ] P19.04 — Create `src/llvm/llvm_expr.c` — expression codegen
+- [ ] P19.05 — Create `src/llvm/llvm_stmt.c` — statement codegen
+- [ ] P19.06 — Create `src/llvm/llvm_func.c` — function codegen
+- [ ] P19.07 — Create `src/llvm/llvm_string.c` — string operations
+- [ ] P19.08 — Create `src/llvm/llvm_asm.c` — inline assembly
+- [ ] P19.09 — Create `src/llvm/llvm_error.c` — error handling
+- [ ] P19.10 — Create `src/llvm/llvm_contract.c` — contract codegen
+- [ ] P19.11 — Create `src/llvm/llvm_runtime.c` — runtime helpers
+- [ ] P19.12 — Create `src/llvm/llvm_target.c` — target setup & emission
+- [ ] P19.13 — Create `src/llvm/llvm_debug.c` — debug info
+- [ ] P19.14 — Wire up dispatcher in `aether.c`
+- [ ] P19.15 — All test fixtures pass through LLVM backend
+- [ ] P19.16 — Remove old `codegen.c` and `asm_*.c` files
+- [ ] P19.17 — Remove NASM dependency from build system
+- [ ] P19.18 — Phase 19 Verification & Cleanup
+
+## Phase 20 — Self-Hosting 🔴 NOT STARTED
+
+- [ ] P20.01 — Compiler can compile its own tokenizer/lexer
+- [ ] P20.02 — Compiler can compile its own parser
+- [ ] P20.03 — Compiler can compile its own AST/semantic analysis
+- [ ] P20.04 — Compiler can compile its own LLVM codegen modules
+- [ ] P20.05 — Compiler can compile its own target emission
+- [ ] P20.06 — Full bootstrap: Aether compiler runs on Aether OS
+- [ ] P20.07 — Compiler can compile itself with no C bootstrap
+- [ ] P20.08 — C bootstrap source archived as historical reference only
 
 ---
 
@@ -314,90 +327,14 @@ All 11 std/*.ae files rewritten in pure Aether. Only asm where genuinely necessa
 
 ---
 
-## Known Issues (as of 2026-06-24)
+## Known Issues (as of 2026-06-29)
 
 1. **test_match** — fails to compile. Match statement codegen has a bug.
 2. **Tokenizer "all operators" test** — expects 22 operator tokens, gets different count.
 3. **Capturing lambdas** — non-capturing lambdas work; capturing lambdas return placeholder 0.
-4. **Inheritance/vtables** — `virtual` keyword is tokenized, NODE_CLASS_DECL exists, but no vtable
-   emission or `super` call codegen. Classes work as structs with auto-drop, not as OOP inheritance.
+4. **Inheritance/vtables** — `virtual` keyword is tokenized, but no vtable emission or `super` call codegen.
 5. **Conditional compilation** (`#if`/`#elif`/`#else`/`#end`) — not found in source.
 6. **Optimizer inline pass** — `opt_inline` function exists but likely a stub.
-
-## Missing Language Features (Needed for OS Work)
-
-The following features are needed by Aether OS but not yet implemented in the compiler.
-They are tracked here for prioritization.
-
-- **`sizeof(T)`** — compile-time size of a type. Needed for struct layout calculations
-  in filesystem code. NODE_SIZEOF exists in AST? No — needs full implementation.
-- **`as` type cast** — `expr as Type` syntax. NODE_CAST exists in AST but parser has
-  no `as` keyword or cast expression parsing. Needed for pointer arithmetic and
-  type-safe hardware access.
-- **`offsetof(Type, field)`** — compile-time field offset. Needed for on-disk struct
-  serialization. Not implemented.
-- **`unsafe { }` blocks** — exist in parser and codegen but need verification that
-  pointer arithmetic (ptr[index]) works inside them.
-
-> **Note**: OS implementation issues (binary execution, page tables, etc.) live in
-> the OS repo's STATUS.md. This file is compiler-only.
-
-## Recent Changes (2026-06-24)
-
-1. **Phase 17 `.aelib` library format implemented** — Full end-to-end pipeline:
-   - `--target lib` produces `.aelib` archives with code + metadata
-   - `import "lib"` resolves `.aelib` files (tries `.ae` first, then `.aelib`)
-   - Synthetic extern function declarations created from metadata
-   - `.o` extracted from `.aelib` archives and linked into final binary
-   - Tested: `lib_math.ae` → `.aelib` → import → compile → run → returns 42
-2. **STATUS.md scoped to compiler only** — Removed OS implementation phases
-   (Phase 12 OS Boot & Shell, Phase 14 OS Memory & Process Management). Renumbered
-   remaining phases: Language Spec → 12, Concurrency → 13, Advanced OS Lang → 14,
-   Goal-Oriented I/O → 15, Protocol → 16, .aelib → 17. OS issues now live in
-   the OS repo's STATUS.md.
-3. **`std/test.ae` completed** — JUnit-style test framework with `assertEquals`/`assertTrue`.
-   Assertions print PASS/FAIL and call `exit(1)` on failure (like AssertionError).
-   No return chaining or if blocks needed in test functions.
-4. **`exit()` built-in** — Compiler emits exit syscall inline (macOS 0x2000001, Linux 60).
-   Registered in semantic analyzer so it resolves like `print()`.
-5. **`@test` without `expect=N`** — Bare `@test` works, defaults to `expect=0`.
-   All `@test(expect=0)` fixtures updated to bare `@test`.
-6. **Import resolution** — Fallback to try import path directly (e.g. `"std/test"` resolves
-   to `std/test.ae` relative to CWD) when file-relative resolution fails.
-
-7. **Auto-generated test dispatcher** — When `@test` functions exist but no `main()` is
-   provided, the compiler emits a `main:` that takes the function name as argv[1],
-   looks it up in the `@test` list, calls it, and returns its exit code. This makes
-   tests self-contained — no need to write a dispatcher in each fixture.
-
-8. **DCE `@test` protection** — Optimizer's dead code elimination was removing
-   `@test` functions because nothing called them. Added `has_test` to the DCE's
-   "is_entry" check so test functions are preserved for the auto-generated dispatcher.
-
-9. **Phase 18: Standard library rewritten in pure Aether** — All 11 std/*.ae files
-   rewritten to use Aether language features instead of asm blocks. Only 3 files
-   retain asm for things Aether cannot express (port I/O, CPU control, byte-level
-   memory copy). Asm usage reduced from 11/11 files to 3/11.
-   - `libaether.aelib` moved from `std/` to `build/lib/` — out of source tree
-   - `*.aelib` added to `.gitignore`
-   - `install`/`install-local` only install binary + `libaether.aelib` (no source files)
-   - Test count: 46/47 passing (same pre-existing test_match failure)
-
-## Recent Changes (2026-06-23)
-
-1. **`@test(expect=N)` annotation** — Replaced `# @expected(N)` comment-based test annotations
-   with proper `@test(expect=N)` function attributes. 47 fixtures updated. The attribute parser
-   already supported `key=value` syntax (used by `@layout`), so `@test(expect=42)` works natively.
-   AttrData and FuncDecl now carry `has_test`, `test_expect_int`, `test_expect_str` fields.
-   Makefile `test-host` target greps `@test(expect=N)` from source.
-2. **`not`/`and`/`or` keyword operators** — The tokenizer had `TOKEN_KW_NOT`, `TOKEN_KW_AND`,
-   `TOKEN_KW_OR` but the parser never wired them in. Added them to `parse_prefix` (for `not`)
-   and the infix operator table (for `and`/`or`). Now `not found`, `a and b`, `a or b` work
-   as language-level keywords, equivalent to `!`, `&&`, `||`.
-3. **`BIN_AND`/`BIN_OR` codegen fix** — Was using hardcoded `L_false`/`L_true` labels causing
-   NASM "symbol not defined" errors when multiple logical expressions appeared. Now uses
-   `cg_new_label()` for unique labels per expression.
-4. **`test_logical_keywords.ae`** — New fixture testing `not`, `and`, `or` keywords.
 
 ---
 
@@ -411,16 +348,11 @@ They are tracked here for prioritization.
 | src/parser.c | 1861 | Recursive descent + Pratt parser, all declarations + statements |
 | src/ast.c | 590 | 65+ AST node types, node constructors |
 | src/semantic.c | 700 | Symbol resolution, type checking |
-| src/codegen.c | 3725 | NASM codegen: all statements, expressions, runtime, targets, .aelib metadata |
 | src/optimizer.c | 960 | Constant folding, DCE, inline (stub) |
-| src/asm_ir.c | 310 | Multi-target assembler IR (AsmIRBlock, AsmInstruction) |
-| src/asm_parser.c | 610 | ASM block parser (instructions, operands, directives) |
-| src/asm_backend_x86_64.c | 180 | x86_64 NASM passthrough backend |
-| src/asm_backend_arm64.c | 220 | ARM64 instruction mapping backend |
-| src/asm_backend_riscv64.c | 200 | RISC-V instruction mapping backend |
-| src/universal.c | 500 | Universal binary builder, CPUID trampolines |
-| src/segfault_helper.c | 160 | sigsetjmp/siglongjmp for host segfault handling |
-| src/aelib.c | 510 | .aelib library format writer + reader (binary archive format) |
+| src/llvm/ (13 files) | ~2350 | LLVM IR backend (planned) |
+| src/arena.c | 100 | Arena allocator |
+| src/str.c | 100 | String view utilities |
+| src/vector.c | 100 | Dynamic array |
 | include/aether/*.h | 16 files | All header definitions |
 
 **Standard library** (std/*.ae): arch, asm, collections, elf, fs, io, math, mem, serial, str, test (11 files)
@@ -429,113 +361,11 @@ They are tracked here for prioritization.
 
 ## Priority Queue (Next to Build)
 
-1. **Phase 12**: Language specification & requirements (REQUIREMENTS.md + spec document)
+1. **Phase 19**: LLVM backend migration — replace NASM codegen with LLVM IR
 2. **Fix test_match**: Match statement compilation failure
 3. **Phase 9 remaining**: Escape analysis, devirtualization, loop unrolling, actionable errors
-4. **Phase 7**: Self-hosting — compiler compiles itself
-5. **Phase 13**: Concurrency & fibers (spawn, channels, mutex, scheduler)
-6. **Phase 14**: Advanced OS language features (bootchain, interrupt handlers, metadata)
-7. **Phase 15**: Goal-oriented I/O & query fusion
-8. **Phase 16**: Protocol generation & hardware configuration
-
----
-
-## Phase 17 — `.aelib` Library Format (🟡 DESIGNED, not implemented)
-
-Closed-source library distribution without reverse engineering risk.
-
-### Motivation
-Current `import "path.ae"` requires source. For third-party closed-source libraries, we need a binary format that:
-- Contains compiled code (so consumers can link against it)
-- Exposes type signatures and class layouts (for compilation and code completion)
-- Hides source code (so it can't be reverse-engineered with `objdump -d`)
-- Supports multi-arch (like macOS fat dylibs)
-- Enforces access modifiers (pub/private/internal via metadata gating)
-
-### File Format (version 1)
-```
-+----------------------------------+
-|  Magic: "AELIB\0" (8 bytes)     |
-|  Version: 0x0001 (2 bytes)     |
-|  Flags:  (2 bytes)             |
-|  ABI version: (2 bytes)         |
-+----------------------------------+
-|  Code section offset (8 bytes)  |
-|  Code section size   (8 bytes)  |
-+----------------------------------+
-|  Metadata section offset (8)    |
-|  Metadata section size   (8)    |
-+----------------------------------+
-|  Code section (archive of .o)  |
-+----------------------------------+
-|  Metadata section (binary blob) |
-+----------------------------------+
-```
-
-### Metadata Section Format
-- Header: magic "AEMETA\0", version 0x0001
-- Symbol table: name, kind (function/struct/class/global/const/enum), flags (public bit), namespace, type data offset/size
-- Type data: function signatures (return type, param count, params with name/type/mutability), struct/class layouts (field offsets/sizes), enum variants
-- String table: null-terminated strings concatenated
-
-### Import Syntax
-```
-import "libtest"                    # all public decls
-import "libtest" : Foo              # all public from Foo class only
-import "libtest" : Foo, Bar         # from multiple classes
-import "libtest.aelib" : Foo        # explicit .aelib file
-import "std/io"                     # standard library
-```
-
-### Resolution Order
-1. `foo.ae` — source file (for code you own)
-2. `foo.aelib` — pre-compiled library
-3. `foo/lib.ae` or `foo/lib.aelib` — package directory
-4. Standard library paths: `$AETHER_LIB`, `~/.aether/lib`, `/usr/local/lib/aether`
-
-### Build Command
-```
-aether build --target lib libtest.ae -o libtest.aelib
-```
-New `--target lib` produces code + metadata in one file.
-
-### Linking Modes
-- **Static** (default for `--target kernel`, `--target binary`): extract .o from archive, link into final binary
-- **Dynamic** (for `--target host`): reference as shared library, runtime resolution
-
-### Multi-Arch Support
-Code section can contain .o for multiple architectures. Metadata is arch-agnostic — only references symbols by name. Linker picks right arch at build time (like macOS fat dylib).
-
-### Why Not `.aeb`?
-ELF with metadata section (`.aeb`) is trivially reverse-engineerable with `objdump -d`. Archive format (`.aelib`) requires writing a custom disassembler to extract the code sections AND understanding the archive layout. Also matches how dylibs work on every platform.
-
-### Implementation Plan (Minimal Viable)
-Will be implemented in a new feature branch after current branch is merged. Minimal viable version:
-1. Single-arch `.aelib` first (no multi-arch)
-2. Static linking only (no dynamic)
-3. Class/namespace imports only (no function-level)
-4. Visibility filtering: private decls omitted from metadata
-
-Future iterations add: multi-arch, dynamic linking, function-level imports, full access control enforcement.
-
----
-
-## Known Technical Decisions
-
-- **Bootstrap language**: C11 freestanding (matches Aether OS kernel)
-- **Output**: ELF64 flat binary for freestanding; Mach-O 64 (macOS) or native ELF64 (Linux) for host-native
-- **Assembly**: NASM syntax only, integrated assembler in compiler
-- **Multi-target assembler**: NASM syntax parsed into an intermediate IR, then translated to target architecture
-- **Memory model**: Stack-first with bump allocator per function; explicit `alloc` for heap
-- **Exceptions**: Deterministic with cleanup tables, no personality/unwind tables
-- **Generics**: Monomorphization (zero-cost, like Rust/C++)
-- **Compile-time**: `comptime` functions, not a separate macro system
-- **Indentation**: Braces for blocks, newlines separate statements
-- **Host native**: Multi-backend codegen; host syscall ABI instead of 0x5000 table
-- **`print()`**: Was a compiler built-in that emitted `write` syscall inline on host targets and was a no-op on freestanding. Now a regular library function in `std/io.ae` that calls through `sys func puts`. All test fixtures updated to import `libaether` for `print`.
-- **`.aelib` universal format**: TODO — currently `.aelib` archives contain host-format object code (Mach-O on macOS, ELF on Linux). They should contain architecture-independent metadata so the same `.aelib` works on any machine. This requires a proper intermediate representation rather than raw `.o` embedding.
-- **Build output**: All intermediate and output files go to `/tmp/kernel/` for easy cleanup
-- **Segfault handling**: Host uses sigsetjmp/siglongjmp via C helper (segfault_helper.c).
-  Kernel target uses IDT-based fault handling (OS repo). __aether_segfault_jmpbuf in BSS.
-- **Makefile**: aether.c moved out of CORE_OBJS (has main()) to avoid duplicate symbol in test executables.
-  Segfault helper compiled separately with host CC (needs libSystem for signal/backtrace).
+4. **Phase 13**: Concurrency & fibers (spawn, channels, mutex, scheduler)
+5. **Phase 14**: Advanced OS language features (bootchain, interrupt handlers, metadata)
+6. **Phase 15**: Goal-oriented I/O & query fusion
+7. **Phase 16**: Protocol generation & hardware configuration
+8. **Phase 20**: Self-hosting — compiler compiles itself
