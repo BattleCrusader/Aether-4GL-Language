@@ -2754,19 +2754,48 @@ The following operations are **undefined behavior** — the compiler may produce
 
 ## Appendix E: Compiler Pipeline
 
+The Aether compiler pipeline, showing what is implemented (✅) and what is planned (🔲):
+
 ```
 Source (.ae)
-  → Tokenizer (whitespace-aware, indent engine)
-    → Parser (Pratt + recursive descent)
-      → AST (50+ node types)
-        → Semantic Analysis (type checking, name resolution, borrow checking)
-          → HIR → MIR (CFG with memory annotations)
-            → Optimization (constant folding, DCE, inlining, escape analysis)
-              → LIR (register allocation, instruction selection)
-                → Code Generation (NASM text output)
-                  → Multi-Target Assembler (x86_64/ARM64/RISC-V)
-                    → Binary Output (ELF64/Mach-O/PE32+/flat binary)
+  → Tokenizer (whitespace-aware, indent engine)                    ✅
+    → Parser (Pratt + recursive descent)                           ✅
+      → AST (50+ node types)                                       ✅
+        → Import Resolution (read, parse, merge imported files)     ✅
+          → Semantic Analysis (type checking, name resolution)     ✅
+            → Code Generation (NASM text output)                    ✅
+              → Multi-Target Assembler (x86_64/ARM64/RISC-V)       ✅
+                → Binary Output (ELF64/Mach-O/PE32+/flat binary)   ✅
 ```
+
+**Planned future pipeline phases** (not yet implemented):
+
+```
+            → HIR (High-level IR — type-aware, for semantic passes) 🔲
+              → MIR (Mid-level IR — CFG with memory annotations)   🔲
+                → Optimization (constant folding, DCE, inlining)    ✅
+                  → LIR (Low-level IR — register allocation)        🔲
+                    → Code Generation (from LIR, not AST)            🔲
+```
+
+**Comparison with other languages:**
+
+| Phase | Aether | Swift | Zig |
+|-------|--------|-------|-----|
+| Tokenizer | ✅ Direct | Lexer | Tokenizer |
+| Parser | ✅ Recursive descent | Recursive descent | Recursive descent |
+| AST | ✅ 50+ node types | AST | AST |
+| Import resolution | ✅ File-level | Module system | `@import` |
+| Semantic analysis | ✅ Two-pass | Sema | ZIR → AIR |
+| High-level IR | 🔲 Planned | SIL (Swift IR) | ZIR (Zig IR) |
+| Mid-level IR | 🔲 Planned | SIL Optimizer | AIR (Analyzed IR) |
+| Optimization | ✅ Partial | SIL + LLVM passes | LLVM passes |
+| Low-level IR | 🔲 Planned | LLVM IR | LLVM IR |
+| Code generation | ✅ NASM text | LLVM IRGen | LLVM / native |
+| Assembly | ✅ Multi-target | LLVM MC | LLVM MC |
+| Binary output | ✅ ELF/Mach-O/PE | LLVM | LLVM / custom |
+
+> **Note:** Aether's current pipeline skips intermediate IRs and goes directly from AST to NASM assembly text. This is by design for the bootstrap phase — it keeps the compiler simple and debuggable. As the language matures, HIR/MIR/LIR passes will be added for better optimization and code quality.
 
 ---
 
