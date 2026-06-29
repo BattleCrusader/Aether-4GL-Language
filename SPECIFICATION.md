@@ -1,9 +1,7 @@
 # Aether Language Specification
 
 **Version**: 1.0 (Comprehensive)
-**Status**: Living Document — Last updated: 2026-06-24 — Implementation status updated. All recently implemented features now correctly marked as ✅.
-
-> **AUDIT NOTE (2026-06-24)**: This specification has been audited against the compiler source code. Features are annotated with `✅` (fully implemented), `⚠️` (partially implemented), or `❌` (not yet implemented). See individual sections for details. Spec mismatch annotations (`🔧`) have been resolved — the spec now accurately reflects the implementation.
+**Status**: Living Document — Last updated: 2026-06-29
 
 ---
 
