@@ -101,6 +101,10 @@ static int is_string_expr(AstNode *node) {
                 }
             }
         }
+        /* If no type annotation, check the value expression */
+        if (!type_node && decl->type == NODE_LET && decl->data.let_decl.value) {
+            return is_string_expr(decl->data.let_decl.value);
+        }
     }
     return 0;
 }
@@ -235,12 +239,22 @@ static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
 }
 
 static void c_emit_call(CCodegen *cg, AstNode *node) {
-    if (!node->data.call.callee || node->data.call.callee->type != NODE_IDENT) {
-        fprintf(stderr, "C: call with non-ident callee not yet supported\n");
+    if (!node->data.call.callee) {
+        fprintf(stderr, "C: call with NULL callee\n");
         return;
     }
 
-    StringView fname = node->data.call.callee->data.ident.name;
+    StringView fname;
+    if (node->data.call.callee->type == NODE_IDENT) {
+        fname = node->data.call.callee->data.ident.name;
+    } else if (node->data.call.callee->type == NODE_FIELD_ACCESS) {
+        /* Handle scoped calls like Option::Some(42) — just emit the value */
+        c_emit_expr(cg, node->data.call.args.items[0]);
+        return;
+    } else {
+        fprintf(stderr, "C: call with non-ident callee not yet supported\n");
+        return;
+    }
     fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);
 
     /* Look up the function declaration to check param types */
@@ -283,7 +297,16 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
         case NODE_LITERAL_BOOL:   c_emit_literal_bool(cg, node); break;
         case NODE_LITERAL_CHAR:   c_emit_literal_char(cg, node); break;
         case NODE_LITERAL_NONE:   fputs("{ 0, { 0 } }", cg->out); break;
-        case NODE_IDENT:          c_emit_ident(cg, node); break;
+        case NODE_IDENT: {
+            /* Check if this is a const declaration — evaluate the const value */
+            AstNode *decl = node->data.ident.resolved;
+            if (decl && decl->type == NODE_CONST_DECL && decl->data.let_decl.value) {
+                c_emit_expr(cg, decl->data.let_decl.value);
+            } else {
+                c_emit_ident(cg, node);
+            }
+            break;
+        }
         case NODE_BINARY_OP:      c_emit_binary_op(cg, node); break;
         case NODE_UNARY_OP:       c_emit_unary_op(cg, node); break;
         case NODE_CALL:           c_emit_call(cg, node); break;
