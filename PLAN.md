@@ -1,275 +1,168 @@
-# Phase 19 — Week 1: LLVM Backend Skeleton
+# Phase 19 — Week 2: Expressions, Statements, and print()
 
-> **Branch:** `feature/P19.00-llvm-backend`
-> **Goal:** `aether --llvm run tests/fixtures/hello.ae` produces a working binary that prints 42 and exits with code 42.
+> **Branch:** `feature/P19.01-llvm-week2`
+> **Goal:** All simple test fixtures pass through the LLVM backend. `print()` works. If/while/for/assign/defer all generate correct LLVM IR.
 
 ---
 
 ## Overview
 
-Week 1 establishes the LLVM backend skeleton. We create the core infrastructure — LLVM context, type mapping, and enough codegen to compile `hello.ae` end-to-end. The frontend (tokenizer, parser, AST, semantic analysis) is unchanged. Only the codegen path changes.
-
-**What `hello.ae` looks like:**
-```aether
-func main(): u64 {
-    print("Hello, World!\n")
-    return 42
-}
-```
-
-This exercises: function declaration, string literal, function call (`print`), return with value.
+Week 2 expands the LLVM backend from "hello world only" to handling all common expression and statement types. The `print()` built-in is implemented via write syscall. Control flow (if, while, for) uses LLVM basic blocks. Assignment and compound assignment modify variables in place.
 
 ---
 
 ## Task Breakdown
 
-### P19.01 — Create `include/aether/llvm.h`
-
-**File:** `include/aether/llvm.h`
-**Lines:** ~100
-
-The main header defining the `LlvmCodegen` struct and public API. Every LLVM module includes this.
-
-**Contents:**
-- `LlvmCodegen` struct with: `context`, `module`, `builder`, `current_func`, `current_block`, symbol tables, loop/try stacks, defer chain, target config, debug info state
-- `LlvmSymbol` struct — maps Aether name to `LLVMValueRef` + type
-- `LlvmLoopFrame` — break/continue target blocks
-- `LlvmTryFrame` — catch/finally target blocks
-- `LlvmDeferEntry` — LIFO defer chain
-- Public API declarations:
-  - `llvm_create()`, `llvm_destroy()`
-  - `llvm_generate()`
-  - `llvm_emit_object()`, `llvm_emit_assembly()`, `llvm_emit_binary()`
-
-**Depends on:** Nothing (standalone header)
-**Test:** Compile check — `#include "aether/llvm.h"` compiles clean
-
-### P19.02 — Create `src/llvm/llvm_init.c`
-
-**File:** `src/llvm/llvm_init.c`
-**Lines:** ~80
-
-LLVM bootstrap — creates context, module, builder, initializes target registry.
-
-**Functions:**
-- `LlvmCodegen *llvm_create(Arena *arena, Target target, int opt_level)` — allocates struct, creates LLVM context/module/builder, sets target triple and data layout
-- `void llvm_destroy(LlvmCodegen *lc)` — disposes LLVM objects (but not the arena — that's owned by the caller)
-
-**Target triple mapping:**
-- `TARGET_HOST` → auto-detected (macOS: `x86_64-apple-macosx`, Linux: `x86_64-unknown-linux-gnu`)
-- `TARGET_KERNEL` → `x86_64-unknown-none-elf`
-- `TARGET_BOOT` → `x86_64-unknown-none-elf`
-- `TARGET_FREESTANDING` → `x86_64-unknown-none-elf`
-- `TARGET_MODULE` → `x86_64-unknown-none-elf`
-- `TARGET_BINARY` → `x86_64-unknown-none-elf`
-
-**Depends on:** `llvm.h`
-**Test:** `llvm_create()` returns non-NULL, module has correct target triple
-
-### P19.03 — Create `src/llvm/llvm_types.c`
-
-**File:** `src/llvm/llvm_types.c`
-**Lines:** ~120
-
-Maps Aether primitive types to LLVM types.
-
-**Functions:**
-- `LLVMTypeRef llvm_prim_type(LlvmCodegen *lc, PrimType prim)` — maps `PRIM_U64` → `LLVMInt64Type()`, `PRIM_BOOL` → `LLVMInt1Type()`, `PRIM_STRING` → pointer to i8, etc.
-- `LLVMTypeRef llvm_type_from_ast(LlvmCodegen *lc, AstNode *type_node)` — handles compound types (arrays, slices, pointers, refs, optionals, tuples, function types)
-- `LLVMTypeRef llvm_throws_return_type(LlvmCodegen *lc, AstNode *return_type)` — struct `{ value_type, i8 }` for throws functions
-
-**Type mapping table:**
-| Aether | LLVM |
-|--------|------|
-| `void` | `LLVMVoidType()` |
-| `bool` | `LLVMInt1Type()` |
-| `byte`, `u8`, `char` | `LLVMInt8Type()` |
-| `u16` | `LLVMInt16Type()` |
-| `u32` | `LLVMInt32Type()` |
-| `u64`, `int` | `LLVMInt64Type()` |
-| `i8` | `LLVMInt8Type()` |
-| `i16` | `LLVMInt16Type()` |
-| `i32` | `LLVMInt32Type()` |
-| `i64` | `LLVMInt64Type()` |
-| `f32`, `float` | `LLVMFloatType()` |
-| `f64`, `double` | `LLVMDoubleType()` |
-| `string` | `LLVMPointerType(LLVMInt8Type(), 0)` |
-
-**Depends on:** `llvm.h`
-**Test:** Each primitive maps to the correct LLVM type
-
-### P19.04 — Create `src/llvm/llvm_expr.c` (minimal)
+### P19.10 — Implement `print()` built-in
 
 **File:** `src/llvm/llvm_expr.c`
-**Lines:** ~100 (Week 1 — expanded in Week 2)
+**Lines:** ~30 added
 
-Minimal expression codegen — just enough for `hello.ae`.
+Replace the no-op `print()` with a real implementation that emits a write syscall.
 
-**Functions (Week 1):**
-- `LLVMValueRef llvm_cg_expr(LlvmCodegen *lc, AstNode *node)` — dispatcher
-- `llvm_cg_literal_int()` — `LLVMConstInt()`
-- `llvm_cg_literal_string()` — global string constant + GEP
-- `llvm_cg_ident()` — local/global lookup + load
-- `llvm_cg_call()` — `LLVMBuildCall2()` for `print()` built-in
+**Approach:** For host targets, emit inline assembly that calls the macOS/Linux write syscall:
+- macOS: `mov rax, 0x2000004; mov rdi, 1; mov rsi, str_ptr; mov rdx, len; syscall`
+- Linux: `mov rax, 1; mov rdi, 1; mov rsi, str_ptr; mov rdx, len; syscall`
 
-**Depends on:** `llvm.h`, `llvm_types.c`
-**Test:** `llvm_cg_expr(lc, literal_int(42))` returns `LLVMConstInt(i64, 42)`
+For now, use LLVM inline asm to emit the syscall. The string pointer and length are computed from the string argument.
 
-### P19.05 — Create `src/llvm/llvm_func.c` (minimal)
+**Test:** `aether --llvm run tests/fixtures/hello.ae` prints "Hello, World!" and exits with 42
 
-**File:** `src/llvm/llvm_func.c`
-**Lines:** ~100 (Week 1 — expanded in Week 2)
+### P19.11 — Unary operations
 
-Minimal function codegen — just enough for `hello.ae`.
+**File:** `src/llvm/llvm_expr.c`
+**Lines:** ~40 added
 
-**Functions (Week 1):**
-- `void llvm_cg_func_decl(LlvmCodegen *lc, AstNode *node)` — creates LLVM function, entry block, alloca for params, generates body, emits return
-- `void llvm_cg_block(LlvmCodegen *lc, AstNode *node)` — iterates statements
+Add codegen for all unary operators:
+- `UNARY_NEG` → `LLVMBuildNeg()`
+- `UNARY_NOT` → `LLVMBuildNot()` (logical not: `icmp eq` + `xor 1`)
+- `UNARY_BIT_NOT` → `LLVMBuildNot()`
+- `UNARY_INC` / `UNARY_DEC` → load, add/sub 1, store, return (prefix: new value, postfix: old value)
+- `UNARY_ARRAY_LEN` → load first 8 bytes of array header
+- `UNARY_REF` → return the alloca pointer
+- `UNARY_DEREF` → load from pointer
 
-**Depends on:** `llvm.h`, `llvm_types.c`, `llvm_expr.c`
-**Test:** A function with `return 42` produces LLVM IR with `ret i64 42`
+**Test:** `let x = -5; let y = !true; let z = ~0xFF` all produce correct values
 
-### P19.06 — Create `src/llvm/llvm_runtime.c` (minimal)
+### P19.12 — If/elif/else
 
-**File:** `src/llvm/llvm_runtime.c`
-**Lines:** ~80
+**File:** `src/llvm/llvm_stmt.c`
+**Lines:** ~80 added
 
-Declares runtime helper functions that the generated code calls.
+Implement if/elif/else using LLVM basic blocks:
+1. Evaluate condition
+2. Compare against zero (or use `icmp ne`)
+3. `LLVMBuildCondBr()` to then block or else/elif chain
+4. Then block: generate body, branch to merge block
+5. Elif chain: each elif is a nested if with its own condition and blocks
+6. Else block: generate body, branch to merge block
+7. Merge block: continue after the if chain
 
-**Functions:**
-- `void llvm_declare_runtime(LlvmCodegen *lc)` — declares `__aether_alloc`, `__aether_concat`, `__aether_itoa` as external LLVM functions with correct signatures
-- `LLVMValueRef llvm_call_alloc(LlvmCodegen *lc, LLVMValueRef size)` — generates call to `__aether_alloc`
-- `LLVMValueRef llvm_call_concat(LlvmCodegen *lc, LLVMValueRef left, LLVMValueRef right)` — generates call to `__aether_concat`
+**Test:** `tests/fixtures/test_if.ae` compiles and runs correctly
 
-**Runtime function signatures:**
-```
-__aether_alloc(i64) -> ptr         ; bump allocator
-__aether_concat(ptr, ptr) -> ptr   ; string concat
-__aether_itoa(i64) -> ptr          ; u64 to decimal string
-```
+### P19.13 — While loops
 
-**Depends on:** `llvm.h`
-**Test:** Runtime declarations exist in module with correct signatures
+**File:** `src/llvm/llvm_stmt.c`
+**Lines:** ~40 added
 
-### P19.07 — Create `src/llvm/llvm_target.c` (minimal)
+Implement while loops:
+1. Create condition block, body block, after block
+2. Branch to condition block
+3. Condition block: evaluate condition, `LLVMBuildCondBr()` to body or after
+4. Body block: generate body, branch back to condition block
+5. After block: continue
 
-**File:** `src/llvm/llvm_target.c`
-**Lines:** ~100 (Week 1 — expanded in Week 5)
+Push/pop loop context for break/continue support.
 
-Minimal target emission — just enough to produce a `.o` file and link it.
+**Test:** `tests/fixtures/test_while.ae` compiles and runs correctly
 
-**Functions (Week 1):**
-- `const char *llvm_target_triple(Target target)` — returns target triple string
-- `const char *llvm_target_data_layout(Target target)` — returns data layout string
-- `int llvm_emit_object(LlvmCodegen *lc, const char *path)` — creates target machine, runs optimization, emits `.o` file
-- `int llvm_emit_assembly(LlvmCodegen *lc, const char *path)` — emits assembly listing
+### P19.14 — For loops
 
-**Depends on:** `llvm.h`
-**Test:** `llvm_emit_object()` produces a valid `.o` file
+**File:** `src/llvm/llvm_stmt.c`
+**Lines:** ~60 added
 
-### P19.08 — Wire up `--llvm` flag in `aether.c`
+Implement for loops (range and array iteration):
+- Range: `for i in 0..10` → create counter variable, compare, increment
+- Array: `for val in arr` → create index variable, load element, increment
+- With index: `for i, val in arr` → both index and value
 
-**File:** `src/aether.c`
-**Lines:** ~20 changed
+**Test:** `tests/fixtures/test_for.ae` and `tests/fixtures/test_for_index.ae` compile and run
 
-Add `--llvm` CLI flag that selects the LLVM codegen path instead of NASM.
+### P19.15 — Assignment (regular and compound)
 
-**Changes:**
-- Add `bool use_llvm` to CLI args parsing
-- In `aether_compile()`: if `use_llvm`, call `llvm_create()` → `llvm_generate()` → `llvm_emit_object()` → link with system linker
-- Keep NASM path as default for now
+**File:** `src/llvm/llvm_stmt.c`
+**Lines:** ~50 added
 
-**Depends on:** All above modules
-**Test:** `aether --llvm run hello.ae` produces output
+Implement assignment statements:
+- Regular: `x = expr` → evaluate expr, store to x's alloca
+- Compound: `x += expr`, `x -= expr`, etc. → load x, apply op, store back
+- Handle field access targets: `obj.field = expr` → GEP + store
 
-### P19.09 — Update Makefile
+**Test:** `let mut x = 5; x += 3;` produces x = 8
 
-**File:** `Makefile`
-**Lines:** ~15 changed
+### P19.16 — Defer
 
-Add LLVM compilation and linking.
+**File:** `src/llvm/llvm_stmt.c`
+**Lines:** ~40 added
 
-**Changes:**
-```
-LLVM_CONFIG ?= /opt/homebrew/opt/llvm/bin/llvm-config
-LLVM_CFLAGS := $(shell $(LLVM_CONFIG) --cflags)
-LLVM_LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags --libs --system-libs)
+Implement defer:
+1. Push deferred body onto `lc->defer_head` (LIFO)
+2. At scope exit (before return, at end of block), pop and emit deferred bodies
+3. Deferred bodies are emitted as regular statement codegen
 
-LLVM_SRCS = src/llvm/llvm_init.c src/llvm/llvm_types.c \
-            src/llvm/llvm_expr.c src/llvm/llvm_func.c \
-            src/llvm/llvm_runtime.c src/llvm/llvm_target.c
+**Test:** `tests/fixtures/test_defer.ae` compiles and runs correctly
 
-LLVM_OBJS = $(LLVM_SRCS:src/llvm/%.c=build/llvm/%.o)
+### P19.17 — Index expressions and field access
 
-build/llvm/%.o: src/llvm/%.c include/aether/llvm.h
-    mkdir -p build/llvm
-    $(CC) $(CFLAGS) $(LLVM_CFLAGS) -c -o $@ $<
+**File:** `src/llvm/llvm_expr.c`
+**Lines:** ~50 added
 
-build/aether: $(OBJS) $(LLVM_OBJS)
-    $(CC) -o $@ $^ $(LDFLAGS) $(LLVM_LDFLAGS)
-```
+Implement:
+- `arr[i]` → GEP into array pointer + load
+- `s[i]` (string indexing) → GEP into string + load byte
+- `obj.field` → GEP into struct + load
+- `obj.field = expr` → GEP into struct + store (in assignment codegen)
 
-**Depends on:** All above modules
-**Test:** `make clean && make` compiles clean with LLVM
+**Test:** Array indexing and struct field access work correctly
+
+### P19.18 — Test all simple fixtures
+
+**File:** `Makefile` (test target)
+**Lines:** ~10 added
+
+Add an `llvm-test` target that runs all simple test fixtures through the LLVM backend.
+
+**Test fixtures to verify:**
+- `hello.ae` — basic function + return
+- `test_if.ae` — if/elif/else
+- `test_while.ae` — while loops
+- `test_for.ae` — for loops
+- `test_for_index.ae` — for with index
+- `test_defer.ae` — defer
+- `test_assign.ae` — assignment
+- `test_math.ae` — arithmetic
+- `test_bool.ae` — boolean logic
 
 ---
 
 ## Verification
 
-### Test: `hello.ae` compiles and runs
-
 ```bash
 make clean && make
-./build/aether --llvm tests/fixtures/hello.ae -o /tmp/hello_llvm
-/tmp/hello_llvm
-echo $?   # Should print 42
-```
-
-### Test: LLVM IR output is readable
-
-```bash
-./build/aether --llvm tests/fixtures/hello.ae -S -o /tmp/hello.ll
-cat /tmp/hello.ll
-```
-
-Should show:
-```llvm
-define i64 @main() {
-entry:
-  %calltmp = call ptr @print(ptr @.str)
-  ret i64 42
-}
-```
-
-### Test: NASM path still works
-
-```bash
-./build/aether tests/fixtures/hello.ae -o /tmp/hello_nasm
-/tmp/hello_nasm
-echo $?   # Should also print 42
+./build/aether --llvm run tests/fixtures/hello.ae    # prints "Hello, World!" exits 42
+./build/aether --llvm run tests/fixtures/test_if.ae   # exits 0
+./build/aether --llvm run tests/fixtures/test_math.ae  # exits 0
 ```
 
 ---
 
-## File Size Budget (Week 1)
+## File Size Budget (Week 2)
 
-| File | Lines | Status |
-|------|-------|--------|
-| `include/aether/llvm.h` | 100 | New |
-| `src/llvm/llvm_init.c` | 80 | New |
-| `src/llvm/llvm_types.c` | 120 | New |
-| `src/llvm/llvm_expr.c` | 100 | New (minimal) |
-| `src/llvm/llvm_func.c` | 100 | New (minimal) |
-| `src/llvm/llvm_runtime.c` | 80 | New (minimal) |
-| `src/llvm/llvm_target.c` | 100 | New (minimal) |
-| `src/aether.c` | +20 | Modified |
-| `Makefile` | +15 | Modified |
-| **Total** | **~715** | **7 new files, 2 modified** |
-
----
-
-## Dependencies
-
-- LLVM 21.1.8 at `/opt/homebrew/opt/llvm/` (already installed)
-- `llvm-config` at `/opt/homebrew/opt/llvm/bin/llvm-config`
-- System linker (`ld` on macOS, `ld.lld` on Linux)
+| File | Lines added | Total |
+|------|-------------|-------|
+| `src/llvm/llvm_expr.c` | +120 | ~220 |
+| `src/llvm/llvm_stmt.c` | +310 | ~310 |
+| `src/llvm/llvm_func.c` | +20 | ~120 |
+| `src/llvm/llvm_sym.c` | +10 | ~90 |
+| `Makefile` | +10 | — |
+| **Total** | **~470** | |
