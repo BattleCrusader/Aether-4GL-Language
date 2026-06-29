@@ -208,6 +208,7 @@ typedef struct {
     AstNode *type;          /* NULL for inferred */
     AstNode *value;
     bool is_mut;
+    bool is_global;         /* true for file-scope let declarations */
 } LetDecl;
 
 /* If/elif/else */

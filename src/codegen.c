@@ -793,6 +793,10 @@ static bool is_numeric_expr(AstNode *node) {
     }
     if (node->type == NODE_IDENT && node->data.ident.resolved) {
         AstNode *decl = node->data.ident.resolved;
+        /* Variadic params are array pointers, not numeric */
+        if (decl->type == NODE_PARAM && decl->data.param.is_varargs) return false;
+        /* For-loop variables are always u64 */
+        if (decl->type == NODE_IDENT) return true;
         AstNode *type_node = NULL;
         if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
         else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
@@ -806,6 +810,10 @@ static bool is_numeric_expr(AstNode *node) {
         if (!type_node && decl->type == NODE_LET && decl->data.let_decl.value) {
             return is_numeric_expr(decl->data.let_decl.value);
         }
+    }
+    /* Also check by name lookup for idents that weren't resolved by semantic analysis */
+    if (node->type == NODE_IDENT && !node->data.ident.resolved) {
+        return true;
     }
     /* Function calls that return numeric types */
     if (node->type == NODE_CALL && node->data.call.callee &&
@@ -842,9 +850,19 @@ static bool is_string_expr(AstNode *node) {
         if (type_node && type_node->type == NODE_TYPE_PRIMITIVE) {
             return type_node->data.type_node.prim == PRIM_STRING;
         }
-        /* No type annotation — check if initializer is a string expression */
         if (!type_node && decl->type == NODE_LET && decl->data.let_decl.value) {
             return is_string_expr(decl->data.let_decl.value);
+        }
+    }
+    /* Function calls that return string types */
+    if (node->type == NODE_CALL && node->data.call.callee &&
+        node->data.call.callee->type == NODE_IDENT) {
+        if (node->data.call.callee->data.ident.resolved &&
+            node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
+            AstNode *ret_type = node->data.call.callee->data.ident.resolved->data.func.return_type;
+            if (ret_type && ret_type->type == NODE_TYPE_PRIMITIVE) {
+                return ret_type->data.type_node.prim == PRIM_STRING;
+            }
         }
     }
     return false;
@@ -1575,7 +1593,34 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     break;
                 }
                 /* Compound assignment: x += expr etc — left value in rax, right in rcx */
-                case BIN_ADD_ASSIGN: cg_comment(cg, "+="); cg_inst1(cg, "add", "rax, rcx"); goto store_assign;
+                case BIN_ADD_ASSIGN: {
+                    cg_comment(cg, "+=");
+                    bool left_is_str = false;
+                    if (node->data.binary.left && node->data.binary.left->type == NODE_IDENT &&
+                        node->data.binary.left->data.ident.resolved) {
+                        AstNode *ld = node->data.binary.left->data.ident.resolved;
+                        AstNode *lt = NULL;
+                        if (ld->type == NODE_LET) lt = ld->data.let_decl.type;
+                        else if (ld->type == NODE_PARAM) lt = ld->data.param.type;
+                        if (lt && lt->type == NODE_TYPE_PRIMITIVE && lt->data.type_node.prim == PRIM_STRING)
+                            left_is_str = true;
+                    }
+                    if (left_is_str) {
+                        /* Convert right operand to string if numeric */
+                        if (is_numeric_expr(node->data.binary.right)) {
+                            cg_inst1(cg, "mov", "rdi, rcx");
+                            cg_inst(cg, "call __aether_itoa");
+                            cg_inst1(cg, "mov", "rcx, rax");
+                        }
+                        cg_inst1(cg, "push", "rax");
+                        cg_inst1(cg, "push", "rcx");
+                        cg_inst(cg, "call __aether_concat");
+                        cg_inst(cg, "add rsp, 16");
+                    } else {
+                        cg_inst1(cg, "add", "rax, rcx");
+                    }
+                    goto store_assign;
+                }
                 case BIN_SUB_ASSIGN: cg_comment(cg, "-="); cg_inst1(cg, "sub", "rax, rcx"); goto store_assign;
                 case BIN_MUL_ASSIGN: cg_comment(cg, "*="); cg_inst1(cg, "mul", "rcx"); goto store_assign;
                 case BIN_DIV_ASSIGN: cg_comment(cg, "/="); cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "rcx"); goto store_assign;
@@ -1666,6 +1711,13 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                         cg_inst1(cg, "pop", "rcx");      /* restore rcx = right (already a string) */
                     }
                     /* Now rax = left (string), rcx = right (string) */
+                    /* If either is neither string nor numeric (e.g. array pointer), null it */
+                    if (!is_string_expr(node->data.binary.left) && !left_num) {
+                        cg_inst(cg, "xor rax, rax");
+                    }
+                    if (!is_string_expr(node->data.binary.right) && !right_num) {
+                        cg_inst(cg, "xor rcx, rcx");
+                    }
                     cg_inst1(cg, "push", "rax");   /* left arg (rbp+24) */
                     cg_inst1(cg, "push", "rcx");   /* right arg (rbp+16) */
                     cg_inst(cg, "call __aether_concat");
@@ -1858,56 +1910,115 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             cg_comment(cg, "function call");
             int argc = node->data.call.args.count;
 
-            /* SysV AMD64 ABI: first 6 integer args in rdi, rsi, rdx, rcx, r8, r9
-               For ≤6 args (Phase 1): evaluate right-to-left, push all, pop into regs */
-            const char *regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-            int reg_count = argc < 6 ? argc : 6;
-
-            /* Evaluate args right-to-left, push each onto stack */
-            for (int i = argc - 1; i >= 0; i--) {
-                cg_expr(cg, node->data.call.args.items[i], slots);
-                cg_inst1(cg, "push", "rax");
-            }
-
-            /* Pop into target registers rdi, rsi, rdx, rcx, r8, r9 */
-            for (int i = 0; i < reg_count; i++) {
-                cg_inst1(cg, "pop", regs[i]);
-            }
-
-            /* Extra stack args (>6) stay on stack — callee finds them at rsp+N */
-            /* After call, count of remaining items = argc - reg_count, but if that's ≤0 it's fine */
-            int stack_cleanup = argc > 6 ? argc - 6 : 0;
-
-            if (node->data.call.callee->type == NODE_IDENT) {
-                char buf[256];
-                snprintf(buf, sizeof(buf), "%.*s",
-                    (int)node->data.call.callee->data.ident.name.len,
-                    node->data.call.callee->data.ident.name.data);
-
-                /* Check if this is a sys func call — emit indirect call through 0x5000 table */
-                if (node->data.call.callee->data.ident.resolved &&
-                    node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL &&
-                    node->data.call.callee->data.ident.resolved->data.func.is_sys) {
-                    int idx = node->data.call.callee->data.ident.resolved->data.func.sys_index;
-                    if (idx >= 0) {
-                        cg_comment(cg, "syscall via 0x5000 table");
-                        char tmp[64];
-                        snprintf(tmp, sizeof(tmp), "mov rax, 0x%x", 0x5000 + idx * 8);
-                        cg_inst(cg, tmp);
-                        cg_inst(cg, "call [rax]");
-                    } else {
-                        cg_inst1(cg, "call", buf);
+            /* Check if callee has a variadic parameter */
+            bool callee_has_varargs = false;
+            int regular_param_count = argc;
+            if (node->data.call.callee->type == NODE_IDENT &&
+                node->data.call.callee->data.ident.resolved &&
+                node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
+                AstNode *func_decl = node->data.call.callee->data.ident.resolved;
+                for (int i = 0; i < func_decl->data.func.params.count; i++) {
+                    if (func_decl->data.func.params.items[i]->data.param.is_varargs) {
+                        callee_has_varargs = true;
+                        regular_param_count = i;
+                        break;
                     }
-                } else {
-                    cg_inst1(cg, "call", buf);
                 }
             }
 
-            /* Clean up remaining stack args after call */
-            if (stack_cleanup > 0) {
-                char buf[32];
-                snprintf(buf, sizeof(buf), "add rsp, %d", stack_cleanup * 8);
-                cg_inst(cg, buf);
+            if (callee_has_varargs) {
+                int vararg_count = argc - regular_param_count;
+                cg_inst1(cg, "mov", "rdi, 8");
+                if (vararg_count > 0) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "add rdi, %d", vararg_count * 8);
+                    cg_inst(cg, buf);
+                }
+                cg_inst(cg, "call __aether_alloc");
+                cg_inst1(cg, "mov", "r15, rax");
+                cg_inst1(cg, "mov", "rcx, 0");
+                if (vararg_count > 0) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "mov rcx, %d", vararg_count);
+                    cg_inst(cg, buf);
+                }
+                cg_inst(cg, "mov [r15], rcx");
+                for (int i = argc - 1; i >= regular_param_count; i--) {
+                    cg_expr(cg, node->data.call.args.items[i], slots);
+                    cg_inst1(cg, "push", "rax");
+                }
+                for (int i = regular_param_count; i < argc; i++) {
+                    cg_inst1(cg, "pop", "rcx");
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "mov [r15+8+%d*8], rcx", i - regular_param_count);
+                    cg_inst(cg, buf);
+                }
+                /* Now push regular args right-to-left */
+                for (int i = regular_param_count - 1; i >= 0; i--) {
+                    cg_expr(cg, node->data.call.args.items[i], slots);
+                    cg_inst1(cg, "push", "rax");
+                }
+                int reg_count = regular_param_count < 6 ? regular_param_count : 6;
+                const char *regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+                for (int i = 0; i < reg_count; i++) {
+                    cg_inst1(cg, "pop", regs[i]);
+                }
+                {
+                    char buf[64];
+                    snprintf(buf, sizeof(buf), "mov %s, r15", regs[regular_param_count < 6 ? regular_param_count : 5]);
+                    cg_inst(cg, buf);
+                }
+                int stack_cleanup = regular_param_count > 6 ? regular_param_count - 6 : 0;
+                if (node->data.call.callee->type == NODE_IDENT) {
+                    char buf[256];
+                    snprintf(buf, sizeof(buf), "%.*s",
+                        (int)node->data.call.callee->data.ident.name.len,
+                        node->data.call.callee->data.ident.name.data);
+                    cg_inst1(cg, "call", buf);
+                }
+                if (stack_cleanup > 0) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "add rsp, %d", stack_cleanup * 8);
+                    cg_inst(cg, buf);
+                }
+            } else {
+                const char *regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+                int reg_count = argc < 6 ? argc : 6;
+                for (int i = argc - 1; i >= 0; i--) {
+                    cg_expr(cg, node->data.call.args.items[i], slots);
+                    cg_inst1(cg, "push", "rax");
+                }
+                for (int i = 0; i < reg_count; i++) {
+                    cg_inst1(cg, "pop", regs[i]);
+                }
+                int stack_cleanup = argc > 6 ? argc - 6 : 0;
+                if (node->data.call.callee->type == NODE_IDENT) {
+                    char buf[256];
+                    snprintf(buf, sizeof(buf), "%.*s",
+                        (int)node->data.call.callee->data.ident.name.len,
+                        node->data.call.callee->data.ident.name.data);
+                    if (node->data.call.callee->data.ident.resolved &&
+                        node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL &&
+                        node->data.call.callee->data.ident.resolved->data.func.is_sys) {
+                        int idx = node->data.call.callee->data.ident.resolved->data.func.sys_index;
+                        if (idx >= 0) {
+                            cg_comment(cg, "syscall via 0x5000 table");
+                            char tmp[64];
+                            snprintf(tmp, sizeof(tmp), "mov rax, 0x%x", 0x5000 + idx * 8);
+                            cg_inst(cg, tmp);
+                            cg_inst(cg, "call [rax]");
+                        } else {
+                            cg_inst1(cg, "call", buf);
+                        }
+                    } else {
+                        cg_inst1(cg, "call", buf);
+                    }
+                }
+                if (stack_cleanup > 0) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "add rsp, %d", stack_cleanup * 8);
+                    cg_inst(cg, buf);
+                }
             }
             break;
         }
@@ -2266,8 +2377,10 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     }
 
                     /* Body */
+                    cg_inst1(cg, "push", "rcx");  /* save loop counter */
                     if (node->data.for_node.body)
                         cg_stmt(cg, node->data.for_node.body, slots);
+                    cg_inst1(cg, "pop", "rcx");   /* restore loop counter */
 
                     /* Increment index */
                     cg_inst1(cg, "inc", "rcx");
@@ -3614,7 +3727,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_inst1(cg, "mov", "rdi, r13");         /* dest = buffer start */
             cg_inst1(cg, "mov", "rsi, r14");         /* src = first digit */
             /* Compute length */
-            cg_inst1(cg, "lea", "rdx, [r13+19]");
+            cg_inst1(cg, "lea", "rdx, [r13+20]");
             cg_inst1(cg, "sub", "rdx, r14");         /* rdx = length */
             cg_inst(cg, "call LA_concat_memcpy");
             cg_inst(cg, "mov byte [r13+rdx], 0");    /* null terminate at new position */

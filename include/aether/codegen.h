@@ -30,6 +30,7 @@ typedef enum {
 
 typedef struct AutoDrop AutoDrop;
 typedef struct SrcLocEntry SrcLocEntry;
+typedef struct GlobalSlot GlobalSlot;
 
 typedef struct {
     Arena *arena;
@@ -63,6 +64,8 @@ typedef struct {
     char **aelib_imports;
     int aelib_import_count;
     int aelib_import_cap;
+    /* Global variables (file-scope let declarations) */
+    GlobalSlot *global_slots;
 } Codegen;
 
 Codegen *codegen_create(Arena *a);

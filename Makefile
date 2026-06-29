@@ -152,15 +152,31 @@ TEST_FIXTURES = \
 AELIB_FIXTURES = \
 	tests/fixtures/lib_math.ae
 
-# libaether.aelib — combined standard library archive
+# libaether.aelib — proper static library archive from individual .o files
 LIBAETHER_SRCS = std/arch.ae std/asm.ae std/collections.ae std/elf.ae std/fs.ae std/io.ae std/math.ae std/mem.ae std/serial.ae std/str.ae std/test.ae
+LIBAETHER_OBJS = $(LIBAETHER_SRCS:std/%.ae=$(BUILD_DIR)/lib/%.o)
 LIBAETHER_AELIB = build/lib/libaether.aelib
 
-$(LIBAETHER_AELIB): aether-cli $(LIBAETHER_SRCS)
+# Compile each .ae to its own .o for the library
+$(BUILD_DIR)/lib/%.o: std/%.ae aether-cli
+	@mkdir -p $(@D) /tmp/kernel
+	./$(BUILD_DIR)/aether --target lib $< -o $@
+	@test -f $@ || { echo "ERROR: $@ was not created"; exit 1; }
+
+# Archive all .o files into .aelib (static library)
+$(LIBAETHER_AELIB): $(LIBAETHER_OBJS)
 	@echo "=== Building libaether.aelib ==="
-	@mkdir -p build/lib 
-	@cat $(LIBAETHER_SRCS) > /tmp/libaether_combined.ae
-	@./$(BUILD_DIR)/aether --target lib /tmp/libaether_combined.ae -o $(LIBAETHER_AELIB) 2>/dev/null >/dev/null && echo "  libaether.aelib built OK" || echo "  FAILED"
+	@mkdir -p build/lib
+	@ar rcs $@ $^
+	@echo "  libaether.aelib built OK"
+
+# .aelib library fixtures — must be built before test-host
+AELIB_FIXTURES = \
+	tests/fixtures/lib_math.ae
+
+# Each .aelib fixture gets its own .o
+tests/fixtures/%.aelib: tests/fixtures/%.ae aether-cli
+	./$(BUILD_DIR)/aether --target lib $< -o $@ 2>/dev/null
 
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \

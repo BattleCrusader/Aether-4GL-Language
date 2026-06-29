@@ -38,7 +38,7 @@ func readLine(): string {
             movzx rax, al
         }
         if tempByte == 10 { done = true; break }
-        let s: string = tempByte
+        let s: string = string(tempByte)
         result = result + s
     }
     free(buf)
@@ -63,11 +63,11 @@ func printHex(value: u64) {
             }
             if digit < 10 {
                 let ch: byte = 48 + digit
-                let s: string = ch
+                let s: string = string(ch)
                 print(s)
             } else {
                 let ch: byte = 87 + digit
-                let s: string = ch
+                let s: string = string(ch)
                 print(s)
             }
         }
@@ -91,11 +91,11 @@ func printDecimal(value: u64) {
     let mut i: u64 = #digits
     while i > 0 {
         i = i - 1
-        let s: string = digits[i]
+        let s: string = string(digits[i])
         print(s)
     }
 }
 
-func formatString(template: string, args: ...): string {
+func formatString(template: string, args: string): string {
     return template
 }
