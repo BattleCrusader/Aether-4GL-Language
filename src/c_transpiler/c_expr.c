@@ -370,7 +370,7 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
             if (i > 0) fputs(", ", cg->out);
             c_emit_expr(cg, node->data.call.args.items[regular_count + i]);
         }
-        fprintf(cg->out, "}, %d }", vararg_count);
+        fprintf(cg->out, "}, %d, 8 }", vararg_count);
         fputs(")", cg->out);
         return;
     }
@@ -439,19 +439,23 @@ static void c_emit_index(CCodegen *cg, AstNode *node) {
         /* Determine element type for slice indexing.
            Known slice fields from collections.ae: keys=[string], values=[u64], occupied=[bool], data=[u64] */
         const char *elem_cast = "uint64_t*";
+        int elem_size = 8;
         if (target && target->type == NODE_FIELD_ACCESS) {
             StringView fname = target->data.field.field->data.ident.name;
             if (fname.len == 4 && memcmp(fname.data, "keys", 4) == 0) {
                 elem_cast = "string*";
+                elem_size = 16;
             } else if (fname.len == 8 && memcmp(fname.data, "occupied", 8) == 0) {
                 elem_cast = "uint8_t*";
+                elem_size = 1;
             }
         }
-        fprintf(cg->out, "((%s)(", elem_cast);
+        /* Use elem_size-aware access: cast ptr to char*, offset by index*elem_size, cast to element type */
+        fprintf(cg->out, "(*((%s)((char*)(", elem_cast);
         c_emit_expr(cg, node->data.index.target);
-        fputs(".ptr))[", cg->out);
+        fputs(".ptr) + (", cg->out);
         c_emit_expr(cg, node->data.index.index);
-        fputc(']', cg->out);
+        fprintf(cg->out, ") * %d)))", elem_size);
     } else if (is_slice_or_string == 2) {
         c_emit_expr(cg, node->data.index.target);
         fputs(".ptr[", cg->out);
@@ -497,7 +501,7 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
         case NODE_LITERAL_STRING: c_emit_literal_string(cg, node); break;
         case NODE_LITERAL_BOOL:   c_emit_literal_bool(cg, node); break;
         case NODE_LITERAL_CHAR:   c_emit_literal_char(cg, node); break;
-        case NODE_LITERAL_NONE:   fputs("(slice){ NULL, 0 }", cg->out); break;
+        case NODE_LITERAL_NONE:   fputs("0", cg->out); break;
         case NODE_IDENT: {
             /* Check if this is a const declaration — evaluate the const value */
             AstNode *decl = node->data.ident.resolved;
@@ -541,15 +545,14 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
             break;
         }
         case NODE_ARRAY_LIT: {
-            /* Array literal: emit as slice compound literal.
-               Use void* for ptr — element type is handled at index time. */
+            /* Array literal: emit as slice compound literal with elem_size */
             int count = node->data.array_lit.elements.count;
             if (count == 0) {
-                fputs("(slice){ NULL, 0 }", cg->out);
+                fputs("(slice){ NULL, 0, 8 }", cg->out);
             } else {
-                /* Check first element to determine array element type */
                 AstNode *first = node->data.array_lit.elements.items[0];
                 int is_str = (first && first->type == NODE_LITERAL_STRING);
+                int es = is_str ? 16 : 8;
                 fputs("(slice){ (void*)(", cg->out);
                 fputs(is_str ? "string" : "uint64_t", cg->out);
                 fprintf(cg->out, "[]){", count);
@@ -557,7 +560,7 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
                     if (i > 0) fputs(", ", cg->out);
                     c_emit_expr(cg, node->data.array_lit.elements.items[i]);
                 }
-                fprintf(cg->out, "}, %d }", count);
+                fprintf(cg->out, "}, %d, %d }", count, es);
             }
             break;
         }
