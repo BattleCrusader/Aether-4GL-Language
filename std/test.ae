@@ -1,18 +1,26 @@
 // std/test.ae — Testing: assertEquals, assertTrue
-// JUnit-style assertions using Aether's string interpolation and exit() built-in.
+// JUnit-style assertions. Tracks all failures in a global counter.
+// The test function should return __test_failures.
 
-func assertEquals(actualValue: u64, expectedValue: u64, message: string?) {
+let mut __test_failures: u64 = 0
+
+func assertEquals(expectedValue: u64, actualValue: u64, message: string?) {
     if actualValue != expectedValue {
         print("  FAIL: {message} (got {actualValue}, expected {expectedValue})\n")
-        exit(1)
+        __test_failures += 1
     }
-    print("  PASS: {message}\n")
+}
+
+func assertDoNotEquals(expectedValue: u64, actualValue: u64, message: string?) {
+    if actualValue == expectedValue {
+        print("  FAIL: {message} (got {actualValue}, expected {expectedValue})\n")
+        __test_failures += 1
+    }
 }
 
 func assertTrue(condition: bool, message: string?) {
     if !condition {
         print("  FAIL: {message}\n")
-        exit(1)
+        __test_failures += 1
     }
-    print("  PASS: {message}\n")
 }

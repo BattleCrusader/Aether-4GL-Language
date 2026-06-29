@@ -263,6 +263,27 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             node->type = NODE_CONST_DECL;
             node_list_append(decls, node);
         }
+    } else if (parser_match(p, TOKEN_KW_LET)) {
+        /* let [mut] name[: type] [= expr] — file-scope variable */
+        bool is_mut = parser_match(p, TOKEN_KW_MUT);
+        if (!parser_check(p, TOKEN_IDENT)) {
+            parser_error(p, p->current, "expected variable name in let");
+            return;
+        }
+        Token name_tok = p->current; parser_advance(p);
+        AstNode *type = NULL;
+        if (parser_match(p, TOKEN_COLON)) {
+            type = parse_type(p);
+        }
+        AstNode *value = NULL;
+        if (parser_match(p, TOKEN_EQ)) {
+            value = parse_expr(p);
+        }
+        AstNode *node = node_let(p->arena, name_tok.loc,
+            node_ident(p->arena, name_tok.loc, name_tok.text),
+            type, value, is_mut);
+        node->data.let_decl.is_global = true;
+        node_list_append(decls, node);
     } else if (parser_match(p, TOKEN_KW_IMPORT)) {
         /* import "path" or import name */
         Token path = p->current; parser_advance(p);
@@ -1844,8 +1865,16 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         parser_advance(p);
         AstNode *call = node_call(p->arena, loc, left);
         while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
-            AstNode *arg = parse_expr(p);
-            node_list_append(&call->data.call.args, arg);
+            /* Handle empty arg: , , or leading , — means "none" for optional variadics */
+            if (parser_check(p, TOKEN_COMMA)) {
+                /* Empty argument — emit a NONE literal (0) */
+                AstNode *none = node_int_literal(p->arena, loc, 0);
+                none->type = NODE_LITERAL_NONE;
+                node_list_append(&call->data.call.args, none);
+            } else {
+                AstNode *arg = parse_expr(p);
+                node_list_append(&call->data.call.args, arg);
+            }
             if (!parser_match(p, TOKEN_COMMA)) break;
         }
         parser_expect(p, TOKEN_RPAREN, "function call");

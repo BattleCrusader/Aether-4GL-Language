@@ -257,6 +257,11 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                         decl->data.let_decl.name->data.ident.name.data,
                         decl->data.let_decl.name->data.ident.name.len);
                     scope_declare(sa, name, decl);
+                } else if (decl->type == NODE_LET && decl->data.let_decl.is_global) {
+                    const char *name = arena_strndup(sa->arena,
+                        decl->data.let_decl.name->data.ident.name.data,
+                        decl->data.let_decl.name->data.ident.name.len);
+                    scope_declare(sa, name, decl);
                 } else if (decl->type == NODE_STRUCT_DECL) {
                     const char *name = arena_strndup(sa->arena,
                         decl->data.struct_decl.name->data.ident.name.data,
@@ -558,6 +563,26 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
             break;
 
         case NODE_CALL:
+            /* Constructor pattern: TypeName(expr) — skip resolution for primitive type names */
+            if (node->data.call.callee && node->data.call.callee->type == NODE_IDENT &&
+                node->data.call.args.count == 1) {
+                const char *cn = arena_strndup(sa->arena,
+                    node->data.call.callee->data.ident.name.data,
+                    node->data.call.callee->data.ident.name.len);
+                if (strcmp(cn, "string") == 0 ||
+                    strcmp(cn, "u8") == 0 || strcmp(cn, "u16") == 0 ||
+                    strcmp(cn, "u32") == 0 || strcmp(cn, "u64") == 0 ||
+                    strcmp(cn, "i8") == 0 || strcmp(cn, "i16") == 0 ||
+                    strcmp(cn, "i32") == 0 || strcmp(cn, "i64") == 0 ||
+                    strcmp(cn, "f32") == 0 || strcmp(cn, "f64") == 0 ||
+                    strcmp(cn, "bool") == 0 || strcmp(cn, "byte") == 0) {
+                    /* Constructor call — just visit the argument, don't resolve callee */
+                    for (int i = 0; i < node->data.call.args.count; i++) {
+                        semantic_visit_expr(sa, node->data.call.args.items[i]);
+                    }
+                    break;
+                }
+            }
             semantic_visit_expr(sa, node->data.call.callee);
             for (int i = 0; i < node->data.call.args.count; i++) {
                 semantic_visit_expr(sa, node->data.call.args.items[i]);
