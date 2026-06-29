@@ -67,7 +67,7 @@ static LLVMValueRef cg_literal_float(LlvmCodegen *lc, AstNode *node) {
 
 /* ──────────────────────────────────────────────
  * String literal — create a global string constant
- * and return a pointer to it.
+ * and return it as an Aether string struct { len, ptr }.
  * ────────────────────────────────────────────── */
 static LLVMValueRef cg_literal_string(LlvmCodegen *lc, AstNode *node) {
     StringView sv = node->data.literal.string_val;
@@ -77,6 +77,7 @@ static LLVMValueRef cg_literal_string(LlvmCodegen *lc, AstNode *node) {
     char name[64];
     snprintf(name, sizeof(name), ".str.%d", str_counter++);
 
+    /* Create global string constant */
     LLVMTypeRef arr_type = LLVMArrayType(LLVMInt8TypeInContext(lc->context), len + 1);
     LLVMValueRef global = LLVMAddGlobal(lc->module, arr_type, name);
     LLVMSetInitializer(global, LLVMConstString(sv.data, len, true));
@@ -84,11 +85,19 @@ static LLVMValueRef cg_literal_string(LlvmCodegen *lc, AstNode *node) {
     LLVMSetLinkage(global, LLVMPrivateLinkage);
     LLVMSetUnnamedAddr(global, true);
 
+    /* Get pointer to first element */
     LLVMValueRef indices[2] = {
         LLVMConstInt(LLVMInt64TypeInContext(lc->context), 0, false),
         LLVMConstInt(LLVMInt64TypeInContext(lc->context), 0, false)
     };
-    return LLVMConstGEP2(arr_type, global, indices, 2);
+    LLVMValueRef ptr = LLVMConstGEP2(arr_type, global, indices, 2);
+
+    /* Create Aether string struct: { len: i64, ptr: i8* } */
+    LLVMValueRef struct_vals[2] = {
+        LLVMConstInt(LLVMInt64TypeInContext(lc->context), len, false),
+        ptr
+    };
+    return LLVMConstStruct(struct_vals, 2, false);
 }
 
 /* ──────────────────────────────────────────────
@@ -150,6 +159,15 @@ static LLVMValueRef cg_binary_op(LlvmCodegen *lc, AstNode *node) {
         case BIN_SHR: return LLVMBuildAShr(B, L, R, "shrtmp");
         case BIN_AND: return LLVMBuildAnd(B, L, R, "andtmp");
         case BIN_OR:  return LLVMBuildOr(B, L, R, "ortmp");
+        case BIN_CONCAT: {
+            /* String concatenation — call __aether_concat */
+            return llvm_call_concat(lc, L, R);
+        }
+        case BIN_OR_ELSE: {
+            /* Optional unwrap: x or default — if x is none, use default */
+            /* For now, just return the right side */
+            return R;
+        }
         default:
             fprintf(stderr, "LLVM: unhandled binary op %d\n", node->data.binary.op);
             return LLVMConstInt(LLVMInt64TypeInContext(lc->context), 0, false);
@@ -238,8 +256,17 @@ static LLVMValueRef cg_call(LlvmCodegen *lc, AstNode *node) {
 
     LLVMValueRef func = LLVMGetNamedFunction(lc->module, name);
     if (!func) {
-        fprintf(stderr, "LLVM: undefined function '%s'\n", name);
-        return LLVMConstInt(LLVMInt64TypeInContext(lc->context), 0, false);
+        /* Forward declaration — create a placeholder function.
+         * The actual definition will be added when we reach it. */
+        int nparams = argc;
+        LLVMTypeRef *param_types = (LLVMTypeRef *)malloc(nparams * sizeof(LLVMTypeRef));
+        for (int i = 0; i < nparams; i++) {
+            param_types[i] = LLVMInt64TypeInContext(lc->context);
+        }
+        LLVMTypeRef func_type = LLVMFunctionType(
+            LLVMInt64TypeInContext(lc->context), param_types, nparams, false);
+        func = LLVMAddFunction(lc->module, name, func_type);
+        free(param_types);
     }
 
     /* Evaluate arguments */
@@ -249,7 +276,7 @@ static LLVMValueRef cg_call(LlvmCodegen *lc, AstNode *node) {
     }
 
     LLVMValueRef result = LLVMBuildCall2(lc->builder,
-        LLVMGetElementType(LLVMTypeOf(func)), func, args, argc, "calltmp");
+        LLVMGlobalGetValueType(func), func, args, argc, "calltmp");
     free(args);
     return result;
 }

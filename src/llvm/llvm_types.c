@@ -19,7 +19,14 @@ LLVMTypeRef llvm_prim_type(LlvmCodegen *lc, PrimType prim) {
         case PRIM_I64:    return LLVMInt64TypeInContext(lc->context);
         case PRIM_F32:    return LLVMFloatTypeInContext(lc->context);
         case PRIM_F64:    return LLVMDoubleTypeInContext(lc->context);
-        case PRIM_STRING: return LLVMPointerType(LLVMInt8TypeInContext(lc->context), 0);
+        case PRIM_STRING: {
+            /* Aether string is { len: i64, ptr: i8* } */
+            LLVMTypeRef elems[2] = {
+                LLVMInt64TypeInContext(lc->context),
+                LLVMPointerType(LLVMInt8TypeInContext(lc->context), 0)
+            };
+            return LLVMStructType(elems, 2, false);
+        }
     }
     return LLVMInt64TypeInContext(lc->context); /* fallback */
 }

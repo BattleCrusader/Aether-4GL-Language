@@ -86,6 +86,35 @@ static void cg_let(LlvmCodegen *lc, AstNode *node) {
     LLVMTypeRef llvm_type;
     if (type_node) {
         llvm_type = llvm_type_from_ast(lc, type_node);
+    } else if (value_node) {
+        /* Infer type from the value expression.
+         * For literals, we can determine the type directly. */
+        switch (value_node->type) {
+            case NODE_LITERAL_INT:
+                llvm_type = LLVMInt64TypeInContext(lc->context);
+                break;
+            case NODE_LITERAL_FLOAT:
+                llvm_type = LLVMDoubleTypeInContext(lc->context);
+                break;
+            case NODE_LITERAL_STRING: {
+                /* Aether string is { len: i64, ptr: i8* } */
+                LLVMTypeRef elems[2] = {
+                    LLVMInt64TypeInContext(lc->context),
+                    LLVMPointerType(LLVMInt8TypeInContext(lc->context), 0)
+                };
+                llvm_type = LLVMStructType(elems, 2, false);
+                break;
+            }
+            case NODE_LITERAL_BOOL:
+                llvm_type = LLVMInt1TypeInContext(lc->context);
+                break;
+            case NODE_LITERAL_CHAR:
+                llvm_type = LLVMInt8TypeInContext(lc->context);
+                break;
+            default:
+                llvm_type = LLVMInt64TypeInContext(lc->context);
+                break;
+        }
     } else {
         llvm_type = LLVMInt64TypeInContext(lc->context);
     }
