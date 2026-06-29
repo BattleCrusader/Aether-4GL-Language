@@ -64,29 +64,10 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     /* Emit runtime helpers */
     c_emit_runtime(cg);
 
-    /* Pass 1: Emit function prototypes (forward declarations) */
-    for (int i = 0; i < program->data.list.count; i++) {
-        AstNode *decl = program->data.list.items[i];
-        if (decl->type == NODE_FUNC_DECL) {
-            c_emit_func_prototype(cg, decl);
-        }
-    }
-
-    /* Pass 2: Emit all top-level declarations */
+    /* Pass 0: Emit type declarations (struct, enum, class) before function prototypes */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
         switch (decl->type) {
-            case NODE_FUNC_DECL:
-                c_emit_func_decl(cg, decl);
-                break;
-            case NODE_LET:
-                if (decl->data.let_decl.is_global) {
-                    c_emit_stmt(cg, decl);
-                }
-                break;
-            case NODE_CONST_DECL:
-                c_emit_stmt(cg, decl);
-                break;
             case NODE_STRUCT_DECL:
             case NODE_CLASS_DECL:
             case NODE_ENUM_DECL:
@@ -95,6 +76,70 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
             default:
                 break;
         }
+    }
+
+    /* Pass 1: Emit function prototypes (forward declarations) */
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        if (decl->type == NODE_FUNC_DECL) {
+            c_emit_func_prototype(cg, decl);
+        }
+    }
+
+    /* Pass 2a: Emit global variable declarations (before function bodies) */
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        switch (decl->type) {
+            case NODE_LET:
+                if (decl->data.let_decl.is_global) {
+                    c_emit_stmt(cg, decl);
+                }
+                break;
+            case NODE_CONST_DECL:
+                c_emit_stmt(cg, decl);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /* Pass 2b: Emit function bodies */
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        if (decl->type == NODE_FUNC_DECL) {
+            c_emit_func_decl(cg, decl);
+        }
+    }
+
+    /* Check if we need an auto-generated test dispatcher */
+    bool has_main = false;
+    int test_func_count = 0;
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *node = program->data.list.items[i];
+        if (node->type == NODE_FUNC_DECL) {
+            StringView fname = node->data.func.name->data.ident.name;
+            if (fname.len == 4 && memcmp(fname.data, "main", 4) == 0) {
+                has_main = true;
+            }
+            if (node->data.func.has_test) {
+                test_func_count++;
+            }
+        }
+    }
+
+    if (test_func_count > 0 && !has_main) {
+        /* Auto-generate test dispatcher: run all @test functions, accumulate results */
+        fputs("int main(int argc, char **argv) {\n", cg->out);
+        fputs("    (void)argc; (void)argv;\n", cg->out);
+        fputs("    uint64_t total = 0;\n", cg->out);
+        for (int i = 0; i < program->data.list.count; i++) {
+            AstNode *node = program->data.list.items[i];
+            if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
+            StringView fname = node->data.func.name->data.ident.name;
+            fprintf(cg->out, "    total += %.*s();\n", (int)fname.len, fname.data);
+        }
+        fputs("    return (int)total;\n", cg->out);
+        fputs("}\n", cg->out);
     }
 
     /* Emit target postamble */

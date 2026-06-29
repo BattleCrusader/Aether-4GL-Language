@@ -41,14 +41,27 @@ const char *c_type_name(AstNode *type_node) {
             return c_prim_type_name(type_node->data.type_node.prim);
         case NODE_TYPE_PTR:
             return "void*";  /* generic pointer */
-        case NODE_TYPE_REF:
+        case NODE_TYPE_REF: {
+            /* ref T → T* (pointer to the base type) */
+            if (type_node->data.type_node.elem_type) {
+                static char buf[256];
+                const char *base = c_type_name(type_node->data.type_node.elem_type);
+                int len = snprintf(buf, sizeof(buf), "%s*", base);
+                if (len > 0 && len < 256) return buf;
+            }
             return "void*";
+        }
         case NODE_TYPE_ARRAY:
             return "void*";  /* placeholder */
         case NODE_TYPE_SLICE:
             return "slice";
-        case NODE_TYPE_OPTIONAL:
-            return "optional";
+        case NODE_TYPE_OPTIONAL: {
+            /* Optional types: use the base type with NULL convention */
+            if (type_node->data.type_node.elem_type) {
+                return c_type_name(type_node->data.type_node.elem_type);
+            }
+            return "void*";
+        }
         case NODE_TYPE_TUPLE:
             return "tuple";
         case NODE_TYPE_FN:

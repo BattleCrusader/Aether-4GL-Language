@@ -84,6 +84,11 @@ static int is_string_expr(AstNode *node) {
     if (!node) return 0;
     if (node->type == NODE_LITERAL_STRING) return 1;
     if (node->type == NODE_BINARY_OP && node->data.binary.op == BIN_CONCAT) return 1;
+    /* BIN_ADD with string operand is also string concat */
+    if (node->type == NODE_BINARY_OP && node->data.binary.op == BIN_ADD) {
+        return is_string_expr(node->data.binary.left) ||
+               is_string_expr(node->data.binary.right);
+    }
     if (node->type == NODE_IDENT) {
         AstNode *decl = node->data.ident.resolved;
         if (!decl) return 0;
@@ -101,6 +106,10 @@ static int is_string_expr(AstNode *node) {
                 }
             }
         }
+        /* If no type annotation, check the value expression */
+        if (!type_node && decl->type == NODE_LET && decl->data.let_decl.value) {
+            return is_string_expr(decl->data.let_decl.value);
+        }
     }
     return 0;
 }
@@ -114,9 +123,13 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
         int right_str = is_string_expr(right);
         if (left_str || right_str) {
             fputs("__aether_concat(", cg->out);
+            if (!left_str) fputs("__aether_itoa(", cg->out);
             c_emit_expr(cg, left);
+            if (!left_str) fputc(')', cg->out);
             fputs(", ", cg->out);
+            if (!right_str) fputs("__aether_itoa(", cg->out);
             c_emit_expr(cg, right);
+            if (!right_str) fputc(')', cg->out);
             fputc(')', cg->out);
             return;
         }
@@ -219,6 +232,7 @@ static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
             fputs(")))", cg->out);
             break;
         case UNARY_REF:
+        case UNARY_ADDR:
             fputs("(&(", cg->out);
             c_emit_expr(cg, node->data.unary.operand);
             fputs("))", cg->out);
@@ -235,23 +249,109 @@ static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
 }
 
 static void c_emit_call(CCodegen *cg, AstNode *node) {
-    if (!node->data.call.callee || node->data.call.callee->type != NODE_IDENT) {
+    if (!node->data.call.callee) {
+        fprintf(stderr, "C: call with NULL callee\n");
+        return;
+    }
+
+    StringView fname;
+    AstNode *func_decl = NULL;
+    if (node->data.call.callee->type == NODE_IDENT) {
+        fname = node->data.call.callee->data.ident.name;
+        if (node->data.call.callee->data.ident.resolved) {
+            func_decl = node->data.call.callee->data.ident.resolved;
+        }
+    } else if (node->data.call.callee->type == NODE_FIELD_ACCESS) {
+        /* Handle scoped calls like Option::Some(42) — just emit the value */
+        c_emit_expr(cg, node->data.call.args.items[0]);
+        return;
+    } else {
         fprintf(stderr, "C: call with non-ident callee not yet supported\n");
         return;
     }
 
-    StringView fname = node->data.call.callee->data.ident.name;
+    /* Prefix sys function names to avoid C library conflicts */
+    if (func_decl && func_decl->data.func.is_sys) {
+        fputs("__aether_sys_", cg->out);
+    }
     fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);
 
-    /* Look up the function declaration to check param types */
-    AstNode *func_decl = NULL;
-    if (node->data.call.callee->data.ident.resolved) {
-        func_decl = node->data.call.callee->data.ident.resolved;
+    /* Emit arguments, filling in defaults for omitted optional params */
+
+    int total_params = 0;
+    int varargs_param_idx = -1;
+    if (func_decl) {
+        total_params = func_decl->data.func.params.count;
+        for (int i = 0; i < total_params; i++) {
+            if (func_decl->data.func.params.items[i]->data.param.is_varargs) {
+                varargs_param_idx = i;
+                break;
+            }
+        }
+    }
+    if (total_params == 0) {
+        total_params = (int)node->data.call.args.count;
     }
 
-    for (int i = 0; i < node->data.call.args.count; i++) {
+    int regular_count = (varargs_param_idx >= 0) ? varargs_param_idx : total_params;
+    int vararg_count = (varargs_param_idx >= 0) ? (int)node->data.call.args.count - regular_count : 0;
+
+    /* If variadic, pack extra args into a slice compound literal */
+    if (varargs_param_idx >= 0) {
+        /* Emit regular args first (function name already emitted above) */
+        for (int i = 0; i < regular_count; i++) {
+            if (i > 0) fputs(", ", cg->out);
+            AstNode *arg = node->data.call.args.items[i];
+            if (fname.len == 5 && memcmp(fname.data, "print", 5) == 0 &&
+                !is_string_expr(arg)) {
+                fputs("__aether_itoa(", cg->out);
+                c_emit_expr(cg, arg);
+                fputc(')', cg->out);
+            } else {
+                c_emit_expr(cg, arg);
+            }
+        }
+        if (regular_count > 0) fputs(", ", cg->out);
+        /* Pack variadic args into a slice using compound literal */
+        fputs("(slice){ (uint64_t[]){", cg->out);
+        for (int i = 0; i < vararg_count; i++) {
+            if (i > 0) fputs(", ", cg->out);
+            c_emit_expr(cg, node->data.call.args.items[regular_count + i]);
+        }
+        fprintf(cg->out, "}, %d }", vararg_count);
+        fputs(")", cg->out);
+        return;
+    }
+
+    for (int i = 0; i < total_params; i++) {
         if (i > 0) fputs(", ", cg->out);
-        c_emit_expr(cg, node->data.call.args.items[i]);
+        if (func_decl) (void)func_decl->data.func.params.items[i];
+        if (i < (int)node->data.call.args.count) {
+            AstNode *arg = node->data.call.args.items[i];
+            /* Auto-add & for struct args passed to void* params */
+            int needs_ref = 0;
+            if (func_decl && i < func_decl->data.func.params.count) {
+                AstNode *ptype = func_decl->data.func.params.items[i]->data.param.type;
+                if (ptype && (ptype->type == NODE_TYPE_REF || ptype->type == NODE_TYPE_PTR) &&
+                    arg->type == NODE_IDENT) {
+                    needs_ref = 1;
+                }
+            }
+            if (needs_ref) fputs("&(", cg->out);
+            /* Auto-wrap non-string args to print() with __aether_itoa */
+            if (fname.len == 5 && memcmp(fname.data, "print", 5) == 0 &&
+                !is_string_expr(arg)) {
+                fputs("__aether_itoa(", cg->out);
+                c_emit_expr(cg, arg);
+                fputc(')', cg->out);
+            } else {
+                c_emit_expr(cg, arg);
+            }
+            if (needs_ref) fputs(")", cg->out);
+        } else {
+            /* Omitted optional param — fill with NULL */
+            fputs("(string){ 0, NULL }", cg->out);
+        }
     }
     fputc(')', cg->out);
 }
@@ -283,12 +383,58 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
         case NODE_LITERAL_BOOL:   c_emit_literal_bool(cg, node); break;
         case NODE_LITERAL_CHAR:   c_emit_literal_char(cg, node); break;
         case NODE_LITERAL_NONE:   fputs("{ 0, { 0 } }", cg->out); break;
-        case NODE_IDENT:          c_emit_ident(cg, node); break;
+        case NODE_IDENT: {
+            /* Check if this is a const declaration — evaluate the const value */
+            AstNode *decl = node->data.ident.resolved;
+            if (decl && decl->type == NODE_CONST_DECL && decl->data.let_decl.value) {
+                c_emit_expr(cg, decl->data.let_decl.value);
+            } else {
+                c_emit_ident(cg, node);
+            }
+            break;
+        }
         case NODE_BINARY_OP:      c_emit_binary_op(cg, node); break;
         case NODE_UNARY_OP:       c_emit_unary_op(cg, node); break;
         case NODE_CALL:           c_emit_call(cg, node); break;
         case NODE_INDEX:          c_emit_index(cg, node); break;
         case NODE_FIELD_ACCESS:   c_emit_field_access(cg, node); break;
+        case NODE_MATCH: {
+            /* Match expression: emit as ternary chain.
+             * match val { case p1 -> e1; case p2 -> e2; case _ -> e3 }
+             * → (val) == (p1) ? (e1) : (val) == (p2) ? (e2) : (e3) */
+            AstNode *val = node->data.match_node.value;
+            int arms = node->data.match_node.arms.count;
+            for (int i = 0; i < arms; i++) {
+                AstNode *arm = node->data.match_node.arms.items[i];
+                int is_default = (arm->data.match_arm.pattern &&
+                    arm->data.match_arm.pattern->type == NODE_IDENT &&
+                    arm->data.match_arm.pattern->data.ident.name.len == 1 &&
+                    arm->data.match_arm.pattern->data.ident.name.data[0] == '_');
+                if (!is_default) {
+                    fputs("(", cg->out);
+                    c_emit_expr(cg, val);
+                    fputs(") == (", cg->out);
+                    c_emit_expr(cg, arm->data.match_arm.pattern);
+                    fputs(") ? (", cg->out);
+                    if (arm->data.match_arm.body) c_emit_expr(cg, arm->data.match_arm.body);
+                    fputs(")", cg->out);
+                    if (i < arms - 1) fputs(" : ", cg->out);
+                } else {
+                    if (arm->data.match_arm.body) c_emit_expr(cg, arm->data.match_arm.body);
+                }
+            }
+            break;
+        }
+        case NODE_ARRAY_LIT: {
+            /* Array literal: emit as C compound literal */
+            fputs("{", cg->out);
+            for (int i = 0; i < node->data.array_lit.elements.count; i++) {
+                if (i > 0) fputs(", ", cg->out);
+                c_emit_expr(cg, node->data.array_lit.elements.items[i]);
+            }
+            fputs("}", cg->out);
+            break;
+        }
         default:
             fprintf(stderr, "C: unhandled expression node type %d\n", node->type);
             break;
