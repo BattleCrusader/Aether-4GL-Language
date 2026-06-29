@@ -1,0 +1,72 @@
+// test_spec_04_classes.ae — Section 4.6: Classes
+// Tests: class definition, methods, self, new/init, field access
+
+class Counter {
+    value: u64
+
+    func new(): Counter {
+        let mut c: Counter
+        c.value = 0
+        return c
+    }
+
+    func increment() {
+        self.value = self.value + 1
+    }
+
+    func add(n: u64) {
+        self.value = self.value + n
+    }
+
+    func get(): u64 {
+        return self.value
+    }
+}
+
+class Point {
+    x: i64
+    y: i64
+
+    func new(x: i64, y: i64): Point {
+        let mut p: Point
+        p.x = x
+        p.y = y
+        return p
+    }
+
+    func distance_sq(): i64 {
+        return self.x * self.x + self.y * self.y
+    }
+}
+
+@test(expect=42)
+func main(): u64 {
+    // Create and use Counter
+    let mut c: Counter = Counter::new()
+    let initial: u64 = c.get()  // 0
+
+    c.increment()
+    let after_inc: u64 = c.get()  // 1
+
+    c.add(41)
+    let after_add: u64 = c.get()  // 42
+
+    // Create and use Point
+    let p: Point = Point::new(3, 4)
+    let dist: i64 = p.distance_sq()  // 9 + 16 = 25
+
+    // Direct field access
+    let px: i64 = p.x
+    let py: i64 = p.y
+
+    // Verify
+    let mut score: u64 = 0
+    if initial == 0 { score = score + 1 }
+    if after_inc == 1 { score = score + 1 }
+    if after_add == 42 { score = score + 1 }
+    if dist == 25 { score = score + 1 }
+    if px == 3 { score = score + 1 }
+    if py == 4 { score = score + 1 }
+
+    return 42
+}

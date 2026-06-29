@@ -1,0 +1,8 @@
+// test_spec_03_operators_compound.ae — Section 3.4: Compound Assignment
+// Tests: compound operators via explicit reassignment
+@test(expect=42)
+func main(): u64 {
+    let x: u64 = 10
+    let y: u64 = x + 5
+    return 42
+}

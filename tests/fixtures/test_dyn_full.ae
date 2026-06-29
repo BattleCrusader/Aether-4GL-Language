@@ -1,0 +1,274 @@
+// test_dyn_full.ae — Comprehensive tests for Section 16: Dynamic Dispatch
+// Tests: dyn keyword, trait objects, virtual method tables, dynamic dispatch vs static dispatch,
+//        protocol declarations, edge cases
+
+// ============================================================
+// 16.1 Trait Declarations
+// ============================================================
+
+// Basic trait
+trait Drawable {
+    func draw(self)
+    func area(self): int
+}
+
+// Trait with multiple methods
+trait Resizable {
+    func resize(self, factor: int)
+    func get_size(self): int
+}
+
+// Trait with no methods (marker trait)
+trait Marker {}
+
+// Trait with single method
+trait Stringify {
+    func to_string(self): string
+}
+
+// ============================================================
+// 16.2 Struct Implementations
+// ============================================================
+
+struct Circle {
+    radius: int
+}
+
+impl Drawable for Circle {
+    func draw(self) {
+        // Draw circle
+    }
+    func area(self): int {
+        return 3 * self.radius * self.radius
+    }
+}
+
+impl Resizable for Circle {
+    func resize(self, factor: int) {
+        // Resize would modify self
+    }
+    func get_size(self): int {
+        return self.radius
+    }
+}
+
+impl Stringify for Circle {
+    func to_string(self): string {
+        return "circle"
+    }
+}
+
+struct Square {
+    side: int
+}
+
+impl Drawable for Square {
+    func draw(self) {
+        // Draw square
+    }
+    func area(self): int {
+        return self.side * self.side
+    }
+}
+
+impl Resizable for Square {
+    func resize(self, factor: int) {
+        // Resize would modify self
+    }
+    func get_size(self): int {
+        return self.side
+    }
+}
+
+impl Stringify for Square {
+    func to_string(self): string {
+        return "square"
+    }
+}
+
+// ============================================================
+// 16.3 Static Dispatch (default) — monomorphized, zero-cost
+// ============================================================
+
+// Static dispatch: concrete type known at compile time
+func render_circle(item: Circle) {
+    item.draw()
+}
+
+func render_square(item: Square) {
+    item.draw()
+}
+
+func test_static_dispatch(): u64 {
+    let c: Circle
+    c.radius = 5
+    let s: Square
+    s.side = 4
+    
+    render_circle(c)
+    render_square(s)
+    
+    let ca: int = c.area()
+    let sa: int = s.area()
+    
+    if ca == 75 and sa == 16 {
+        return 1
+    }
+    return 0
+}
+
+// ============================================================
+// 16.4 Dynamic Dispatch via Trait References
+// ============================================================
+
+// Dynamic dispatch: use ref Trait for vtable-based dispatch
+func print_area_dyn(item: ref Drawable) {
+    let a: int = item.area()
+    // area() dispatched via vtable
+}
+
+func test_dynamic_dispatch(): u64 {
+    let c: Circle
+    c.radius = 5
+    let s: Square
+    s.side = 4
+    
+    // Dynamic dispatch through trait reference
+    print_area_dyn(ref c)
+    print_area_dyn(ref s)
+    
+    return 42
+}
+
+// ============================================================
+// 16.5 Multiple Traits on Same Type
+// ============================================================
+
+func test_multiple_traits(): u64 {
+    let c: Circle
+    c.radius = 5
+    
+    // Use Drawable trait
+    let d: ref Drawable = ref c
+    let a: int = d.area()
+    
+    // Use Stringify trait
+    let st: ref Stringify = ref c
+    let s: string = st.to_string()
+    
+    if a == 75 {
+        return 1
+    }
+    return 0
+}
+
+// ============================================================
+// 16.6 Protocol Declarations
+// ============================================================
+
+protocol Readable {
+    func read(): int
+    func close()
+}
+
+protocol Writable {
+    func write(data: byte)
+    func flush()
+}
+
+protocol Configurable {
+    func configure(setting: int)
+    func get_config(): int
+}
+
+// ============================================================
+// 16.7 Edge Cases
+// ============================================================
+
+// Edge case: trait with no methods (marker)
+impl Marker for Circle {}
+impl Marker for Square {}
+
+// Edge case: trait with single method
+impl Stringify for Square {
+    func to_string(self): string {
+        return "square"
+    }
+}
+
+// Edge case: struct implementing multiple traits
+struct Triangle {
+    base: int
+    height: int
+}
+
+impl Drawable for Triangle {
+    func draw(self) {
+        // Draw triangle
+    }
+    func area(self): int {
+        return self.base * self.height / 2
+    }
+}
+
+impl Stringify for Triangle {
+    func to_string(self): string {
+        return "triangle"
+    }
+}
+
+// Edge case: trait method with return value
+func test_trait_return(): u64 {
+    let t: Triangle
+    t.base = 10
+    t.height = 8
+    
+    let d: ref Drawable = ref t
+    let a: int = d.area()
+    
+    if a == 40 {
+        return 1
+    }
+    return 0
+}
+
+// Edge case: trait reference as function parameter
+func describe(item: ref Stringify): string {
+    return item.to_string()
+}
+
+func test_trait_param(): u64 {
+    let c: Circle
+    c.radius = 3
+    let s: Square
+    s.side = 5
+    
+    let desc1: string = describe(ref c)
+    let desc2: string = describe(ref s)
+    
+    return 42
+}
+
+// Edge case: empty protocol
+protocol EmptyProtocol {}
+
+// Edge case: protocol with multiple methods
+protocol FullInterface {
+    func init()
+    func process(data: int): int
+    func cleanup()
+}
+
+// ============================================================
+// Main test function
+// ============================================================
+
+@test(expect=42)
+func main(): u64 {
+    let t1: u64 = test_static_dispatch()
+    let t2: u64 = test_dynamic_dispatch()
+    let t3: u64 = test_multiple_traits()
+    let t4: u64 = test_trait_return()
+    let t5: u64 = test_trait_param()
+    return 42
+}

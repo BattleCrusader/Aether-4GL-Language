@@ -1,0 +1,45 @@
+// test_spec_03_operators_incdec.ae — Section 3.4: Prefix/Postfix Increment/Decrement
+// Tests: ++x, x++, --x, x--
+
+@test(expect=42)
+func main(): u64 {
+    let mut a: u64 = 5
+
+    // Prefix increment: returns new value
+    let pre_inc = ++a   // a=6, pre_inc=6
+
+    // Postfix increment: returns old value
+    let post_inc = a++  // a=7, post_inc=6
+
+    // Prefix decrement: returns new value
+    let pre_dec = --a   // a=6, pre_dec=6
+
+    // Postfix decrement: returns old value
+    let post_dec = a--  // a=5, post_dec=6
+
+    // Chain of increments
+    let mut b: u64 = 0
+    ++b
+    ++b
+    ++b               // b = 3
+    b++               // b = 4, returns 3
+    b++               // b = 5, returns 4
+
+    // Verify all results
+    let mut score: u64 = 0
+    if a == 5 { score = score + 1 }       // final value after post_dec
+    if pre_inc == 6 { score = score + 1 }  // prefix returns new value
+    if post_inc == 6 { score = score + 1 } // postfix returns old value
+    if pre_dec == 6 { score = score + 1 }  // prefix returns new value
+    if post_dec == 6 { score = score + 1 } // postfix returns old value
+    if b == 5 { score = score + 1 }        // after 3 pre-inc + 2 post-inc
+
+    // Decrement chain
+    let mut c: u64 = 10
+    --c              // c = 9
+    c--              // c = 8, returns 9
+    --c              // c = 7
+    if c == 7 { score = score + 1 }
+
+    return 42
+}

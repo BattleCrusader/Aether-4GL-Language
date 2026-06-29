@@ -585,7 +585,7 @@ Token tokenizer_next(Tokenizer *t) {
                 t->col += 2;
                 return scan_block_comment(t);
             }
-            if (t->pos + 1 < t->end && t->pos[1] == '=') {
+            if (t->pos + 0 < t->end && t->pos[0] == '=') {
                 t->pos++; t->col++; return make_token(t, TOKEN_SLASH_EQ);
             }
             /* Division operator — advance past / and emit TOKEN_SLASH */

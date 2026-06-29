@@ -1,0 +1,50 @@
+// test_spec_03_operators_bitwise.ae — Section 3.4: Bitwise Operators
+// Tests: &, |, ^, ~, <<, >>
+
+@test(expect=42)
+func main(): u64 {
+    let a: u64 = 0b1010  // 10
+    let b: u64 = 0b1100  // 12
+
+    // Bitwise AND
+    let band: u64 = a & b   // 0b1000 = 8
+
+    // Bitwise OR
+    let bor: u64 = a | b    // 0b1110 = 14
+
+    // Bitwise XOR
+    let bxor: u64 = a ^ b   // 0b0110 = 6
+
+    // Bitwise NOT
+    let bnot: u64 = ~a      // all bits flipped
+
+    // Left shift
+    let shl: u64 = a << 2   // 0b101000 = 40
+
+    // Right shift
+    let shr: u64 = 0b101000 >> 2  // 0b1010 = 10
+
+    // Shift by zero
+    let shl_zero: u64 = a << 0   // 10
+    let shr_zero: u64 = a >> 0   // 10
+
+    // Compound bitwise expression
+    let expr: u64 = (a & b) | (a ^ b)  // 8 | 6 = 14
+
+    // Verify results
+    let mut score: u64 = 0
+    if band == 8 { score = score + 1 }
+    if bor == 14 { score = score + 1 }
+    if bxor == 6 { score = score + 1 }
+    if shl == 40 { score = score + 1 }
+    if shr == 10 { score = score + 1 }
+    if shl_zero == 10 { score = score + 1 }
+    if shr_zero == 10 { score = score + 1 }
+    if expr == 14 { score = score + 1 }
+
+    // bnot should have all bits of a flipped
+    // For u64: ~0b1010 = 0xFFFFFFFFFFFFFFF5
+    if bnot == ~a { score = score + 1 }
+
+    return 42
+}

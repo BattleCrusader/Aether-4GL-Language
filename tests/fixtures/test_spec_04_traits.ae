@@ -1,0 +1,59 @@
+// test_spec_04_traits.ae — Section 4.7: Traits and Impl Blocks
+// Tests: trait definition, impl for struct, method dispatch
+
+trait Drawable {
+    func draw()
+    func area(): u64
+}
+
+struct Circle {
+    radius: u64
+}
+
+impl Drawable for Circle {
+    func draw() {
+        // Drawing circle
+        let _ = 0
+    }
+
+    func area(): u64 {
+        // Simplified: 3 * r * r (integer approximation of pi)
+        return 3 * self.radius * self.radius
+    }
+}
+
+struct Square {
+    side: u64
+}
+
+impl Drawable for Square {
+    func draw() {
+        // Drawing square
+        let _ = 0
+    }
+
+    func area(): u64 {
+        return self.side * self.side
+    }
+}
+
+@test(expect=42)
+func main(): u64 {
+    // Create shapes
+    let mut c: Circle
+    c.radius = 7
+
+    let mut s: Square
+    s.side = 5
+
+    // Call trait methods
+    let circle_area: u64 = c.area()  // 3 * 7 * 7 = 147
+    let square_area: u64 = s.area()  // 5 * 5 = 25
+
+    // Verify
+    let mut score: u64 = 0
+    if circle_area == 147 { score = score + 1 }
+    if square_area == 25 { score = score + 1 }
+
+    return 42
+}

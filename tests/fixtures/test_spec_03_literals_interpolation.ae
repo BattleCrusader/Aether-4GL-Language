@@ -1,0 +1,40 @@
+// test_spec_03_literals_interpolation.ae — Section 3.6-3.7: String Interpolation
+// Tests: basic interpolation, numeric auto-conversion, expressions in braces,
+//        escaped braces, multiple interpolations
+
+@test(expect=42)
+func main(): u64 {
+    // Basic string interpolation with variable
+    let name = "World"
+    let msg1 = "Hello {name}!"
+
+    // Interpolation with numeric (auto-itoa)
+    let count: u64 = 42
+    let msg2 = "count = {count}"
+
+    // Interpolation with expression
+    let x: u64 = 40
+    let y: u64 = 2
+    let msg3 = "sum = {x + y}"
+
+    // Multiple interpolations
+    let first = "John"
+    let last = "Doe"
+    let msg4 = "Name: {first} {last}"
+
+    // Escaped braces (literal { and })
+    let msg5 = "literal brace: \{not_interpolated\}"
+
+    // Interpolation with bool
+    let flag: bool = true
+    let msg6 = "flag = {flag}"
+
+    // Interpolation with char
+    let ch: char = 'A'
+    let msg7 = "char = {ch}"
+
+    // All these should compile and produce strings
+    // We can't easily verify string content without std lib,
+    // but we can verify they don't crash
+    return 42
+}

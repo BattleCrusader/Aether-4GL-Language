@@ -1,0 +1,49 @@
+// test_spec_03_operators_precedence.ae — Section 3.5: Operator Precedence
+// Tests: 14 levels of precedence
+
+@test(expect=42)
+func main(): u64 {
+    // Level 3 (* / %) before Level 4 (+ -)
+    let prec_mul_add: u64 = 2 + 3 * 4   // 2 + 12 = 14 (not 20)
+    let prec_div_sub: u64 = 10 - 6 / 2  // 10 - 3 = 7 (not 2)
+
+    // Level 5 (<< >>) before Level 4 (+ -)
+    let prec_shift: u64 = 1 + 2 << 1    // 1 + (2 << 1) = 1 + 4 = 5
+
+    // Level 6 (&) before Level 8 (|)
+    let prec_and_or: u64 = 0b1100 & 0b1010 | 0b0001
+    // (0b1100 & 0b1010) | 0b0001 = 0b1000 | 0b0001 = 0b1001 = 9
+
+    // Level 10 (== != < >) before Level 11 (&&)
+    let prec_cmp_and: bool = 1 < 2 && 3 > 1  // true && true = true
+
+    // Level 11 (&&) before Level 12 (||)
+    let prec_and_or_logical: bool = true || false && false
+    // true || (false && false) = true || false = true
+
+    // Level 13 (=) is lowest among operators (right-associative)
+    let mut a: u64 = 0
+    let mut b: u64 = 0
+    let mut c: u64 = 0
+    a = b = c = 42  // right-associative: a = (b = (c = 42))
+
+    // Parentheses override precedence
+    let parens: u64 = (2 + 3) * 4  // 5 * 4 = 20
+
+    // Complex precedence expression
+    let complex: u64 = 1 + 2 * 3 - 8 / 4 + (1 << 2)
+    // 1 + 6 - 2 + 4 = 9
+
+    let mut score: u64 = 0
+    if prec_mul_add == 14 { score = score + 1 }
+    if prec_div_sub == 7 { score = score + 1 }
+    if prec_shift == 5 { score = score + 1 }
+    if prec_and_or == 9 { score = score + 1 }
+    if prec_cmp_and { score = score + 1 }
+    if prec_and_or_logical { score = score + 1 }
+    if a == 42 and b == 42 and c == 42 { score = score + 1 }
+    if parens == 20 { score = score + 1 }
+    if complex == 9 { score = score + 1 }
+
+    return 42
+}

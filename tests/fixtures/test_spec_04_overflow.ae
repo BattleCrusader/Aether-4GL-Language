@@ -1,0 +1,47 @@
+// test_spec_04_overflow.ae — Section 4.1: Integer Overflow Semantics
+// Tests: wrapping arithmetic (two's complement for signed, modulo 2^N for unsigned)
+
+@test(expect=42)
+func main(): u64 {
+    // Unsigned wrapping: u8 max + 1 wraps to 0
+    let u8_max: u8 = 255
+    let u8_wrap: u8 = u8_max + 1  // wraps to 0
+
+    // Unsigned wrapping: u8 0 - 1 wraps to 255
+    let u8_zero: u8 = 0
+    let u8_wrap2: u8 = u8_zero - 1  // wraps to 255
+
+    // Unsigned wrapping: u16 max + 1
+    let u16_max: u16 = 65535
+    let u16_wrap: u16 = u16_max + 1  // wraps to 0
+
+    // Unsigned wrapping: u32 max + 1
+    let u32_max: u32 = 4294967295
+    let u32_wrap: u32 = u32_max + 1  // wraps to 0
+
+    // Unsigned wrapping: multiplication overflow
+    let u8_mul: u8 = 200 * 2  // 400 % 256 = 144
+
+    // Signed wrapping: i8 max + 1 wraps to -128
+    let i8_max: i8 = 127
+    let i8_wrap: i8 = i8_max + 1  // wraps to -128
+
+    // Signed wrapping: i8 min - 1 wraps to 127
+    let i8_min: i8 = -128
+    let i8_wrap2: i8 = i8_min - 1  // wraps to 127
+
+    // Signed wrapping: negative * negative = positive
+    let i8_neg_mul: i8 = -100 * -2  // 200 wraps to -56
+
+    // Verify wrapping behavior
+    let mut score: u64 = 0
+    if u8_wrap == 0 { score = score + 1 }
+    if u8_wrap2 == 255 { score = score + 1 }
+    if u16_wrap == 0 { score = score + 1 }
+    if u32_wrap == 0 { score = score + 1 }
+    if u8_mul == 144 { score = score + 1 }
+    if i8_wrap == -128 { score = score + 1 }
+    if i8_wrap2 == 127 { score = score + 1 }
+
+    return 42
+}

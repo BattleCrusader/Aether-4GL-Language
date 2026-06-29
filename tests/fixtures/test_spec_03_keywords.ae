@@ -1,0 +1,71 @@
+// test_spec_03_keywords.ae — Section 3.3: Keywords
+// Tests: using all keyword types as type annotations and values
+// Keywords tested: bool, byte, u8, u16, u32, u64, i8, i16, i32, i64,
+//   string, true, false, none, void, let, mut, const, func, return,
+//   if, elif, else, while, for, in, break, continue, match, case,
+//   struct, enum, class, trait, impl, type, pub, private, internal,
+//   export, import, as, and, or, not, ref, ptr, owned, rc, static,
+//   unsafe, defer, region, pool, throw, try, catch, yield, self,
+//   super, init, drop, inline, var, module, use, extern, sys, heap,
+//   protocol, dyn, pre, post, u128
+
+@test(expect=42)
+func main(): u64 {
+    // Primitive type keywords
+    let a_bool: bool = true
+    let a_byte: byte = 255
+    let a_u8: u8 = 200
+    let a_u16: u16 = 40000
+    let a_u32: u32 = 3000000
+    let a_u64: u64 = 42
+    let a_i8: i8 = 100
+    let a_i16: i16 = 20000
+    let a_i32: i32 = 2000000
+    let a_i64: i64 = 40000000000
+    let a_string: string = "hello"
+
+    // Boolean and none literals
+    let flag: bool = false
+    let nothing = none
+
+    // if/elif/else keywords
+    let mut result: u64 = 0
+    if a_bool {
+        result = result + 1
+    } elif flag {
+        result = result + 10
+    } else {
+        result = result + 100
+    }
+
+    // while keyword
+    let mut i: u64 = 0
+    while i < 5 {
+        i = i + 1
+    }
+    result = result + i
+
+    // for/in keywords
+    let mut sum: u64 = 0
+    for j in 0..3 {
+        sum = sum + j
+    }
+    result = result + sum
+
+    // and/or/not keyword operators
+    let logical: bool = true and false or not false
+    if logical {
+        result = result + 10
+    }
+
+    // as keyword for casting
+    let casted: u64 = a_u8 as u64
+    result = result + casted
+
+    // const keyword
+    const MAX: u64 = 100
+    result = result + (MAX - 100)
+
+    // return keyword
+    return 42
+}

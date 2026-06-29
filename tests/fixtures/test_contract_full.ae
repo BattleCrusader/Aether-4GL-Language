@@ -1,0 +1,220 @@
+// test_contract_full.ae — Comprehensive tests for Section 13: Contract Programming
+// Tests: pre() conditions, post() conditions, multiple conditions, debug vs release, edge cases
+
+// ============================================================
+// 13.1 Preconditions — pre(expr)
+// ============================================================
+
+// Basic precondition: divisor must be non-zero
+func divide(a: int, b: int): int pre(b != 0) {
+    return a / b
+}
+
+// Precondition with multiple conditions
+func withdraw(balance: int, amount: int): int
+    pre(amount > 0)
+    pre(balance >= amount)
+{
+    return balance - amount
+}
+
+// Precondition with comparison
+func sqrt_approx(x: int): int pre(x >= 0) {
+    return x / 2
+}
+
+// Precondition with boolean expression
+func access(has_permission: bool, is_admin: bool): int
+    pre(has_permission or is_admin)
+{
+    return 1
+}
+
+// ============================================================
+// 13.2 Postconditions — post(expr)
+// ============================================================
+
+// Basic postcondition: result is always positive
+func abs(x: i64): i64 post(result >= 0) {
+    if x < 0 {
+        return -x
+    }
+    return x
+}
+
+// Postcondition with arithmetic relationship
+func double(x: int): int post(result == x * 2) {
+    return x * 2
+}
+
+// Postcondition with range
+func clamp(value: int, min_val: int, max_val: int): int
+    post(result >= min_val and result <= max_val)
+{
+    if value < min_val {
+        return min_val
+    }
+    if value > max_val {
+        return max_val
+    }
+    return value
+}
+
+// ============================================================
+// 13.3 Both Pre and Post Conditions
+// ============================================================
+
+// Full contract: pre + post
+func safe_divide(a: int, b: int): int
+    pre(b != 0)
+    post(result == a / b)
+{
+    return a / b
+}
+
+// Multiple pre and post
+func bounded_add(a: int, b: int, limit: int): int
+    pre(a >= 0)
+    pre(b >= 0)
+    pre(a + b <= limit)
+    post(result >= a)
+    post(result >= b)
+    post(result <= limit)
+{
+    return a + b
+}
+
+// ============================================================
+// 13.4 Contract Evaluation in Debug Builds
+// ============================================================
+
+// Contracts are checked at runtime in debug builds
+func debug_only_check(x: u64): u64
+    pre(x > 0)
+    post(result > 0)
+{
+    return 100 / x
+}
+
+// ============================================================
+// 13.5 Contract Elimination in Release Builds
+// ============================================================
+
+// In release builds, contracts serve as optimizer hints and are eliminated
+// This function has the same contracts but they won't generate runtime checks
+func release_optimized(x: u64): u64
+    pre(x > 0)
+    post(result > 0)
+{
+    return 100 / x
+}
+
+// ============================================================
+// 13.6 Edge Cases
+// ============================================================
+
+// Edge case: precondition with constant
+func always_positive(x: int): int pre(x > -1000) {
+    return x + 1
+}
+
+// Edge case: postcondition with constant comparison
+func return_constant(): int post(result == 42) {
+    return 42
+}
+
+// Edge case: precondition on void function
+func validate_flag(flag: bool) pre(flag == true or flag == false) {
+    // No return value
+}
+
+// Edge case: multiple preconditions on same line
+func multi_pre_same(x: int, y: int): int
+    pre(x > 0 and y > 0)
+{
+    return x + y
+}
+
+// Edge case: postcondition with complex expression
+func compute_area(width: int, height: int): int
+    pre(width > 0)
+    pre(height > 0)
+    post(result == width * height)
+{
+    return width * height
+}
+
+// Edge case: contract on function with no parameters
+func get_answer(): int
+    post(result == 42)
+{
+    return 42
+}
+
+// Edge case: contract with boolean parameter
+func toggle(flag: bool): bool
+    post(result == !flag)
+{
+    return !flag
+}
+
+// Edge case: chained contracts
+func chain_test(a: int, b: int): int
+    pre(a != 0)
+    pre(b != 0)
+    post(result > 0)
+{
+    if a > b {
+        return a / b
+    }
+    return b / a
+}
+
+// ============================================================
+// Main test function
+// ============================================================
+
+@test(expect=42)
+func main(): u64 {
+    // Test basic divide with precondition
+    let r1: int = divide(10, 2)
+    
+    // Test withdraw with preconditions
+    let r2: int = withdraw(100, 30)
+    
+    // Test abs with postcondition
+    let r3: i64 = abs(-5)
+    
+    // Test double with postcondition
+    let r4: int = double(21)
+    
+    // Test safe_divide with both pre and post
+    let r5: int = safe_divide(20, 4)
+    
+    // Test bounded_add with multiple pre/post
+    let r6: int = bounded_add(5, 10, 100)
+    
+    // Test clamp with postcondition
+    let r7: int = clamp(50, 0, 100)
+    
+    // Test access with boolean precondition
+    let r8: int = access(false, true)
+    
+    // Test return_constant with postcondition
+    let r9: int = return_constant()
+    
+    // Test compute_area
+    let r10: int = compute_area(5, 10)
+    
+    // Test get_answer
+    let r11: int = get_answer()
+    
+    // Test toggle
+    let r12: bool = toggle(true)
+    
+    // Test chain_test
+    let r13: int = chain_test(10, 5)
+    
+    // All tests pass
+    return 42
+}

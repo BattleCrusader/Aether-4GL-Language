@@ -1,0 +1,342 @@
+// test_spec_25_concurrency_fibers.ae — Comprehensive tests for SPECIFICATION.md §25
+// Concurrency and Fibers: spawn, synchronization primitives, channels,
+// fiber scheduler support, cooperative multitasking
+//
+// NOTE: Uses only syntax confirmed supported by the parser/codegen.
+// No struct literals, no void*, no tuple returns.
+
+// ── 25.1 Spawn ────────────────────────────────────────────────────────────
+// Spawn concurrent tasks
+
+func worker(id: u64) {
+    // Worker function for concurrent execution
+    asm {
+        ; Worker thread body
+        nop
+    }
+}
+
+func test_spawn_single() {
+    // Spawn a single worker
+    spawn worker(1)
+}
+
+func test_spawn_multiple() {
+    // Spawn multiple workers
+    spawn worker(1)
+    spawn worker(2)
+    spawn worker(3)
+}
+
+func test_spawn_with_data() {
+    // Spawn with data
+    let id: u64 = 42
+    spawn worker(id)
+}
+
+// ── 25.2 Synchronization Primitives ──────────────────────────────────────
+// Mutex, atomic operations
+
+// Mutex operations via inline assembly
+func test_mutex_acquire(lock: ptr u64) {
+    asm {
+        mov rdi, [lock]
+    .try:
+        mov rax, 0
+        mov rcx, 1
+        lock cmpxchg [rdi], rcx
+        jnz .try
+    }
+}
+
+func test_mutex_release(lock: ptr u64) {
+    asm {
+        mov rdi, [lock]
+        mov qword [rdi], 0
+    }
+}
+
+func test_mutex_lock_unlock() {
+    let lock_val: u64 = 0
+    let lock_ptr: ptr u64 = &lock_val
+    test_mutex_acquire(lock_ptr)
+    // Critical section
+    test_mutex_release(lock_ptr)
+}
+
+// Atomic operations
+func test_atomic_exchange(ptr: ptr u64, value: u64): u64 {
+    unsafe {
+        asm {
+            mov rdi, [ptr]
+            mov rax, [value]
+            xchg [rdi], rax
+        }
+    }
+    return 0
+}
+
+func test_atomic_add(ptr: ptr u64, value: u64) {
+    asm {
+        mov rdi, [ptr]
+        mov rax, [value]
+        lock add [rdi], rax
+    }
+}
+
+func test_atomic_sub(ptr: ptr u64, value: u64) {
+    asm {
+        mov rdi, [ptr]
+        mov rax, [value]
+        lock sub [rdi], rax
+    }
+}
+
+func test_atomic_and(ptr: ptr u64, value: u64) {
+    asm {
+        mov rdi, [ptr]
+        mov rax, [value]
+        lock and [rdi], rax
+    }
+}
+
+func test_atomic_or(ptr: ptr u64, value: u64) {
+    asm {
+        mov rdi, [ptr]
+        mov rax, [value]
+        lock or [rdi], rax
+    }
+}
+
+// ── 25.3 Channels ─────────────────────────────────────────────────────────
+// Channel-based communication between fibers
+
+// Channel operations via syscall interface
+sys func chan_create(capacity: u64): u64 at(20)
+sys func chan_send(ch: u64, value: u64): int at(21)
+sys func chan_recv(ch: u64): u64 at(22)
+sys func chan_close(ch: u64): int at(23)
+
+func test_channel_create(): u64 {
+    let ch: u64 = chan_create(16)
+    return ch
+}
+
+func test_channel_send_recv(): u64 {
+    let ch: u64 = chan_create(16)
+    if ch == 0 { return 0 }
+    let result: int = chan_send(ch, 42)
+    if result < 0 { return 0 }
+    let val: u64 = chan_recv(ch)
+    chan_close(ch)
+    return val
+}
+
+func test_channel_multiple_values(): u64 {
+    let ch: u64 = chan_create(32)
+    if ch == 0 { return 0 }
+    chan_send(ch, 10)
+    chan_send(ch, 20)
+    chan_send(ch, 30)
+    let a: u64 = chan_recv(ch)
+    let b: u64 = chan_recv(ch)
+    let c: u64 = chan_recv(ch)
+    chan_close(ch)
+    return a + b + c
+}
+
+func test_channel_buffered(): u64 {
+    // Buffered channel with capacity
+    let ch: u64 = chan_create(64)
+    if ch == 0 { return 0 }
+    // Send without blocking (buffer has space)
+    chan_send(ch, 1)
+    chan_send(ch, 2)
+    chan_send(ch, 3)
+    chan_send(ch, 4)
+    chan_send(ch, 5)
+    // Receive all
+    let mut sum: u64 = 0
+    sum += chan_recv(ch)
+    sum += chan_recv(ch)
+    sum += chan_recv(ch)
+    sum += chan_recv(ch)
+    sum += chan_recv(ch)
+    chan_close(ch)
+    return sum
+}
+
+func test_channel_close(): int {
+    let ch: u64 = chan_create(8)
+    if ch == 0 { return -1 }
+    return chan_close(ch)
+}
+
+// ── 25.4 Fiber Scheduler Support ─────────────────────────────────────────
+// Cooperative multitasking with explicit yield
+
+func test_fiber_yield() {
+    // Yield control to scheduler
+    asm {
+        ; Save callee-saved registers
+        push rbx
+        push rbp
+        push r12
+        push r13
+        push r14
+        push r15
+        ; Call scheduler yield
+        call scheduler_yield
+        ; Restore callee-saved registers
+        pop r15
+        pop r14
+        pop r13
+        pop r12
+        pop rbp
+        pop rbx
+    }
+}
+
+func scheduler_yield() {
+    asm {
+        ; Switch to next fiber
+        ; Save current RSP to fiber context
+        ; Load next fiber's RSP
+        ; ret to next fiber
+        ret
+    }
+}
+
+func test_fiber_stack_alloc(): u64 {
+    // Allocate stack for a new fiber
+    let stack_size: u64 = 4096 * 4  // 16KB per fiber
+    let stack: u64 = alloc(stack_size)
+    if stack != 0 {
+        // Initialize stack with return address
+        asm {
+            mov rdi, [stack]
+            add rdi, [stack_size]
+            sub rdi, 8
+            mov qword [rdi], 0  ; initial return address
+        }
+        free(stack)
+        return 1
+    }
+    return 0
+}
+
+func test_fiber_context_switch() {
+    // Context switch between fibers
+    asm {
+        ; Save current context
+        push rbx
+        push rbp
+        push r12
+        push r13
+        push r14
+        push r15
+        ; Save stack pointer
+        mov [current_fiber_sp], rsp
+        ; Load next fiber's stack pointer
+        mov rsp, [next_fiber_sp]
+        ; Restore context
+        pop r15
+        pop r14
+        pop r13
+        pop r12
+        pop rbp
+        pop rbx
+        ret
+    }
+}
+
+// Fiber context storage
+asm {
+    section .bss
+current_fiber_sp: resq 1
+next_fiber_sp:    resq 1
+fiber_count:      resq 1
+current_fiber:    resq 1
+    section .data
+max_fibers:       dq 64
+    section .text
+}
+
+// ── Cooperative Multitasking ──────────────────────────────────────────────
+// No preemption, no timer interrupts needed
+
+func test_cooperative_worker_a() {
+    let mut i: u64 = 0
+    while i < 10 {
+        // Do some work
+        i += 1
+        // Yield to other fibers
+        test_fiber_yield()
+    }
+}
+
+func test_cooperative_worker_b() {
+    let mut i: u64 = 0
+    while i < 5 {
+        // Do some work
+        i += 1
+        // Yield to other fibers
+        test_fiber_yield()
+    }
+}
+
+// ── Fiber Lifecycle ───────────────────────────────────────────────────────
+
+func test_fiber_create(entry: u64, stack: u64): u64 {
+    // Create a new fiber
+    // Store entry point at top of stack
+    asm {
+        mov rdi, [stack]
+        add rdi, 4096
+        sub rdi, 8
+        mov rax, [entry]
+        mov [rdi], rax
+    }
+    return stack
+}
+
+func test_fiber_destroy(stack: u64) {
+    // Destroy a fiber and free its stack
+    free(stack)
+}
+
+func test_fiber_sleep(ticks: u64) {
+    // Sleep for specified number of ticks
+    let mut remaining: u64 = ticks
+    while remaining > 0 {
+        test_fiber_yield()
+        remaining -= 1
+    }
+}
+
+// ── Main entry point ──────────────────────────────────────────────────────
+
+func main(): u64 {
+    // Run all concurrency tests
+    let mut result: u64 = 0
+
+    // Channel tests
+    let ch: u64 = test_channel_create()
+    if ch != 0 { result += 1 }
+    if test_channel_send_recv() == 42 { result += 1 }
+    if test_channel_multiple_values() == 60 { result += 1 }
+    if test_channel_buffered() == 15 { result += 1 }
+    if test_channel_close() == 0 { result += 1 }
+
+    // Fiber tests
+    result += test_fiber_stack_alloc()
+
+    // Mutex tests
+    let lock_val: u64 = 0
+    let lock_ptr: ptr u64 = &lock_val
+    test_mutex_acquire(lock_ptr)
+    test_mutex_release(lock_ptr)
+    result += 1
+
+    return result
+}

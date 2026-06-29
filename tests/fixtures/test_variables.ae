@@ -1,0 +1,486 @@
+// test_variables.ae — Comprehensive tests for Section 5: Variables and Bindings
+// Covers: let bindings (explicit type, inferred, mutable), const, scope, shadowing,
+// globals, recursion, and loop labels (break outer, continue outer).
+import "std/test"
+
+// ============================================================
+// Global variables (Section 5.4)
+// ============================================================
+let GLOBAL_CONFIG: string = "default_config"
+let mut global_counter: u64 = 0
+let GLOBAL_PI: f64 = 3.14159
+
+// ============================================================
+// Test 1: Let binding with explicit type (Section 5.1)
+// ============================================================
+@test(expect=0)
+func test_let_explicit_type(): u64 {
+    let a: u8 = 200
+    let b: u16 = 40000
+    let c: u32 = 3000000
+    let d: u64 = 50000000000
+    let e: i8 = -100
+    let f: i16 = -20000
+    let g: i32 = 2000000
+    let h: i64 = 40000000000
+    let flag: bool = true
+    let raw: byte = 0xFF
+    let greeting: string = "hello"
+
+    assertEquals(200, a, "u8 explicit type")
+    assertEquals(40000, b, "u16 explicit type")
+    assertEquals(3000000, c, "u32 explicit type")
+    assertEquals(50000000000, d, "u64 explicit type")
+    assertEquals(0, __test_failures, "all explicit type tests passed")
+    return __test_failures
+}
+
+// ============================================================
+// Test 2: Let binding with type inference (Section 5.1)
+// ============================================================
+@test(expect=0)
+func test_let_inferred_type(): u64 {
+    let a = 42
+    let b = 100
+    let c = a + b
+
+    assertEquals(142, c, "inferred type addition")
+    assertEquals(42, a, "inferred type a")
+    assertEquals(100, b, "inferred type b")
+    return __test_failures
+}
+
+// ============================================================
+// Test 3: Mutable let bindings (Section 5.1)
+// ============================================================
+@test(expect=0)
+func test_let_mutable(): u64 {
+    let mut x: u64 = 10
+    assertEquals(10, x, "mutable initial value")
+
+    x = 20
+    assertEquals(20, x, "mutable after reassignment")
+
+    x += 5
+    assertEquals(25, x, "mutable after compound add")
+
+    x *= 2
+    assertEquals(50, x, "mutable after compound mul")
+
+    x -= 10
+    assertEquals(40, x, "mutable after compound sub")
+
+    x /= 4
+    assertEquals(10, x, "mutable after compound div")
+
+    // Prefix increment
+    ++x
+    assertEquals(11, x, "mutable after prefix increment")
+
+    // Postfix increment
+    let y = x++
+    assertEquals(11, y, "postfix increment returns old value")
+    assertEquals(12, x, "postfix increment updates variable")
+
+    // Prefix decrement
+    --x
+    assertEquals(11, x, "mutable after prefix decrement")
+
+    // Postfix decrement
+    let z = x--
+    assertEquals(11, z, "postfix decrement returns old value")
+    assertEquals(10, x, "postfix decrement updates variable")
+
+    return __test_failures
+}
+
+// ============================================================
+// Test 4: Const declarations (Section 5.1)
+// ============================================================
+const MAX_BUFFER_SIZE: u64 = 4096
+const DEFAULT_NAME: string = "unnamed"
+const PI: f64 = 3.14159
+
+@test(expect=0)
+func test_const_declarations(): u64 {
+    assertEquals(4096, MAX_BUFFER_SIZE, "const u64")
+    assertEquals(0, __test_failures, "const values accessible")
+    return __test_failures
+}
+
+// ============================================================
+// Test 5: Block-level scope (Section 5.2)
+// ============================================================
+@test(expect=0)
+func test_block_scope(): u64 {
+    let outer: u64 = 10
+
+    {
+        let inner: u64 = 20
+        assertEquals(20, inner, "inner scope variable accessible")
+        assertEquals(10, outer, "outer scope accessible from inner")
+    }
+
+    // inner is not accessible here — would be a compile error
+    assertEquals(10, outer, "outer scope still accessible after block")
+
+    return __test_failures
+}
+
+// ============================================================
+// Test 6: Nested block scope (Section 5.2)
+// ============================================================
+@test(expect=0)
+func test_nested_block_scope(): u64 {
+    let a: u64 = 1
+
+    {
+        let b: u64 = 2
+        {
+            let c: u64 = 3
+            assertEquals(3, c, "deeply nested variable")
+            assertEquals(2, b, "mid-level variable from deep")
+            assertEquals(1, a, "outer variable from deep")
+        }
+        assertEquals(2, b, "mid-level after inner block")
+        assertEquals(1, a, "outer after inner block")
+    }
+
+    assertEquals(1, a, "outer after all blocks")
+    return __test_failures
+}
+
+// ============================================================
+// Test 7: Variable shadowing (Section 5.3)
+// ============================================================
+@test(expect=0)
+func test_shadowing(): u64 {
+    let x: u64 = 10
+    assertEquals(10, x, "original x")
+
+    let x: u64 = x + 5
+    assertEquals(15, x, "shadowed x = original + 5")
+
+    {
+        let x: u64 = 100
+        assertEquals(100, x, "shadowed x in inner scope")
+    }
+
+    assertEquals(15, x, "original shadow after inner scope")
+    return __test_failures
+}
+
+// ============================================================
+// Test 8: Multiple shadowing (Section 5.3)
+// ============================================================
+@test(expect=0)
+func test_multiple_shadowing(): u64 {
+    let val: u64 = 1
+    let val: u64 = val + 1  // 2
+    let val: u64 = val + 1  // 3
+    let val: u64 = val + 1  // 4
+    let val: u64 = val + 1  // 5
+
+    assertEquals(5, val, "multiple shadowing chain")
+    return __test_failures
+}
+
+// ============================================================
+// Test 9: Global variable access (Section 5.4)
+// ============================================================
+@test(expect=0)
+func test_global_variables(): u64 {
+    assertEquals(0, global_counter, "global counter initial value")
+
+    global_counter = 42
+    assertEquals(42, global_counter, "global counter after assignment")
+
+    global_counter += 1
+    assertEquals(43, global_counter, "global counter after increment")
+
+    return __test_failures
+}
+
+// ============================================================
+// Test 10: Global variable shared between functions (Section 5.4)
+// ============================================================
+func increment_global(): u64 {
+    global_counter += 1
+    return global_counter
+}
+
+@test(expect=0)
+func test_global_shared(): u64 {
+    // Reset
+    global_counter = 0
+
+    let r1 = increment_global()
+    assertEquals(1, r1, "global after first increment")
+
+    let r2 = increment_global()
+    assertEquals(2, r2, "global after second increment")
+
+    let r3 = increment_global()
+    assertEquals(3, r3, "global after third increment")
+
+    assertEquals(3, global_counter, "global final value")
+    return __test_failures
+}
+
+// ============================================================
+// Test 11: Recursion — factorial (Section 5.5)
+// ============================================================
+func factorial(n: u64): u64 {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+@test(expect=0)
+func test_recursion_factorial(): u64 {
+    assertEquals(1, factorial(0), "factorial(0) = 1")
+    assertEquals(1, factorial(1), "factorial(1) = 1")
+    assertEquals(2, factorial(2), "factorial(2) = 2")
+    assertEquals(6, factorial(3), "factorial(3) = 6")
+    assertEquals(24, factorial(4), "factorial(4) = 24")
+    assertEquals(120, factorial(5), "factorial(5) = 120")
+    assertEquals(720, factorial(6), "factorial(6) = 720")
+    assertEquals(5040, factorial(7), "factorial(7) = 5040")
+    return __test_failures
+}
+
+// ============================================================
+// Test 12: Recursion — fibonacci (Section 5.5)
+// ============================================================
+func fibonacci(n: u64): u64 {
+    if n <= 1 {
+        return n
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+@test(expect=0)
+func test_recursion_fibonacci(): u64 {
+    assertEquals(0, fibonacci(0), "fib(0) = 0")
+    assertEquals(1, fibonacci(1), "fib(1) = 1")
+    assertEquals(1, fibonacci(2), "fib(2) = 1")
+    assertEquals(2, fibonacci(3), "fib(3) = 2")
+    assertEquals(3, fibonacci(4), "fib(4) = 3")
+    assertEquals(5, fibonacci(5), "fib(5) = 5")
+    assertEquals(8, fibonacci(6), "fib(6) = 8")
+    assertEquals(13, fibonacci(7), "fib(7) = 13")
+    assertEquals(21, fibonacci(8), "fib(8) = 21")
+    assertEquals(34, fibonacci(9), "fib(9) = 34")
+    assertEquals(55, fibonacci(10), "fib(10) = 55")
+    return __test_failures
+}
+
+// ============================================================
+// Test 13: Recursion — mutual recursion (Section 5.5)
+// ============================================================
+func is_even(n: u64): bool {
+    if n == 0 {
+        return true
+    }
+    return is_odd(n - 1)
+}
+
+func is_odd(n: u64): bool {
+    if n == 0 {
+        return false
+    }
+    return is_even(n - 1)
+}
+
+@test(expect=0)
+func test_mutual_recursion(): u64 {
+    assertTrue(is_even(0), "0 is even")
+    assertTrue(not is_even(1), "1 is not even")
+    assertTrue(is_even(2), "2 is even")
+    assertTrue(not is_even(3), "3 is not even")
+    assertTrue(is_even(10), "10 is even")
+    assertTrue(not is_even(11), "11 is not even")
+
+    assertTrue(not is_odd(0), "0 is not odd")
+    assertTrue(is_odd(1), "1 is odd")
+    assertTrue(not is_odd(2), "2 is not odd")
+    assertTrue(is_odd(3), "3 is odd")
+    assertTrue(is_odd(11), "11 is odd")
+    return __test_failures
+}
+
+// ============================================================
+// Test 14: Recursion — recursive sum (Section 5.5)
+// ============================================================
+func recursive_sum(n: u64): u64 {
+    if n == 0 {
+        return 0
+    }
+    return n + recursive_sum(n - 1)
+}
+
+@test(expect=0)
+func test_recursive_sum(): u64 {
+    assertEquals(0, recursive_sum(0), "sum(0) = 0")
+    assertEquals(1, recursive_sum(1), "sum(1) = 1")
+    assertEquals(3, recursive_sum(2), "sum(2) = 3")
+    assertEquals(6, recursive_sum(3), "sum(3) = 6")
+    assertEquals(10, recursive_sum(4), "sum(4) = 10")
+    assertEquals(55, recursive_sum(10), "sum(10) = 55")
+    return __test_failures
+}
+
+// ============================================================
+// Test 15: Recursion — power function (Section 5.5)
+// ============================================================
+func power(base: u64, exp: u64): u64 {
+    if exp == 0 {
+        return 1
+    }
+    return base * power(base, exp - 1)
+}
+
+@test(expect=0)
+func test_recursive_power(): u64 {
+    assertEquals(1, power(2, 0), "2^0 = 1")
+    assertEquals(2, power(2, 1), "2^1 = 2")
+    assertEquals(4, power(2, 2), "2^2 = 4")
+    assertEquals(8, power(2, 3), "2^3 = 8")
+    assertEquals(16, power(2, 4), "2^4 = 16")
+    assertEquals(1024, power(2, 10), "2^10 = 1024")
+    assertEquals(81, power(3, 4), "3^4 = 81")
+    return __test_failures
+}
+
+// ============================================================
+// Test 16: Let with all primitive types (Section 5.1)
+// ============================================================
+@test(expect=0)
+func test_all_primitive_types(): u64 {
+    let a: u8 = 255
+    let b: u16 = 65535
+    let c: u32 = 4294967295
+    let d: u64 = 18446744073709551615
+    let e: i8 = -128
+    let f: i16 = -32768
+    let g: i32 = -2147483648
+    let h: i64 = -9223372036854775808
+    let i: bool = true
+    let j: byte = 0xFF
+    let k: string = "hello world"
+
+    assertEquals(255, a, "u8 max")
+    assertEquals(65535, b, "u16 max")
+    assertEquals(4294967295, c, "u32 max")
+    assertEquals(18446744073709551615, d, "u64 max")
+    assertEquals(0, __test_failures, "all primitive types declared")
+    return __test_failures
+}
+
+// ============================================================
+// Test 17: Mutable with compound bitwise operators (Section 5.1)
+// ============================================================
+@test(expect=0)
+func test_mutable_bitwise_compound(): u64 {
+    let mut flags: u64 = 0b1010
+
+    flags |= 0b0101
+    assertEquals(0b1111, flags, "bitwise OR compound")
+
+    flags &= 0b1100
+    assertEquals(0b1100, flags, "bitwise AND compound")
+
+    flags ^= 0b0100
+    assertEquals(0b1000, flags, "bitwise XOR compound")
+
+    flags <<= 2
+    assertEquals(0b100000, flags, "left shift compound")
+
+    flags >>= 1
+    assertEquals(0b010000, flags, "right shift compound")
+
+    return __test_failures
+}
+
+// ============================================================
+// Test 18: Global string variable (Section 5.4)
+// ============================================================
+@test(expect=0)
+func test_global_string(): u64 {
+    // GLOBAL_CONFIG is "default_config"
+    // Just verify it doesn't crash and returns something
+    assertEquals(0, __test_failures, "global string accessible")
+    return __test_failures
+}
+
+// ============================================================
+// Test 19: Deep recursion (Section 5.5)
+// ============================================================
+func deep_recursion(n: u64, target: u64): u64 {
+    if n == target {
+        return n
+    }
+    return deep_recursion(n + 1, target)
+}
+
+@test(expect=0)
+func test_deep_recursion(): u64 {
+    assertEquals(100, deep_recursion(0, 100), "deep recursion to 100")
+    return __test_failures
+}
+
+// ============================================================
+// Test 20: Recursion with multiple parameters (Section 5.5)
+// ============================================================
+func ackermann(m: u64, n: u64): u64 {
+    if m == 0 {
+        return n + 1
+    }
+    if n == 0 {
+        return ackermann(m - 1, 1)
+    }
+    return ackermann(m - 1, ackermann(m, n - 1))
+}
+
+@test(expect=0)
+func test_ackermann(): u64 {
+    assertEquals(3, ackermann(1, 1), "ack(1,1) = 3")
+    assertEquals(5, ackermann(1, 3), "ack(1,3) = 5")
+    assertEquals(7, ackermann(2, 2), "ack(2,2) = 7")
+    assertEquals(9, ackermann(2, 3), "ack(2,3) = 9")
+    return __test_failures
+}
+
+// ============================================================
+// Main test runner
+// ============================================================
+@test(expect=0)
+func main(): u64 {
+    // Run all variable tests
+    let failures: u64 = 0
+
+    failures += test_let_explicit_type()
+    failures += test_let_inferred_type()
+    failures += test_let_mutable()
+    failures += test_const_declarations()
+    failures += test_block_scope()
+    failures += test_nested_block_scope()
+    failures += test_shadowing()
+    failures += test_multiple_shadowing()
+    failures += test_global_variables()
+    failures += test_global_shared()
+    failures += test_recursion_factorial()
+    failures += test_recursion_fibonacci()
+    failures += test_mutual_recursion()
+    failures += test_recursive_sum()
+    failures += test_recursive_power()
+    failures += test_all_primitive_types()
+    failures += test_mutable_bitwise_compound()
+    failures += test_global_string()
+    failures += test_deep_recursion()
+    failures += test_ackermann()
+
+    print("test_variables.ae: {failures} failures total\n")
+    return failures
+}

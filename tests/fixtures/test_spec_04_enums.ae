@@ -1,0 +1,42 @@
+// test_spec_04_enums.ae — Section 4.5: Enums (Tagged Unions)
+// Tests: enum definition, :: construction, variants with/without payload
+
+enum Option {
+    Some(u64)
+    None
+}
+
+enum Color {
+    Red
+    Green
+    Blue
+}
+
+enum Result {
+    Ok(u64)
+    Error(string)
+}
+
+@test(expect=42)
+func main(): u64 {
+    // Enum construction with ::
+    let opt_some: Option = Option::Some(42)
+    let opt_none: Option = Option::None
+
+    // Enum without payload
+    let color: Color = Color::Red
+    let color2: Color = Color::Blue
+
+    // Enum with string payload
+    let res_ok: Result = Result::Ok(100)
+    let res_err: Result = Result::Error("not found")
+
+    // Verify enum construction works
+    let mut score: u64 = 0
+
+    // We can't easily match on enums in this parser version,
+    // but construction and :: syntax should work
+    score = score + 1  // reached here = construction works
+
+    return 42
+}

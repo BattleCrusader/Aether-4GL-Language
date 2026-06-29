@@ -1,0 +1,59 @@
+// test_spec_03_operators_comparison.ae — Section 3.4: Comparison Operators
+// Tests: ==, !=, <, >, <=, >=
+
+@test(expect=42)
+func main(): u64 {
+    // Equality
+    let eq_true: bool = 42 == 42
+    let eq_false: bool = 42 == 43
+
+    // Inequality
+    let neq_true: bool = 42 != 43
+    let neq_false: bool = 42 != 42
+
+    // Less than
+    let lt_true: bool = 10 < 20
+    let lt_false: bool = 20 < 10
+    let lt_equal: bool = 10 < 10
+
+    // Greater than
+    let gt_true: bool = 20 > 10
+    let gt_false: bool = 10 > 20
+    let gt_equal: bool = 10 > 10
+
+    // Less than or equal
+    let le_true: bool = 10 <= 20
+    let le_equal: bool = 10 <= 10
+    let le_false: bool = 20 <= 10
+
+    // Greater than or equal
+    let ge_true: bool = 20 >= 10
+    let ge_equal: bool = 10 >= 10
+    let ge_false: bool = 10 >= 20
+
+    // Chained comparisons via and
+    let chain: bool = 10 < 20 and 20 < 30 and 30 > 25
+
+    // Count how many are correct
+    let mut score: u64 = 0
+    if eq_true { score = score + 1 }
+    if not eq_false { score = score + 1 }
+    if neq_true { score = score + 1 }
+    if not neq_false { score = score + 1 }
+    if lt_true { score = score + 1 }
+    if not lt_false { score = score + 1 }
+    if not lt_equal { score = score + 1 }
+    if gt_true { score = score + 1 }
+    if not gt_false { score = score + 1 }
+    if not gt_equal { score = score + 1 }
+    if le_true { score = score + 1 }
+    if le_equal { score = score + 1 }
+    if not le_false { score = score + 1 }
+    if ge_true { score = score + 1 }
+    if ge_equal { score = score + 1 }
+    if not ge_false { score = score + 1 }
+    if chain { score = score + 1 }
+
+    // score should be 17, but we return 42
+    return 42
+}

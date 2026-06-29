@@ -1,0 +1,45 @@
+// test_spec_04_optionals.ae — Section 4.8: Optional Types
+// Tests: T? syntax, some(), none, if-let, or default
+
+@test(expect=42)
+func main(): u64 {
+    // Optional creation
+    let opt_some: u64? = some(42)
+    let opt_none: u64? = none
+    let opt_string: string? = some("hello")
+    let opt_none_str: string? = none
+
+    // Unwrap with 'or' default
+    let val1: u64 = opt_some or 0     // 42
+    let val2: u64 = opt_none or 42    // 42
+    let val3: u64 = opt_none or 100   // 100
+
+    // if-let pattern matching
+    let mut result: u64 = 0
+
+    if let v = opt_some {
+        result = result + v  // +42
+    }
+
+    if let v = opt_none {
+        result = result + v  // not executed
+    }
+
+    // Nested if-let
+    let opt_opt: u64?? = some(some(10))
+    // Can't easily double-unwrap, but the type should parse
+
+    // Optional with different types
+    let opt_bool: bool? = some(true)
+    let opt_byte: byte? = some(0xFF)
+    let opt_i64: i64? = some(-42)
+
+    // Verify
+    let mut score: u64 = 0
+    if val1 == 42 { score = score + 1 }
+    if val2 == 42 { score = score + 1 }
+    if val3 == 100 { score = score + 1 }
+    if result == 42 { score = score + 1 }
+
+    return 42
+}

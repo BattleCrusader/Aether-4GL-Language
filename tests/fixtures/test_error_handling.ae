@@ -1,0 +1,310 @@
+// test_error_handling.ae — Comprehensive error handling tests (SPEC §11)
+// Tests: try/catch, throw, catch with type binding, finally, throws functions
+//
+// NOTE: Error handling uses try/catch/throw with enum-based error types.
+// The 'throws' annotation on functions is supported by the parser.
+
+// ============================================================
+// §11.1: Error types (enum-based)
+// ============================================================
+
+enum AppError {
+    NotFound
+    PermissionDenied
+    InvalidInput
+    Timeout
+}
+
+// ============================================================
+// §11.2: Basic try/catch — no error
+// ============================================================
+
+func safeOperation(): u64 {
+    return 42
+}
+
+func testTryNoError(): u64 {
+    try {
+        let result = safeOperation()
+        return result
+    } catch _ {
+        return 0
+    }
+}
+
+// ============================================================
+// §11.3: Throw with catch
+// ============================================================
+
+func failingOperation(): u64 {
+    throw AppError::NotFound
+    return 0
+}
+
+func testThrowCatch(): u64 {
+    try {
+        let result = failingOperation()
+        return result
+    } catch _ {
+        return 42
+    }
+}
+
+// ============================================================
+// §11.4: Catch with type binding
+// ============================================================
+
+func specificError(): u64 {
+    throw AppError::PermissionDenied
+    return 0
+}
+
+func testCatchTypeBinding(): u64 {
+    try {
+        let result = specificError()
+        return result
+    } catch AppError(err) {
+        return 42
+    }
+}
+
+// ============================================================
+// §11.5: Multiple catch arms
+// ============================================================
+
+func multiErrorTest(val: u64): u64 {
+    if val == 0 { throw AppError::NotFound }
+    if val == 1 { throw AppError::PermissionDenied }
+    return val
+}
+
+func testMultipleCatches(): u64 {
+    // First arm catches
+    try {
+        let r = multiErrorTest(0)
+        return r
+    } catch AppError::NotFound {
+        return 42
+    } catch _ {
+        return 0
+    }
+}
+
+func testSecondCatch(): u64 {
+    // Second arm catches
+    try {
+        let r = multiErrorTest(1)
+        return r
+    } catch AppError::NotFound {
+        return 0
+    } catch _ {
+        return 42
+    }
+}
+
+func testNoErrorCatch(): u64 {
+    // No error thrown
+    try {
+        let r = multiErrorTest(2)
+        return r
+    } catch AppError::NotFound {
+        return 0
+    } catch _ {
+        return 0
+    }
+}
+
+// ============================================================
+// §11.6: Finally blocks
+// ============================================================
+
+func testFinallyNoError(): u64 {
+    let mut result: u64 = 0
+    try {
+        result = 42
+    } finally {
+        result = result + 1
+    }
+    return result  // 43
+}
+
+func testFinallyWithError(): u64 {
+    let mut result: u64 = 0
+    try {
+        throw AppError::NotFound
+        result = 100
+    } catch _ {
+        result = 42
+    } finally {
+        result = result + 1
+    }
+    return result  // 43
+}
+
+// ============================================================
+// §11.7: Nested try/catch
+// ============================================================
+
+func innerOperation(shouldFail: bool): u64 {
+    if shouldFail {
+        throw AppError::InvalidInput
+    }
+    return 10
+}
+
+func testNestedTryCatch(): u64 {
+    try {
+        let outer = 5
+        try {
+            let inner = innerOperation(true)
+            return outer + inner
+        } catch _ {
+            // Inner catch handles the error, returns 0
+            return 0
+        }
+    } catch _ {
+        return 0
+    }
+    return 42
+}
+
+// ============================================================
+// §11.8: Throws function annotation
+// ============================================================
+
+func riskyOperation(): u64 throws {
+    return 42
+}
+
+func testThrowsFunction(): u64 {
+    try {
+        let result = riskyOperation()
+        return result
+    } catch _ {
+        return 0
+    }
+}
+
+// ============================================================
+// §11.9: Defer in try/catch
+// ============================================================
+
+func testDeferInTry(): u64 {
+    let mut cleanupRan: u64 = 0
+    try {
+        defer { cleanupRan = 1 }
+        throw AppError::Timeout
+    } catch _ {
+        // defer should have run before catch
+        if cleanupRan == 1 {
+            return 42
+        }
+        return 0
+    }
+    return 0
+}
+
+// ============================================================
+// §11.10: Error propagation through throws functions
+// ============================================================
+
+func propagateError(): u64 throws {
+    throw AppError::NotFound
+    return 0
+}
+
+func caller(): u64 throws {
+    return propagateError()
+}
+
+func testErrorPropagation(): u64 {
+    try {
+        let result = caller()
+        return result
+    } catch _ {
+        return 42
+    }
+}
+
+// ============================================================
+// §11.11: Edge cases
+// ============================================================
+
+// Try with empty body
+func testEmptyTry(): u64 {
+    try {
+        // nothing
+    } catch _ {
+        return 0
+    }
+    return 42
+}
+
+// Try with only finally (no catch)
+func testTryFinallyOnly(): u64 {
+    let mut x: u64 = 0
+    try {
+        x = 42
+    } finally {
+        x = x + 1
+    }
+    return x  // 43
+}
+
+// Multiple throws in same try
+func testMultipleThrows(): u64 {
+    try {
+        throw AppError::NotFound
+        throw AppError::PermissionDenied  // unreachable
+    } catch AppError::NotFound {
+        return 42
+    } catch _ {
+        return 0
+    }
+}
+
+// ============================================================
+// Main test runner
+// ============================================================
+
+@test(expect=0)
+func main(): u64 {
+    let mut failures: u64 = 0
+
+    // §11.2: basic try/catch
+    if testTryNoError() != 42 { failures += 1 }
+
+    // §11.3: throw with catch
+    if testThrowCatch() != 42 { failures += 1 }
+
+    // §11.4: catch with type binding
+    if testCatchTypeBinding() != 42 { failures += 1 }
+
+    // §11.5: multiple catch arms
+    if testMultipleCatches() != 42 { failures += 1 }
+    if testSecondCatch() != 42 { failures += 1 }
+    if testNoErrorCatch() != 2 { failures += 1 }
+
+    // §11.6: finally
+    if testFinallyNoError() != 43 { failures += 1 }
+    if testFinallyWithError() != 43 { failures += 1 }
+
+    // §11.7: nested try/catch
+    if testNestedTryCatch() != 42 { failures += 1 }
+
+    // §11.8: throws function
+    if testThrowsFunction() != 42 { failures += 1 }
+
+    // §11.9: defer in try/catch
+    if testDeferInTry() != 42 { failures += 1 }
+
+    // §11.10: error propagation
+    if testErrorPropagation() != 42 { failures += 1 }
+
+    // §11.11: edge cases
+    if testEmptyTry() != 42 { failures += 1 }
+    if testTryFinallyOnly() != 43 { failures += 1 }
+    if testMultipleThrows() != 42 { failures += 1 }
+
+    return failures
+}

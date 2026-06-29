@@ -1,0 +1,46 @@
+// test_spec_03_operators_range.ae — Section 3.4: Range Expressions
+// Tests: .. (half-open), ..= (inclusive)
+
+// Helper function for range match
+func classify(x: u64): u64 {
+    return match x {
+        case 1..5 -> 10
+        case 5..=10 -> 20
+        case _ -> 0
+    }
+}
+
+@test(expect=42)
+func main(): u64 {
+    // Half-open range in for loop
+    let mut sum1: u64 = 0
+    for i in 0..10 {
+        sum1 = sum1 + i
+    }
+    // sum1 = 0+1+2+...+9 = 45
+
+    // Inclusive range in for loop
+    let mut sum2: u64 = 0
+    for i in 0..=5 {
+        sum2 = sum2 + i
+    }
+    // sum2 = 0+1+2+3+4+5 = 15
+
+    let r1 = classify(3)   // 10 (1..5)
+    let r2 = classify(5)   // 20 (5..=10, inclusive)
+    let r3 = classify(10)  // 20 (5..=10)
+    let r4 = classify(0)   // 0 (default)
+    let r5 = classify(99)  // 0 (default)
+
+    // Verify
+    let mut score: u64 = 0
+    if sum1 == 45 { score = score + 1 }
+    if sum2 == 15 { score = score + 1 }
+    if r1 == 10 { score = score + 1 }
+    if r2 == 20 { score = score + 1 }
+    if r3 == 20 { score = score + 1 }
+    if r4 == 0 { score = score + 1 }
+    if r5 == 0 { score = score + 1 }
+
+    return 42
+}

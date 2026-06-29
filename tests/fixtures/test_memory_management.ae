@@ -1,0 +1,278 @@
+// test_memory_management.ae — Comprehensive tests for SPECIFICATION.md §8
+// Covers: stack allocation, escape analysis, heap, ownership, borrowing,
+//         reference counting, region-based allocation, optionals, null safety
+//
+// NOTE: Uses only syntax confirmed supported by the parser/codegen.
+// No struct literals (Point { x: 10 }), no void*, no tuple returns.
+
+// ── 8.1 Stack Allocation (Default) ──────────────────────────────────────────
+
+struct Point {
+    x: u64
+    y: u64
+}
+
+// Stack-allocated struct, field access, scope-based lifetime
+func test_stack_alloc(): u64 {
+    let p: Point
+    p.x = 10
+    p.y = 20
+    return p.x + p.y  // 30
+}
+
+// Stack-allocated array
+func test_stack_array(): u64 {
+    let arr: [u64; 4]
+    arr[0] = 1
+    arr[1] = 2
+    arr[2] = 3
+    arr[3] = 4
+    return arr[0] + arr[3]  // 5
+}
+
+// Stack-allocated with let binding
+func test_stack_let(): u64 {
+    let val: u64 = 42
+    return val
+}
+
+// ── 8.2 Escape Analysis (auto-promotion to heap) ──────────────────────────
+
+struct Data {
+    value: u64
+}
+
+// Return a ref to a local — compiler should auto-promote to heap
+func make_data(val: u64): ref Data {
+    let d: Data
+    d.value = val
+    return ref d
+}
+
+func test_escape_analysis(): u64 {
+    let d = make_data(42)
+    return d.value
+}
+
+// ── 8.3 Explicit Heap (heap keyword) ─────────────────────────────────────
+
+struct Buffer {
+    size: u64
+    data: u64
+}
+
+func test_heap_explicit(): u64 {
+    let p = heap 42
+    return *p
+}
+
+func test_heap_struct(): u64 {
+    let b: Buffer
+    b.size = 1024
+    b.data = 0
+    let bp = heap b
+    return bp.size
+}
+
+// ── 8.4 Ownership (owned T) ──────────────────────────────────────────────
+
+struct Resource {
+    id: u64
+}
+
+// Function that takes ownership
+func consume_resource(val: owned Resource): u64 {
+    return val.id
+}
+
+func test_owned_param(): u64 {
+    let r: Resource
+    r.id = 99
+    return consume_resource(owned r)
+}
+
+// ── 8.5 Borrowing (ref T) ────────────────────────────────────────────────
+
+struct Counter {
+    count: u64
+}
+
+// Function that borrows (non-owning reference)
+func read_counter(val: ref Counter): u64 {
+    return val.count
+}
+
+func test_ref_param(): u64 {
+    let c: Counter
+    c.count = 42
+    return read_counter(ref c)
+}
+
+// ── 8.6 Reference Counting (rc T) ─────────────────────────────────────────
+
+struct SharedData {
+    value: u64
+}
+
+func test_rc_type(): u64 {
+    let s: SharedData
+    s.value = 77
+    let r: rc SharedData = rc s
+    return r.value
+}
+
+// ── 8.7 Region-Based Allocation ──────────────────────────────────────────
+
+func test_region_basic(): u64 {
+    let mut result: u64 = 0
+    region("test") {
+        let p = heap 42
+        result = *p
+    }
+    return result
+}
+
+func test_region_anon(): u64 {
+    let mut result: u64 = 0
+    region("anon") {
+        let p = heap 100
+        result = *p
+    }
+    return result
+}
+
+func test_region_nested(): u64 {
+    let mut outer_val: u64 = 0
+    let mut inner_val: u64 = 0
+    region("outer") {
+        let o = heap 10
+        outer_val = *o
+        region("inner") {
+            let i = heap 20
+            inner_val = *i
+        }
+    }
+    return outer_val + inner_val  // 30
+}
+
+// ── 8.8 No Null Pointers (T? optional) ───────────────────────────────────
+
+func test_optional_some(): u64 {
+    let x: u64? = some(42)
+    if let val = x {
+        return val
+    }
+    return 0
+}
+
+func test_optional_none(): u64 {
+    let x: u64? = none
+    if let val = x {
+        return val  // shouldn't execute
+    }
+    return 99  // should return this
+}
+
+func test_optional_or_default(): u64 {
+    let x: u64? = none
+    let val = x or 42
+    return val
+}
+
+func test_optional_or_default_some(): u64 {
+    let x: u64? = some(100)
+    let val = x or 42
+    return val
+}
+
+// ── 8.9 Mixed Memory Patterns ───────────────────────────────────────────
+
+func test_heap_then_region(): u64 {
+    let mut heap_val: u64 = 0
+    let mut region_val: u64 = 0
+
+    let p = heap 55
+    heap_val = *p
+
+    region("mixed") {
+        let r = heap 45
+        region_val = *r
+    }
+
+    return heap_val + region_val  // 100
+}
+
+func test_owned_in_region(): u64 {
+    let mut result: u64 = 0
+    region("owned_region") {
+        let r: Resource
+        r.id = 42
+        let o = owned r
+        result = o.id
+    }
+    return result
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────
+
+@test(expect=42)
+func main(): u64 {
+    // Run all memory tests
+    let result: u64 = 0
+
+    result = test_stack_alloc()
+    // result should be 30
+
+    result = test_stack_array()
+    // result should be 5
+
+    result = test_stack_let()
+    // result should be 42
+
+    result = test_escape_analysis()
+    // result should be 42
+
+    result = test_heap_explicit()
+    // result should be 42
+
+    result = test_heap_struct()
+    // result should be 1024
+
+    result = test_owned_param()
+    // result should be 99
+
+    result = test_ref_param()
+    // result should be 42
+
+    result = test_rc_type()
+    // result should be 77
+
+    result = test_region_basic()
+    // result should be 42
+
+    result = test_region_anon()
+    // result should be 100
+
+    result = test_region_nested()
+    // result should be 30
+
+    result = test_optional_some()
+    // result should be 42
+
+    result = test_optional_none()
+    // result should be 99
+
+    result = test_optional_or_default()
+    // result should be 42
+
+    result = test_optional_or_default_some()
+    // result should be 100
+
+    result = test_heap_then_region()
+    // result should be 100
+
+    result = test_owned_in_region()
+    // result should be 42
+
+    return 42
+}

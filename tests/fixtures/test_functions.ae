@@ -1,0 +1,804 @@
+// test_functions.ae — Comprehensive tests for Section 6: Functions
+// Covers: basic declaration/calls, expression-bodied, void return, function attributes,
+// default parameters, extern functions (FFI), variadic functions, calling convention.
+import "std/test"
+
+// ============================================================
+// Test 1: Basic function declaration and call (Section 6.1)
+// ============================================================
+func add(a: u64, b: u64): u64 {
+    return a + b
+}
+
+func subtract(a: u64, b: u64): u64 {
+    return a - b
+}
+
+func multiply(a: u64, b: u64): u64 {
+    return a * b
+}
+
+func divide(a: u64, b: u64): u64 {
+    return a / b
+}
+
+@test(expect=0)
+func test_basic_function_calls(): u64 {
+    assertEquals(15, add(10, 5), "add(10, 5) = 15")
+    assertEquals(5, subtract(10, 5), "subtract(10, 5) = 5")
+    assertEquals(50, multiply(10, 5), "multiply(10, 5) = 50")
+    assertEquals(2, divide(10, 5), "divide(10, 5) = 2")
+    return __test_failures
+}
+
+// ============================================================
+// Test 2: Expression-bodied functions (Section 6.1, -> syntax)
+// ============================================================
+func add_expr(a: u64, b: u64): u64 -> a + b
+
+func multiply_expr(a: u64, b: u64): u64 -> a * b
+
+func max_expr(a: u64, b: u64): u64 -> if a > b { a } else { b }
+
+@test(expect=0)
+func test_expression_bodied(): u64 {
+    assertEquals(15, add_expr(10, 5), "add_expr(10, 5) = 15")
+    assertEquals(50, multiply_expr(10, 5), "multiply_expr(10, 5) = 50")
+    assertEquals(10, max_expr(10, 5), "max_expr(10, 5) = 10")
+    assertEquals(20, max_expr(10, 20), "max_expr(10, 20) = 20")
+    return __test_failures
+}
+
+// ============================================================
+// Test 3: Void return functions (Section 6.1)
+// ============================================================
+let mut void_side_effect: u64 = 0
+
+func void_func() {
+    void_side_effect = 42
+}
+
+func void_func_with_param(x: u64) {
+    void_side_effect = x
+}
+
+@test(expect=0)
+func test_void_functions(): u64 {
+    void_side_effect = 0
+    void_func()
+    assertEquals(42, void_side_effect, "void func sets side effect")
+
+    void_func_with_param(99)
+    assertEquals(99, void_side_effect, "void func with param sets side effect")
+
+    return __test_failures
+}
+
+// ============================================================
+// Test 4: Function with multiple parameters (Section 6.1)
+// ============================================================
+func sum4(a: u64, b: u64, c: u64, d: u64): u64 {
+    return a + b + c + d
+}
+
+func sum6(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64): u64 {
+    return a + b + c + d + e + f
+}
+
+@test(expect=0)
+func test_multi_param(): u64 {
+    assertEquals(10, sum4(1, 2, 3, 4), "sum4(1,2,3,4) = 10")
+    assertEquals(21, sum6(1, 2, 3, 4, 5, 6), "sum6(1..6) = 21")
+    return __test_failures
+}
+
+// ============================================================
+// Test 5: Function with no parameters (Section 6.1)
+// ============================================================
+func get_forty_two(): u64 {
+    return 42
+}
+
+@test(expect=0)
+func test_no_param(): u64 {
+    assertEquals(42, get_forty_two(), "no-param function returns 42")
+    return __test_failures
+}
+
+// ============================================================
+// Test 6: Nested function calls (Section 6.1)
+// ============================================================
+func double(x: u64): u64 {
+    return x * 2
+}
+
+func quadruple(x: u64): u64 {
+    return double(double(x))
+}
+
+@test(expect=0)
+func test_nested_calls(): u64 {
+    assertEquals(40, quadruple(10), "quadruple(10) = 40")
+    assertEquals(8, double(double(2)), "nested double(double(2)) = 8")
+    return __test_failures
+}
+
+// ============================================================
+// Test 7: Function with signed parameters (Section 6.1)
+// ============================================================
+func signed_add(a: i64, b: i64): i64 {
+    return a + b
+}
+
+func signed_negate(x: i64): i64 {
+    return -x
+}
+
+@test(expect=0)
+func test_signed_params(): u64 {
+    assertEquals(30, signed_add(10, 20), "signed_add(10, 20) = 30")
+    assertEquals(-10, signed_add(10, -20), "signed_add(10, -20) = -10")
+    assertEquals(-42, signed_negate(42), "signed_negate(42) = -42")
+    assertEquals(42, signed_negate(-42), "signed_negate(-42) = 42")
+    return __test_failures
+}
+
+// ============================================================
+// Test 8: Function with boolean parameters (Section 6.1)
+// ============================================================
+func bool_to_u64(b: bool): u64 {
+    if b {
+        return 1
+    }
+    return 0
+}
+
+func logical_and(a: bool, b: bool): bool {
+    return a and b
+}
+
+@test(expect=0)
+func test_bool_params(): u64 {
+    assertEquals(1, bool_to_u64(true), "bool_to_u64(true) = 1")
+    assertEquals(0, bool_to_u64(false), "bool_to_u64(false) = 0")
+    assertTrue(logical_and(true, true), "true and true = true")
+    assertTrue(not logical_and(true, false), "true and false = false")
+    return __test_failures
+}
+
+// ============================================================
+// Test 9: Inline function attribute (Section 6.2)
+// ============================================================
+inline func inline_add(a: u64, b: u64): u64 {
+    return a + b
+}
+
+@test(expect=0)
+func test_inline_attribute(): u64 {
+    assertEquals(30, inline_add(10, 20), "inline function works")
+    return __test_failures
+}
+
+// ============================================================
+// Test 10: @force_inline attribute (Section 6.2)
+// ============================================================
+@force_inline func force_inline_double(x: u64): u64 {
+    return x * 2
+}
+
+@test(expect=0)
+func test_force_inline(): u64 {
+    assertEquals(84, force_inline_double(42), "@force_inline function works")
+    return __test_failures
+}
+
+// ============================================================
+// Test 11: @no_inline attribute (Section 6.2)
+// ============================================================
+@no_inline func no_inline_func(x: u64): u64 {
+    return x + 1
+}
+
+@test(expect=0)
+func test_no_inline(): u64 {
+    assertEquals(43, no_inline_func(42), "@no_inline function works")
+    return __test_failures
+}
+
+// ============================================================
+// Test 12: @export attribute (Section 6.2)
+// ============================================================
+@export func exported_func(): u64 {
+    return 42
+}
+
+@test(expect=0)
+func test_export_attribute(): u64 {
+    assertEquals(42, exported_func(), "@export function works")
+    return __test_failures
+}
+
+// ============================================================
+// Test 13: @entry attribute (Section 6.2)
+// ============================================================
+@entry(0x100000) func entry_point(): u64 {
+    return 42
+}
+
+@test(expect=0)
+func test_entry_attribute(): u64 {
+    assertEquals(42, entry_point(), "@entry function works")
+    return __test_failures
+}
+
+// ============================================================
+// Test 14: @test attribute (Section 6.2)
+// ============================================================
+@test(expect=0)
+func test_test_attribute(): u64 {
+    assertEquals(0, __test_failures, "@test attribute works")
+    return __test_failures
+}
+
+// ============================================================
+// Test 15: Default parameters (Section 6.3)
+// ============================================================
+func greet(name: string, greeting: string = "Hello"): string {
+    return greeting + " " + name
+}
+
+func create_rect(width: u64 = 800, height: u64 = 600): u64 {
+    return width * height
+}
+
+@test(expect=0)
+func test_default_params(): u64 {
+    // Just verify these compile and run without crash
+    let msg1 = greet("World")
+    let msg2 = greet("World", "Hi")
+    let area1 = create_rect()
+    let area2 = create_rect(1024, 768)
+
+    assertEquals(480000, area1, "default rect area = 800*600 = 480000")
+    assertEquals(786432, area2, "explicit rect area = 1024*768 = 786432")
+    return __test_failures
+}
+
+// ============================================================
+// Test 16: Default parameter with one required (Section 6.3)
+// ============================================================
+func power_default(base: u64, exp: u64 = 2): u64 {
+    let mut result: u64 = 1
+    let mut i: u64 = 0
+    while i < exp {
+        result = result * base
+        i = i + 1
+    }
+    return result
+}
+
+@test(expect=0)
+func test_default_param_variants(): u64 {
+    assertEquals(25, power_default(5), "5^2 = 25 (default exp)")
+    assertEquals(125, power_default(5, 3), "5^3 = 125 (explicit exp)")
+    assertEquals(1, power_default(5, 0), "5^0 = 1 (explicit exp=0)")
+    return __test_failures
+}
+
+// ============================================================
+// Test 17: Extern function declaration (Section 6.5)
+// ============================================================
+// Note: extern functions are declared without body.
+// They can't be called in tests without linking, but we verify parsing.
+extern func puts(s: string): i64
+
+@test(expect=0)
+func test_extern_declaration(): u64 {
+    // Just verify the extern declaration compiles
+    assertEquals(0, __test_failures, "extern function declaration compiles")
+    return __test_failures
+}
+
+// ============================================================
+// Test 18: Variadic functions — basic (Section 6.4)
+// ============================================================
+func variadic_sum(values: ...u64): u64 {
+    let mut total: u64 = 0
+    for v in values {
+        total = total + v
+    }
+    return total
+}
+
+@test(expect=0)
+func test_variadic_basic(): u64 {
+    assertEquals(15, variadic_sum(1, 2, 3, 4, 5), "variadic sum 1..5 = 15")
+    assertEquals(0, variadic_sum(), "empty variadic = 0")
+    assertEquals(42, variadic_sum(42), "single variadic = 42")
+    return __test_failures
+}
+
+// ============================================================
+// Test 19: Variadic with regular params (Section 6.4)
+// ============================================================
+func variadic_with_prefix(factor: u64, values: ...u64): u64 {
+    let mut total: u64 = 0
+    for v in values {
+        total = total + v
+    }
+    return total * factor
+}
+
+@test(expect=0)
+func test_variadic_with_prefix(): u64 {
+    assertEquals(30, variadic_with_prefix(2, 1, 2, 3, 4, 5), "2 * sum(1..5) = 30")
+    assertEquals(0, variadic_with_prefix(5), "5 * empty = 0")
+    return __test_failures
+}
+
+// ============================================================
+// Test 20: Variadic with many elements (Section 6.4)
+// ============================================================
+func variadic_many(values: ...u64): u64 {
+    let mut total: u64 = 0
+    for v in values {
+        total = total + v
+    }
+    return total
+}
+
+@test(expect=0)
+func test_variadic_many(): u64 {
+    // 0..9 = 45
+    assertEquals(45, variadic_many(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "variadic 0..9 = 45")
+    // 0..19 = 190
+    assertEquals(190, variadic_many(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19), "variadic 0..19 = 190")
+    return __test_failures
+}
+
+// ============================================================
+// Test 21: Variadic with for loop index (Section 6.4)
+// ============================================================
+func variadic_with_index(values: ...u64): u64 {
+    let mut total: u64 = 0
+    for i, v in values {
+        total = total + v
+    }
+    return total
+}
+
+@test(expect=0)
+func test_variadic_with_index(): u64 {
+    assertEquals(15, variadic_with_index(1, 2, 3, 4, 5), "variadic with index = 15")
+    return __test_failures
+}
+
+// ============================================================
+// Test 22: Variadic with different integer types (Section 6.4)
+// ============================================================
+func variadic_u8(values: ...u8): u64 {
+    let mut total: u64 = 0
+    for v in values {
+        total = total + v
+    }
+    return total
+}
+
+func variadic_i64(values: ...i64): i64 {
+    let mut total: i64 = 0
+    for v in values {
+        total = total + v
+    }
+    return total
+}
+
+@test(expect=0)
+func test_variadic_types(): u64 {
+    assertEquals(15, variadic_u8(1, 2, 3, 4, 5), "variadic u8 sum = 15")
+    assertEquals(15, variadic_i64(1, 2, 3, 4, 5), "variadic i64 sum = 15")
+    assertEquals(-5, variadic_i64(1, 2, 3, 4, -15), "variadic i64 negative = -5")
+    return __test_failures
+}
+
+// ============================================================
+// Test 23: Function calling another function (Section 6.1)
+// ============================================================
+func helper_square(x: u64): u64 {
+    return x * x
+}
+
+func helper_cube(x: u64): u64 {
+    return helper_square(x) * x
+}
+
+@test(expect=0)
+func test_function_chaining(): u64 {
+    assertEquals(25, helper_square(5), "square(5) = 25")
+    assertEquals(125, helper_cube(5), "cube(5) = 125")
+    return __test_failures
+}
+
+// ============================================================
+// Test 24: Function with early returns (Section 6.1)
+// ============================================================
+func early_return(x: u64): u64 {
+    if x == 0 {
+        return 0
+    }
+    if x == 1 {
+        return 1
+    }
+    return x * 2
+}
+
+@test(expect=0)
+func test_early_returns(): u64 {
+    assertEquals(0, early_return(0), "early return 0")
+    assertEquals(1, early_return(1), "early return 1")
+    assertEquals(10, early_return(5), "normal return 5*2 = 10")
+    return __test_failures
+}
+
+// ============================================================
+// Test 25: Function with conditional return (Section 6.1)
+// ============================================================
+func conditional_return(x: i64): i64 {
+    if x > 0 {
+        return 1
+    } elif x < 0 {
+        return -1
+    }
+    return 0
+}
+
+@test(expect=0)
+func test_conditional_return(): u64 {
+    assertEquals(1, conditional_return(10), "positive -> 1")
+    assertEquals(-1, conditional_return(-10), "negative -> -1")
+    assertEquals(0, conditional_return(0), "zero -> 0")
+    return __test_failures
+}
+
+// ============================================================
+// Test 26: Function with string parameter (Section 6.1)
+// ============================================================
+func string_length(s: string): u64 {
+    let mut len: u64 = 0
+    while s[len] != 0 {
+        len = len + 1
+    }
+    return len
+}
+
+@test(expect=0)
+func test_string_param(): u64 {
+    assertEquals(5, string_length("hello"), "string_length('hello') = 5")
+    assertEquals(0, string_length(""), "string_length('') = 0")
+    assertEquals(11, string_length("hello world"), "string_length('hello world') = 11")
+    return __test_failures
+}
+
+// ============================================================
+// Test 27: Function with mixed parameter types (Section 6.1)
+// ============================================================
+func mixed_params(count: u64, label: string, flag: bool): u64 {
+    if flag {
+        return count
+    }
+    return 0
+}
+
+@test(expect=0)
+func test_mixed_params(): u64 {
+    assertEquals(42, mixed_params(42, "test", true), "mixed params with flag=true")
+    assertEquals(0, mixed_params(42, "test", false), "mixed params with flag=false")
+    return __test_failures
+}
+
+// ============================================================
+// Test 28: Function with modulo operation (Section 6.1)
+// ============================================================
+func modulo(a: u64, b: u64): u64 {
+    return a % b
+}
+
+@test(expect=0)
+func test_modulo_func(): u64 {
+    assertEquals(0, modulo(10, 5), "10 % 5 = 0")
+    assertEquals(3, modulo(10, 7), "10 % 7 = 3")
+    assertEquals(1, modulo(7, 3), "7 % 3 = 1")
+    return __test_failures
+}
+
+// ============================================================
+// Test 29: Function with bitwise operations (Section 6.1)
+// ============================================================
+func bitwise_and(a: u64, b: u64): u64 {
+    return a & b
+}
+
+func bitwise_or(a: u64, b: u64): u64 {
+    return a | b
+}
+
+func bitwise_xor(a: u64, b: u64): u64 {
+    return a ^ b
+}
+
+@test(expect=0)
+func test_bitwise_funcs(): u64 {
+    assertEquals(0b1000, bitwise_and(0b1010, 0b1100), "bitwise AND")
+    assertEquals(0b1110, bitwise_or(0b1010, 0b1100), "bitwise OR")
+    assertEquals(0b0110, bitwise_xor(0b1010, 0b1100), "bitwise XOR")
+    return __test_failures
+}
+
+// ============================================================
+// Test 30: Function with shift operations (Section 6.1)
+// ============================================================
+func shift_left(x: u64, n: u64): u64 {
+    return x << n
+}
+
+func shift_right(x: u64, n: u64): u64 {
+    return x >> n
+}
+
+@test(expect=0)
+func test_shift_funcs(): u64 {
+    assertEquals(0b101000, shift_left(0b1010, 2), "left shift by 2")
+    assertEquals(0b0101, shift_right(0b1010, 1), "right shift by 1")
+    return __test_failures
+}
+
+// ============================================================
+// Test 31: Function with comparison operators (Section 6.1)
+// ============================================================
+func is_equal(a: u64, b: u64): bool {
+    return a == b
+}
+
+func is_not_equal(a: u64, b: u64): bool {
+    return a != b
+}
+
+func is_less(a: u64, b: u64): bool {
+    return a < b
+}
+
+func is_greater(a: u64, b: u64): bool {
+    return a > b
+}
+
+@test(expect=0)
+func test_comparison_funcs(): u64 {
+    assertTrue(is_equal(5, 5), "5 == 5")
+    assertTrue(not is_equal(5, 6), "5 != 6")
+    assertTrue(is_not_equal(5, 6), "5 != 6")
+    assertTrue(is_less(3, 5), "3 < 5")
+    assertTrue(not is_less(5, 3), "5 < 3 is false")
+    assertTrue(is_greater(5, 3), "5 > 3")
+    assertTrue(not is_greater(3, 5), "3 > 5 is false")
+    return __test_failures
+}
+
+// ============================================================
+// Test 32: Function with logical operators (Section 6.1)
+// ============================================================
+func logical_not(b: bool): bool {
+    return not b
+}
+
+@test(expect=0)
+func test_logical_funcs(): u64 {
+    assertTrue(logical_not(false), "not false = true")
+    assertTrue(not logical_not(true), "not true = false")
+    return __test_failures
+}
+
+// ============================================================
+// Test 33: Function with while loop inside (Section 6.1)
+// ============================================================
+func sum_to_n(n: u64): u64 {
+    let mut total: u64 = 0
+    let mut i: u64 = 0
+    while i <= n {
+        total = total + i
+        i = i + 1
+    }
+    return total
+}
+
+@test(expect=0)
+func test_func_with_while(): u64 {
+    assertEquals(0, sum_to_n(0), "sum_to_n(0) = 0")
+    assertEquals(1, sum_to_n(1), "sum_to_n(1) = 1")
+    assertEquals(3, sum_to_n(2), "sum_to_n(2) = 3")
+    assertEquals(55, sum_to_n(10), "sum_to_n(10) = 55")
+    return __test_failures
+}
+
+// ============================================================
+// Test 34: Function with for loop inside (Section 6.1)
+// ============================================================
+func sum_range(n: u64): u64 {
+    let mut total: u64 = 0
+    for i in 0..n {
+        total = total + i
+    }
+    return total
+}
+
+@test(expect=0)
+func test_func_with_for(): u64 {
+    assertEquals(0, sum_range(0), "sum_range(0) = 0")
+    assertEquals(0, sum_range(1), "sum_range(1) = 0")
+    assertEquals(1, sum_range(2), "sum_range(2) = 1")
+    assertEquals(45, sum_range(10), "sum_range(10) = 45")
+    return __test_failures
+}
+
+// ============================================================
+// Test 35: Function with match inside (Section 6.1)
+// ============================================================
+func classify_number(x: u64): u64 {
+    return match x {
+        case 0 -> 0
+        case 1..9 -> 1
+        case _ -> 2
+    }
+}
+
+@test(expect=0)
+func test_func_with_match(): u64 {
+    assertEquals(0, classify_number(0), "classify 0 -> 0")
+    assertEquals(1, classify_number(5), "classify 5 -> 1")
+    assertEquals(2, classify_number(10), "classify 10 -> 2")
+    assertEquals(2, classify_number(100), "classify 100 -> 2")
+    return __test_failures
+}
+
+// ============================================================
+// Test 36: Function with nested if/else (Section 6.1)
+// ============================================================
+func fizzbuzz(n: u64): u64 {
+    if n % 15 == 0 {
+        return 0
+    } elif n % 3 == 0 {
+        return 1
+    } elif n % 5 == 0 {
+        return 2
+    }
+    return 3
+}
+
+@test(expect=0)
+func test_fizzbuzz(): u64 {
+    assertEquals(0, fizzbuzz(15), "fizzbuzz(15) = 0 (fizzbuzz)")
+    assertEquals(1, fizzbuzz(3), "fizzbuzz(3) = 1 (fizz)")
+    assertEquals(2, fizzbuzz(5), "fizzbuzz(5) = 2 (buzz)")
+    assertEquals(3, fizzbuzz(7), "fizzbuzz(7) = 3 (neither)")
+    assertEquals(0, fizzbuzz(30), "fizzbuzz(30) = 0 (fizzbuzz)")
+    assertEquals(1, fizzbuzz(9), "fizzbuzz(9) = 1 (fizz)")
+    assertEquals(2, fizzbuzz(10), "fizzbuzz(10) = 2 (buzz)")
+    return __test_failures
+}
+
+// ============================================================
+// Test 37: Function with multiple return paths (Section 6.1)
+// ============================================================
+func abs(x: i64): u64 {
+    if x < 0 {
+        return -x
+    }
+    return x
+}
+
+@test(expect=0)
+func test_abs(): u64 {
+    assertEquals(42, abs(42), "abs(42) = 42")
+    assertEquals(42, abs(-42), "abs(-42) = 42")
+    assertEquals(0, abs(0), "abs(0) = 0")
+    return __test_failures
+}
+
+// ============================================================
+// Test 38: Function with compound assignment (Section 6.1)
+// ============================================================
+func accumulate(values: ...u64): u64 {
+    let mut result: u64 = 0
+    for v in values {
+        result += v
+    }
+    return result
+}
+
+@test(expect=0)
+func test_accumulate(): u64 {
+    assertEquals(15, accumulate(1, 2, 3, 4, 5), "accumulate 1..5 = 15")
+    assertEquals(0, accumulate(), "accumulate empty = 0")
+    return __test_failures
+}
+
+// ============================================================
+// Test 39: Function calling variadic function (Section 6.4)
+// ============================================================
+func wrapper_sum(a: u64, b: u64, c: u64): u64 {
+    return variadic_sum(a, b, c)
+}
+
+@test(expect=0)
+func test_wrapper_variadic(): u64 {
+    assertEquals(6, wrapper_sum(1, 2, 3), "wrapper variadic sum = 6")
+    return __test_failures
+}
+
+// ============================================================
+// Test 40: Function with inline and @force_inline together (Section 6.2)
+// ============================================================
+inline func inline_identity(x: u64): u64 {
+    return x
+}
+
+@force_inline func force_inline_identity(x: u64): u64 {
+    return x
+}
+
+@test(expect=0)
+func test_inline_combinations(): u64 {
+    assertEquals(42, inline_identity(42), "inline identity")
+    assertEquals(99, force_inline_identity(99), "force_inline identity")
+    return __test_failures
+}
+
+// ============================================================
+// Main test runner
+// ============================================================
+@test(expect=0)
+func main(): u64 {
+    let failures: u64 = 0
+
+    failures += test_basic_function_calls()
+    failures += test_expression_bodied()
+    failures += test_void_functions()
+    failures += test_multi_param()
+    failures += test_no_param()
+    failures += test_nested_calls()
+    failures += test_signed_params()
+    failures += test_bool_params()
+    failures += test_inline_attribute()
+    failures += test_force_inline()
+    failures += test_no_inline()
+    failures += test_export_attribute()
+    failures += test_entry_attribute()
+    failures += test_test_attribute()
+    failures += test_default_params()
+    failures += test_default_param_variants()
+    failures += test_extern_declaration()
+    failures += test_variadic_basic()
+    failures += test_variadic_with_prefix()
+    failures += test_variadic_many()
+    failures += test_variadic_with_index()
+    failures += test_variadic_types()
+    failures += test_function_chaining()
+    failures += test_early_returns()
+    failures += test_conditional_return()
+    failures += test_string_param()
+    failures += test_mixed_params()
+    failures += test_modulo_func()
+    failures += test_bitwise_funcs()
+    failures += test_shift_funcs()
+    failures += test_comparison_funcs()
+    failures += test_logical_funcs()
+    failures += test_func_with_while()
+    failures += test_func_with_for()
+    failures += test_func_with_match()
+    failures += test_fizzbuzz()
+    failures += test_abs()
+    failures += test_accumulate()
+    failures += test_wrapper_variadic()
+    failures += test_inline_combinations()
+
+    print("test_functions.ae: {failures} failures total\n")
+    return failures
+}

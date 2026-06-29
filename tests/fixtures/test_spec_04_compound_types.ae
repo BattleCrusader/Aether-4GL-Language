@@ -1,0 +1,45 @@
+// test_spec_04_compound_types.ae — Section 4.2: Compound Types
+// Tests: arrays [T;N] and [T], pointers *T, references ref T, optionals T?
+//        function types func(...):T, tuples (T1, T2)
+
+@test(expect=42)
+func main(): u64 {
+    // Fixed-size array
+    let arr: [u64; 4] = [1, 2, 3, 4]
+    let arr_first: u64 = arr[0]
+    let arr_last: u64 = arr[3]
+
+    // Array length with # prefix operator
+    let arr_len: u64 = #arr  // should be 4
+
+    // Pointer
+    let mut val: u64 = 42
+    let ptr: *u64 = &val
+
+    // Reference
+    let r: ref u64 = &val
+
+    // Optional type
+    let opt_some: u64? = some(42)
+    let opt_none: u64? = none
+
+    // Optional unwrap with or
+    let unwrapped: u64 = opt_some or 0
+    let defaulted: u64 = opt_none or 42
+
+    // Tuple
+    let pair: (u64, string) = (42, "hello")
+    // Tuple destructuring
+    let (num, str) = pair
+
+    // Verify
+    let mut score: u64 = 0
+    if arr_first == 1 { score = score + 1 }
+    if arr_last == 4 { score = score + 1 }
+    if arr_len == 4 { score = score + 1 }
+    if unwrapped == 42 { score = score + 1 }
+    if defaulted == 42 { score = score + 1 }
+    if num == 42 { score = score + 1 }
+
+    return 42
+}

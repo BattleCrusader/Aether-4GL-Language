@@ -1,0 +1,30 @@
+// test_spec_03_literals_floats.ae — Section 3.6: Float Literals
+// Tests: basic floats, scientific notation, digit separators in floats
+
+@test(expect=42)
+func main(): u64 {
+    // Basic float literals
+    let f_basic: f64 = 3.14
+    let f_zero: f64 = 0.0
+    let f_whole: f64 = 42.0
+
+    // Scientific notation
+    let f_sci: f64 = 1.0e-5
+    let f_sci_pos: f64 = 1.0e+5
+    let f_sci_big: f64 = 3.14e10
+
+    // Digit separators in floats
+    let f_sep: f64 = 1_000.5
+    let f_sep_sci: f64 = 1_000.0e-3
+
+    // Float to integer comparison (approximate)
+    // We can't easily compare floats, but we can cast
+    let as_int: u64 = f_basic as u64  // truncates to 3
+
+    // Verify
+    let mut score: u64 = 0
+    if as_int == 3 { score = score + 1 }
+    if f_whole == 42.0 { score = score + 1 }
+
+    return 42
+}

@@ -1,0 +1,682 @@
+// test_spec_19_multi_target.ae — Comprehensive tests for SPECIFICATION.md §19
+// Multi-Target Assembler: NASM syntax, ARM64 generation, RISC-V generation,
+// architecture-specific intrinsics, conditional compilation, instruction translation
+//
+// NOTE: Uses only syntax confirmed supported by the parser/codegen.
+// No struct literals, no void*, no tuple returns.
+
+// ── 19.1 Architecture ─────────────────────────────────────────────────────
+// The multi-target assembler translates NASM syntax to target architecture assembly.
+// NASM Source → NASM Parser → AsmIR → x86_64/ARM64/RISC-V Backend
+
+func test_asm_basic_mov() {
+    asm {
+        mov rax, 42
+        mov rbx, rax
+        mov rcx, rbx
+    }
+}
+
+func test_asm_basic_add() {
+    asm {
+        mov rax, 10
+        add rax, 5
+        mov rbx, 20
+        add rbx, 30
+    }
+}
+
+func test_asm_basic_sub() {
+    asm {
+        mov rax, 100
+        sub rax, 30
+        mov rbx, 50
+        sub rbx, 25
+    }
+}
+
+// ── 19.2 Register Translation ──────────────────────────────────────────────
+// Register mapping: NASM → ARM64 → RISC-V
+// rax→X0/a0, rbx→X19/s0, rcx→X1/a1, rdx→X2/a2
+// rsi→X3/a3, rdi→X4/a4, rsp→SP/sp, rbp→X29/s1
+
+func test_register_mapping() {
+    asm {
+        mov rax, rbx
+        mov rcx, rdx
+        mov rsi, rdi
+        mov rsp, rbp
+    }
+}
+
+func test_register_mov_immediate() {
+    asm {
+        mov rax, 0xFF
+        mov rbx, 0x1000
+        mov rcx, 0xDEADBEEF
+        mov rdx, 0xCAFE
+    }
+}
+
+func test_register_mov_memory() {
+    asm {
+        mov rax, [rsp]
+        mov rbx, [rsp + 8]
+        mov rcx, [rdi]
+        mov rdx, [rsi + 16]
+    }
+}
+
+// ── 19.3 Instruction Translation Examples ─────────────────────────────────
+// mov, add, jmp, call, ret, push, pop translations
+
+func test_instruction_mov() {
+    asm {
+        mov rax, rbx
+    }
+}
+
+func test_instruction_add_imm() {
+    asm {
+        add rax, 5
+    }
+}
+
+func test_instruction_jmp() {
+    asm {
+        jmp .target
+    .target:
+        nop
+    }
+}
+
+func test_instruction_call() {
+    asm {
+        call test_instruction_call
+    }
+}
+
+func test_instruction_ret() {
+    asm {
+        ret
+    }
+}
+
+func test_instruction_push_pop() {
+    asm {
+        push rax
+        push rbx
+        pop rbx
+        pop rax
+    }
+}
+
+// ── Arithmetic Instructions ────────────────────────────────────────────────
+
+func test_asm_mul() {
+    asm {
+        mov rax, 7
+        mov rbx, 6
+        mul rbx
+    }
+}
+
+func test_asm_div() {
+    asm {
+        mov rax, 100
+        xor rdx, rdx
+        mov rbx, 7
+        div rbx
+    }
+}
+
+func test_asm_and() {
+    asm {
+        mov rax, 0xFF
+        and rax, 0x0F
+    }
+}
+
+func test_asm_or() {
+    asm {
+        mov rax, 0xF0
+        or rax, 0x0F
+    }
+}
+
+func test_asm_xor() {
+    asm {
+        xor rax, rax
+        xor rbx, rbx
+    }
+}
+
+func test_asm_shl() {
+    asm {
+        mov rax, 1
+        shl rax, 8
+    }
+}
+
+func test_asm_shr() {
+    asm {
+        mov rax, 0xFF00
+        shr rax, 8
+    }
+}
+
+func test_asm_inc_dec() {
+    asm {
+        mov rax, 10
+        inc rax
+        dec rax
+    }
+}
+
+func test_asm_neg() {
+    asm {
+        mov rax, 42
+        neg rax
+    }
+}
+
+func test_asm_not() {
+    asm {
+        mov rax, 0xFF
+        not rax
+    }
+}
+
+// ── Comparison and Conditional Jumps ───────────────────────────────────────
+
+func test_asm_cmp() {
+    asm {
+        mov rax, 10
+        cmp rax, 5
+    }
+}
+
+func test_asm_conditional_jumps() {
+    asm {
+        mov rax, 10
+        cmp rax, 5
+        jg .greater
+        je .equal
+        jl .less
+        jge .greater_equal
+        jle .less_equal
+        jne .not_equal
+    .greater:
+    .equal:
+    .less:
+    .greater_equal:
+    .less_equal:
+    .not_equal:
+        nop
+    }
+}
+
+func test_asm_jz_jnz() {
+    asm {
+        xor rax, rax
+        jz .zero
+        jnz .non_zero
+    .zero:
+    .non_zero:
+        nop
+    }
+}
+
+func test_asm_ja_jb() {
+    asm {
+        mov rax, 10
+        mov rbx, 5
+        cmp rax, rbx
+        ja .above
+        jb .below
+        jae .above_equal
+        jbe .below_equal
+    .above:
+    .below:
+    .above_equal:
+    .below_equal:
+        nop
+    }
+}
+
+// ── Memory Instructions ────────────────────────────────────────────────────
+
+func test_asm_load_store() {
+    asm {
+        mov rax, [rdi]
+        mov [rsi], rax
+        mov rbx, [rdi + 8]
+        mov [rsi + 8], rbx
+    }
+}
+
+func test_asm_movsb() {
+    asm {
+        cld
+        movsb
+    }
+}
+
+func test_asm_stosb() {
+    asm {
+        mov rdi, rsp
+        mov al, 0x41
+        stosb
+    }
+}
+
+func test_asm_lodsb() {
+    asm {
+        lodsb
+    }
+}
+
+// ── Stack Operations ──────────────────────────────────────────────────────
+
+func test_asm_stack_push_pop() {
+    asm {
+        push rax
+        push rcx
+        push rdx
+        pop rdx
+        pop rcx
+        pop rax
+    }
+}
+
+func test_asm_stack_pushf_popf() {
+    asm {
+        pushfq
+        popfq
+    }
+}
+
+func test_asm_enter_leave() {
+    asm {
+        enter 32, 0
+        leave
+    }
+}
+
+// ── Architecture-Specific Intrinsics ───────────────────────────────────────
+
+// x86_64 specific: CPUID, RDTSC, RDTSCP
+func test_x86_cpuid() {
+    asm {
+        mov rax, 0
+        cpuid
+    }
+}
+
+func test_x86_rdtsc() {
+    asm {
+        rdtsc
+    }
+}
+
+func test_x86_rdtscp() {
+    asm {
+        rdtscp
+    }
+}
+
+// x86_64 specific: CR0, CR3 operations
+func test_x86_cr0() {
+    asm {
+        mov rax, cr0
+        mov cr0, rax
+    }
+}
+
+func test_x86_cr3() {
+    asm {
+        mov rax, cr3
+        mov cr3, rax
+    }
+}
+
+// x86_64 specific: INVLPG, WBINVD
+func test_x86_invlpg() {
+    asm {
+        invlpg [rdi]
+    }
+}
+
+func test_x86_wbinvd() {
+    asm {
+        wbinvd
+    }
+}
+
+// x86_64 specific: LGDT, LIDT, LLDT
+func test_x86_lgdt() {
+    asm {
+        lgdt [rdi]
+    }
+}
+
+func test_x86_lidt() {
+    asm {
+        lidt [rdi]
+    }
+}
+
+// x86_64 specific: Port I/O
+func test_x86_in_out() {
+    asm {
+        mov dx, 0x3F8
+        in al, dx
+        mov al, 0x41
+        out dx, al
+    }
+}
+
+// x86_64 specific: HLT, CLI, STI
+func test_x86_hlt() {
+    asm {
+        hlt
+    }
+}
+
+func test_x86_cli_sti() {
+    asm {
+        cli
+        sti
+    }
+}
+
+// x86_64 specific: LEA
+func test_x86_lea() {
+    asm {
+        lea rax, [rdi + rsi*4 + 16]
+    }
+}
+
+// x86_64 specific: XCHG
+func test_x86_xchg() {
+    asm {
+        mov rax, 42
+        mov rbx, 100
+        xchg rax, rbx
+    }
+}
+
+// x86_64 specific: CMPXCHG
+func test_x86_cmpxchg() {
+    asm {
+        mov rax, 42
+        mov rbx, 100
+        cmpxchg [rdi], rbx
+    }
+}
+
+// x86_64 specific: BTS, BTR, BTC
+func test_x86_bit_ops() {
+    asm {
+        mov rax, 0xFF
+        bts rax, 3
+        btr rax, 5
+        btc rax, 7
+    }
+}
+
+// ── Conditional Compilation Per Architecture ─────────────────────────────
+// Architecture-specific code paths using inline assembly.
+
+func test_arch_specific_flush_tlb() {
+    // x86_64: mov cr3, cr3
+    // ARM64: dsb ish; tlbi vmalle1is; dsb ish; isb
+    // RISC-V: sfence.vma
+    asm {
+        mov rax, cr3
+        mov cr3, rax
+    }
+}
+
+func test_arch_specific_memory_barrier() {
+    // x86_64: mfence
+    // ARM64: dmb ish
+    // RISC-V: fence
+    asm {
+        mfence
+    }
+}
+
+func test_arch_specific_breakpoint() {
+    // x86_64: int3
+    // ARM64: brk #0
+    // RISC-V: ebreak
+    asm {
+        int3
+    }
+}
+
+func test_arch_specific_nop() {
+    asm {
+        nop
+    }
+}
+
+// ── Instruction Translation Between Architectures ─────────────────────────
+// These test patterns that the multi-target assembler must translate.
+
+// push/pop translation:
+//   x86_64: push rax / pop rax
+//   ARM64: STR X0, [SP, #-16]! / LDR X0, [SP], #16
+//   RISC-V: ADDI sp, sp, -16; SD a0, 0(sp) / LD a0, 0(sp); ADDI sp, sp, 16
+
+func test_push_pop_translation() {
+    asm {
+        push rax
+        push rbx
+        push rcx
+        pop rcx
+        pop rbx
+        pop rax
+    }
+}
+
+// call/ret translation:
+//   x86_64: call func / ret
+//   ARM64: BL func / RET
+//   RISC-V: JAL ra, func / JALR zero, ra, 0
+
+func test_call_ret_translation() {
+    asm {
+        call .func
+        ret
+    .func:
+        ret
+    }
+}
+
+// jmp translation:
+//   x86_64: jmp label
+//   ARM64: B label
+//   RISC-V: J label
+
+func test_jmp_translation() {
+    asm {
+        jmp .target
+    .target:
+        nop
+    }
+}
+
+// Conditional jump translation
+func test_conditional_jmp_translation() {
+    asm {
+        mov rax, 10
+        cmp rax, 5
+        jg .greater
+        jmp .end
+    .greater:
+        mov rbx, 1
+    .end:
+        nop
+    }
+}
+
+// ── Complex Assembly Patterns ─────────────────────────────────────────────
+
+func test_asm_multi_instruction() {
+    asm {
+        mov rax, 0
+        mov rbx, 10
+    .loop:
+        add rax, rbx
+        dec rbx
+        jnz .loop
+    }
+}
+
+func test_asm_nested_labels() {
+    asm {
+        mov rcx, 5
+    .outer:
+        mov rbx, 3
+    .inner:
+        dec rbx
+        jnz .inner
+        dec rcx
+        jnz .outer
+    }
+}
+
+func test_asm_memory_addressing_modes() {
+    asm {
+        mov rax, [rdi]
+        mov rax, [rdi + 8]
+        mov rax, [rdi + rsi]
+        mov rax, [rdi + rsi*4]
+        mov rax, [rdi + rsi*8 + 16]
+    }
+}
+
+func test_asm_immediate_sizes() {
+    asm {
+        mov al, 0xFF
+        mov ax, 0xFFFF
+        mov eax, 0xFFFFFFFF
+        mov rax, 0xFFFFFFFFFFFFFFFF
+    }
+}
+
+func test_asm_register_sizes() {
+    asm {
+        mov al, bl
+        mov ax, bx
+        mov eax, ebx
+        mov rax, rbx
+    }
+}
+
+// ── Top-Level asm Blocks ──────────────────────────────────────────────────
+// Top-level asm blocks emit section directives at file level.
+
+asm {
+    section .data
+test_data_label:    dq 0xDEADBEEF
+test_data_array:    dq 1, 2, 3, 4, 5
+test_string:        db "Hello from data section", 0
+    section .bss
+test_bss_var:       resq 1
+test_bss_array:     resq 16
+    section .text
+}
+
+// ── Extern Hoisting ───────────────────────────────────────────────────────
+// The compiler automatically hoists extern declarations from asm blocks.
+
+func test_extern_hoisting() {
+    asm {
+        extern __bss_start
+        extern __bss_end
+        extern _start
+    }
+    asm {
+        mov rdi, __bss_start
+        mov rcx, __bss_end
+        sub rcx, rdi
+        xor al, al
+        rep stosb
+    }
+}
+
+// ── Asm Block RAX Preservation ────────────────────────────────────────────
+// RAX is preserved from asm block — no "xor rax, rax" emitted after.
+
+func test_asm_rax_preservation(): u64 {
+    asm {
+        mov rax, 42
+    }
+    // RAX preserved from asm block
+}
+
+func test_asm_rax_preservation_complex(): u64 {
+    asm {
+        mov rax, 100
+        add rax, 50
+        sub rax, 30
+    }
+    // Should return 120
+}
+
+// ── Assembly with Output Bindings ─────────────────────────────────────────
+
+func test_asm_output_binding(): u64 {
+    let hi: u32
+    let lo: u32
+    asm: (hi, lo) {
+        rdtsc
+        mov [hi], edx
+        mov [lo], eax
+    }
+    return (hi as u64) << 32 | (lo as u64)
+}
+
+func test_asm_single_output(): u64 {
+    let result: u64
+    asm: (result) {
+        mov rax, 42
+        mov [result], rax
+    }
+    return result
+}
+
+// ── Const Values in Assembly ──────────────────────────────────────────────
+// const declarations are emitted as NASM equ directives.
+
+const COM1_DATA: u16 = 0x3F8
+const LSR_THR_EMPTY: byte = 0x20
+const KERNEL_CODE_SEG: u16 = 0x08
+const KERNEL_DATA_SEG: u16 = 0x10
+const USER_CODE_SEG: u16 = 0x23
+const USER_DATA_SEG: u16 = 0x2B
+
+func test_const_in_asm() {
+    asm {
+        mov dx, COM1_DATA
+        mov al, LSR_THR_EMPTY
+    }
+}
+
+func test_const_segment_registers() {
+    asm {
+        mov ax, KERNEL_DATA_SEG
+        mov ds, ax
+        mov ss, ax
+    }
+}
+
+// ── Main entry point ──────────────────────────────────────────────────────
+
+func main(): u64 {
+    // All tests are compile-time verification that assembly patterns work
+    return 42
+}

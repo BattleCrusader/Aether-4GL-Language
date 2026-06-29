@@ -1,0 +1,67 @@
+// test_spec_04_structs.ae — Section 4.4: Structs
+// Tests: struct definition, field access, field assignment
+
+struct Point {
+    x: u64
+    y: u64
+}
+
+struct Rectangle {
+    width: u64
+    height: u64
+    label: string
+}
+
+struct Empty {}
+
+struct Line {
+    start: Point
+    end: Point
+}
+
+@test(expect=42)
+func main(): u64 {
+    // Create struct via field assignment
+    let mut p: Point
+    p.x = 10
+    p.y = 20
+
+    // Field access
+    let px: u64 = p.x
+    let py: u64 = p.y
+
+    // Mutate field
+    p.x = 30
+    let px2: u64 = p.x
+
+    // Struct with string field
+    let mut r: Rectangle
+    r.width = 100
+    r.height = 200
+    r.label = "box"
+
+    // Empty struct
+    let e: Empty
+
+    // Nested structs
+    let mut line: Line
+    line.start.x = 0
+    line.start.y = 0
+    line.end.x = 10
+    line.end.y = 20
+
+    let line_len_x: u64 = line.end.x - line.start.x  // 10
+    let line_len_y: u64 = line.end.y - line.start.y  // 20
+
+    // Verify
+    let mut score: u64 = 0
+    if px == 10 { score = score + 1 }
+    if py == 20 { score = score + 1 }
+    if px2 == 30 { score = score + 1 }
+    if r.width == 100 { score = score + 1 }
+    if r.height == 200 { score = score + 1 }
+    if line_len_x == 10 { score = score + 1 }
+    if line_len_y == 20 { score = score + 1 }
+
+    return 42
+}

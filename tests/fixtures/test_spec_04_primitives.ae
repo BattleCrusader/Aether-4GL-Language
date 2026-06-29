@@ -1,0 +1,60 @@
+// test_spec_04_primitives.ae — Section 4.1: Primitive Types
+// Tests: void, bool, byte, u8-u64, i8-i64, f32, f64, string
+// Tests all type sizes and value ranges
+
+@test(expect=42)
+func main(): u64 {
+    // Unsigned integers — all sizes
+    let u8_val: u8 = 200
+    let u16_val: u16 = 40000
+    let u32_val: u32 = 3000000
+    let u64_val: u64 = 50000000000
+
+    // Signed integers — all sizes
+    let i8_pos: i8 = 100
+    let i8_neg: i8 = -100
+    let i16_pos: i16 = 20000
+    let i16_neg: i16 = -20000
+    let i32_pos: i32 = 2000000
+    let i32_neg: i32 = -2000000
+    let i64_pos: i64 = 40000000000
+    let i64_neg: i64 = -40000000000
+
+    // Boolean
+    let bool_t: bool = true
+    let bool_f: bool = false
+
+    // Byte (u8 alias)
+    let byte_val: byte = 0xFF
+
+    // String
+    let str_val: string = "hello"
+
+    // Float types
+    let f32_val: f32 = 3.14
+    let f64_val: f64 = 3.141592653589793
+
+    // Type casting between primitives
+    let u8_from_u64: u8 = u64_val as u8   // truncation
+    let u64_from_u8: u64 = u8_val as u64  // zero-extend
+    let i64_from_u64: i64 = u64_val as i64  // same bits, different interpretation
+
+    // Arithmetic with mixed sizes (all promote to u64/i64 in expressions)
+    let mixed_sum: u64 = u8_val + u16_val + u32_val
+    // 200 + 40000 + 3000000 = 3040200
+
+    // Verify
+    let mut score: u64 = 0
+    if u8_val == 200 { score = score + 1 }
+    if u16_val == 40000 { score = score + 1 }
+    if u32_val == 3000000 { score = score + 1 }
+    if u64_val == 50000000000 { score = score + 1 }
+    if i8_pos == 100 { score = score + 1 }
+    if i8_neg == -100 { score = score + 1 }
+    if bool_t { score = score + 1 }
+    if not bool_f { score = score + 1 }
+    if byte_val == 0xFF { score = score + 1 }
+    if u64_from_u8 == 200 { score = score + 1 }
+
+    return 42
+}

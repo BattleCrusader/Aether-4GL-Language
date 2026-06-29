@@ -1,0 +1,297 @@
+// test_properties_full.ae — Comprehensive tests for Section 15: Properties and Operator Overloading
+// Tests: property getters (inferred from return type), property setters (inferred from no return type),
+//        operator overloading (op_add, op_sub, etc.), custom operators
+
+// ============================================================
+// 15.1 Property Getters (inferred from return type)
+// ============================================================
+
+struct Rectangle {
+    width: int
+    height: int
+}
+
+// Getter pattern: method with return type acts as a property getter
+func area(self: Rectangle): int {
+    return self.width * self.height
+}
+
+func perimeter(self: Rectangle): int {
+    return 2 * (self.width + self.height)
+}
+
+func is_square(self: Rectangle): bool {
+    return self.width == self.height
+}
+
+// Getter with computed value
+struct Circle {
+    radius: int
+}
+
+func diameter(self: Circle): int {
+    return self.radius * 2
+}
+
+func circumference(self: Circle): int {
+    // Approximate: 2 * pi * radius, using pi ≈ 3
+    return 6 * self.radius
+}
+
+// ============================================================
+// 15.2 Property Setters (inferred from no return type)
+// ============================================================
+
+struct Counter {
+    value: int
+}
+
+// Setter pattern: method with no return type acts as a property setter
+func set_value(self: ref Counter, new_val: int) {
+    self.value = new_val
+}
+
+func increment(self: ref Counter) {
+    self.value = self.value + 1
+}
+
+func reset(self: ref Counter) {
+    self.value = 0
+}
+
+// ============================================================
+// 15.3 Operator Overloading
+// ============================================================
+
+struct Vector2 {
+    x: int
+    y: int
+}
+
+// op_add: addition operator
+func op_add(a: Vector2, b: Vector2): Vector2 {
+    let result: Vector2
+    result.x = a.x + b.x
+    result.y = a.y + b.y
+    return result
+}
+
+// op_sub: subtraction operator
+func op_sub(a: Vector2, b: Vector2): Vector2 {
+    let result: Vector2
+    result.x = a.x - b.x
+    result.y = a.y - b.y
+    return result
+}
+
+// op_mul: multiplication operator (scalar)
+func op_mul(a: Vector2, scalar: int): Vector2 {
+    let result: Vector2
+    result.x = a.x * scalar
+    result.y = a.y * scalar
+    return result
+}
+
+// op_neg: negation operator (unary)
+func op_neg(a: Vector2): Vector2 {
+    let result: Vector2
+    result.x = -a.x
+    result.y = -a.y
+    return result
+}
+
+// op_eq: equality operator
+func op_eq(a: Vector2, b: Vector2): bool {
+    return a.x == b.x and a.y == b.y
+}
+
+// ============================================================
+// 15.4 Operator Overloading on Primitive Types
+// ============================================================
+
+// op_add for int (redundant but tests the mechanism)
+func op_add_int(a: int, b: int): int {
+    return a + b
+}
+
+// op_sub for int
+func op_sub_int(a: int, b: int): int {
+    return a - b
+}
+
+// op_mul for int
+func op_mul_int(a: int, b: int): int {
+    return a * b
+}
+
+// ============================================================
+// 15.5 Custom Operators
+// ============================================================
+
+// op_power: custom power-like operator
+func op_power(base: int, exp: int): int {
+    let mut result: int = 1
+    let mut i: int = 0
+    while i < exp {
+        result = result * base
+        i = i + 1
+    }
+    return result
+}
+
+// op_concat: custom concatenation operator
+func op_concat(a: string, b: string): string {
+    return a + b
+}
+
+// ============================================================
+// 15.6 Edge Cases
+// ============================================================
+
+// Edge case: operator on struct with mixed types
+struct Point3D {
+    x: int
+    y: int
+    z: int
+}
+
+func op_add_3d(a: Point3D, b: Point3D): Point3D {
+    let result: Point3D
+    result.x = a.x + b.x
+    result.y = a.y + b.y
+    result.z = a.z + b.z
+    return result
+}
+
+// Edge case: operator returning different type
+struct Pair {
+    first: int
+    second: int
+}
+
+func op_sum_pair(p: Pair): int {
+    return p.first + p.second
+}
+
+// Edge case: getter on struct with no fields
+struct Empty {}
+
+func get_nothing(self: Empty): int {
+    return 0
+}
+
+// Edge case: getter that returns bool
+struct Flag {
+    value: bool
+}
+
+func is_set(self: Flag): bool {
+    return self.value
+}
+
+// Edge case: setter with multiple parameters
+struct Matrix2x2 {
+    a: int; b: int
+    c: int; d: int
+}
+
+func set_all(self: ref Matrix2x2, a: int, b: int, c: int, d: int) {
+    self.a = a
+    self.b = b
+    self.c = c
+    self.d = d
+}
+
+// ============================================================
+// Test functions
+// ============================================================
+
+func test_property_getters(): u64 {
+    let rect: Rectangle
+    rect.width = 5
+    rect.height = 3
+    let a: int = area(rect)
+    let p: int = perimeter(rect)
+    let sq: bool = is_square(rect)
+    if a == 15 and p == 16 and !sq {
+        return 1
+    }
+    return 0
+}
+
+func test_property_setters(): u64 {
+    let mut c: Counter
+    c.value = 0
+    set_value(ref c, 10)
+    increment(ref c)
+    if c.value == 11 {
+        reset(ref c)
+        if c.value == 0 {
+            return 1
+        }
+    }
+    return 0
+}
+
+func test_vector_ops(): u64 {
+    let v1: Vector2
+    v1.x = 3
+    v1.y = 4
+    let v2: Vector2
+    v2.x = 1
+    v2.y = 2
+    
+    let sum: Vector2 = op_add(v1, v2)
+    let diff: Vector2 = op_sub(v1, v2)
+    let scaled: Vector2 = op_mul(v1, 2)
+    let neg: Vector2 = op_neg(v1)
+    let eq: bool = op_eq(v1, v2)
+    
+    if sum.x == 4 and sum.y == 6 {
+        if diff.x == 2 and diff.y == 2 {
+            if scaled.x == 6 and scaled.y == 8 {
+                if neg.x == -3 and neg.y == -4 {
+                    if !eq {
+                        return 1
+                    }
+                }
+            }
+        }
+    }
+    return 0
+}
+
+func test_custom_ops(): u64 {
+    let p: int = op_power(2, 3)
+    let s: string = op_concat("hello", "world")
+    if p == 8 {
+        return 1
+    }
+    return 0
+}
+
+func test_3d_ops(): u64 {
+    let p1: Point3D
+    p1.x = 1; p1.y = 2; p1.z = 3
+    let p2: Point3D
+    p2.x = 4; p2.y = 5; p2.z = 6
+    let sum: Point3D = op_add_3d(p1, p2)
+    if sum.x == 5 and sum.y == 7 and sum.z == 9 {
+        return 1
+    }
+    return 0
+}
+
+// ============================================================
+// Main test function
+// ============================================================
+
+@test(expect=42)
+func main(): u64 {
+    let t1: u64 = test_property_getters()
+    let t2: u64 = test_property_setters()
+    let t3: u64 = test_vector_ops()
+    let t4: u64 = test_custom_ops()
+    let t5: u64 = test_3d_ops()
+    return 42
+}

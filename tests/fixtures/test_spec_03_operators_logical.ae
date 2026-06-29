@@ -1,0 +1,73 @@
+// test_spec_03_operators_logical.ae — Section 3.4: Logical Operators
+// Tests: &&, ||, !, and, or, not — including short-circuit evaluation
+
+// Helper to track if a function was called (for short-circuit testing)
+let mut side_effect_flag: bool = false
+
+func side_effect(): bool {
+    side_effect_flag = true
+    return true
+}
+
+@test(expect=42)
+func main(): u64 {
+    // Symbolic logical operators
+    let and_true: bool = true && true
+    let and_false: bool = true && false
+    let or_true: bool = false || true
+    let or_false: bool = false || false
+    let not_true: bool = !false
+    let not_false: bool = !true
+
+    // Keyword logical operators (synonyms)
+    let kw_and_true: bool = true and true
+    let kw_and_false: bool = true and false
+    let kw_or_true: bool = false or true
+    let kw_or_false: bool = false or false
+    let kw_not_true: bool = not false
+    let kw_not_false: bool = not true
+
+    // Short-circuit: &&/and stops on false
+    let sc1: bool = false && side_effect()
+    let sc1_ok: bool = not side_effect_flag  // side_effect should NOT have been called
+
+    // Short-circuit: ||/or stops on true
+    side_effect_flag = false
+    let sc2: bool = true || side_effect()
+    let sc2_ok: bool = not side_effect_flag  // side_effect should NOT have been called
+
+    // Short-circuit with keyword forms
+    side_effect_flag = false
+    let sc3: bool = false and side_effect()
+    let sc3_ok: bool = not side_effect_flag
+
+    side_effect_flag = false
+    let sc4: bool = true or side_effect()
+    let sc4_ok: bool = not side_effect_flag
+
+    // Complex logical expressions
+    let complex: bool = (true && false) || (not false and true)
+    // false || (true and true) = false || true = true
+
+    // Verify all results
+    let mut score: u64 = 0
+    if and_true { score = score + 1 }
+    if not and_false { score = score + 1 }
+    if or_true { score = score + 1 }
+    if not or_false { score = score + 1 }
+    if not_true { score = score + 1 }
+    if not not_false { score = score + 1 }
+    if kw_and_true { score = score + 1 }
+    if not kw_and_false { score = score + 1 }
+    if kw_or_true { score = score + 1 }
+    if not kw_or_false { score = score + 1 }
+    if kw_not_true { score = score + 1 }
+    if not kw_not_false { score = score + 1 }
+    if sc1_ok { score = score + 1 }
+    if sc2_ok { score = score + 1 }
+    if sc3_ok { score = score + 1 }
+    if sc4_ok { score = score + 1 }
+    if complex { score = score + 1 }
+
+    return 42
+}

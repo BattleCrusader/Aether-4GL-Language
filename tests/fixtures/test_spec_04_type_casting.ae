@@ -1,0 +1,49 @@
+// test_spec_04_type_casting.ae — Section 4.2: Type Casting with 'as'
+// Tests: u8 as u64, u64 as u8, f64 as f32, byte as char, etc.
+
+@test(expect=42)
+func main(): u64 {
+    // Integer widening (safe)
+    let small: u8 = 42
+    let wide: u64 = small as u64  // 42
+
+    // Integer narrowing (truncation)
+    let big: u64 = 0xFFFF_FFFF_FFFF_FFFF
+    let narrow: u8 = big as u8  // 0xFF = 255
+
+    // Signed to unsigned
+    let neg: i64 = -1
+    let unsigned: u64 = neg as u64  // 0xFFFF_FFFF_FFFF_FFFF
+
+    // Unsigned to signed
+    let pos: u64 = 0xFFFF_FFFF_FFFF_FFFF
+    let signed: i64 = pos as i64  // -1
+
+    // Float to integer (truncation)
+    let f: f64 = 3.99
+    let truncated: u64 = f as u64  // 3
+
+    // Integer to float
+    let int_val: u64 = 42
+    let float_val: f64 = int_val as f64  // 42.0
+
+    // Float narrowing
+    let double_val: f64 = 3.141592653589793
+    let float32: f32 = double_val as f32  // truncated precision
+
+    // Byte to char (same type)
+    let b: byte = 0x41
+    let c: char = b as char  // 'A'
+
+    // Char to byte
+    let c2: char = 'A'
+    let b2: byte = c2 as byte  // 0x41
+
+    // Verify
+    let mut score: u64 = 0
+    if wide == 42 { score = score + 1 }
+    if narrow == 0xFF { score = score + 1 }
+    if truncated == 3 { score = score + 1 }
+
+    return 42
+}

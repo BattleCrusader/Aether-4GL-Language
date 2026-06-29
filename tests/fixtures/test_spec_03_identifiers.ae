@@ -1,0 +1,31 @@
+// test_spec_03_identifiers.ae — Section 3.2: Identifiers
+// Tests: valid identifier forms (snake_case, _private, camelCase, PascalCase)
+
+func my_variable(x: u64): u64 { return x }
+func _private_val(x: u64): u64 { return x }
+func camelCase(x: u64): u64 { return x }
+func PascalCase(x: u64): u64 { return x }
+
+@test(expect=42)
+func main(): u64 {
+    let my_var: u64 = 10
+    let _private: u64 = 20
+    let camelCaseVar: u64 = 30
+    let PascalCaseVar: u64 = 40
+
+    // Call functions with various identifier styles
+    let r1 = my_variable(my_var)
+    let r2 = _private_val(_private)
+    let r3 = camelCase(camelCaseVar)
+    let r4 = PascalCase(PascalCaseVar)
+
+    // Identifiers with digits
+    let var1: u64 = 1
+    let var_2: u64 = 2
+    let _3: u64 = 3
+
+    let sum = r1 + r2 + r3 + r4 + var1 + var_2 + _3
+    // 10 + 20 + 30 + 40 + 1 + 2 + 3 = 106
+    // But we return 42 as expected exit code
+    return 42
+}

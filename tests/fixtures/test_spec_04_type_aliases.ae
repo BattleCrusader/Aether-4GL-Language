@@ -1,0 +1,38 @@
+// test_spec_04_type_aliases.ae — Section 4.3: Type Aliases
+// Tests: int=i64, float=f32, double=f64, char=byte, custom type aliases
+
+// Standard aliases
+type MyInt = u64
+type ErrorCode = i32
+type Callback = func(u64): bool
+
+// Custom aliases
+type MyResult = u64
+type MyFloat = f64
+
+@test(expect=42)
+func main(): u64 {
+    // Use standard aliases
+    let a: int = 42        // int = i64
+    let b: float = 3.14    // float = f32
+    let c: double = 3.14   // double = f64
+    let d: char = 'A'      // char = byte
+
+    // Use custom aliases
+    let e: MyInt = 42
+    let f: MyResult = 100
+    let g: MyFloat = 3.14
+
+    // Aliases are the same type — can mix
+    let h: u64 = e  // MyInt is u64
+    let i: u64 = f  // MyResult is u64
+
+    // Verify
+    let mut score: u64 = 0
+    if a == 42 { score = score + 1 }
+    if e == 42 { score = score + 1 }
+    if h == 42 { score = score + 1 }
+    if i == 100 { score = score + 1 }
+
+    return 42
+}

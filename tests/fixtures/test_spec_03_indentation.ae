@@ -1,0 +1,59 @@
+// test_spec_03_indentation.ae — Section 3.8: Significant Indentation
+// Tests: 4-space indentation for block structure
+
+@test(expect=42)
+func main(): u64 {
+    // Nested indentation: if inside if inside for
+    let mut result: u64 = 0
+    for i in 0..10 {
+        if i < 5 {
+            if i % 2 == 0 {
+                result = result + i
+            }
+        } elif i == 5 {
+            result = result + 10
+        } else {
+            // i > 5
+            result = result + 1
+        }
+    }
+    // i=0: +0, i=1: skip, i=2: +2, i=3: skip, i=4: +4
+    // i=5: +10, i=6: +1, i=7: +1, i=8: +1, i=9: +1
+    // total = 0+2+4+10+1+1+1+1 = 20
+
+    // Nested while
+    let mut outer: u64 = 0
+    while outer < 3 {
+        let mut inner: u64 = 0
+        while inner < 3 {
+            result = result + 1
+            inner = inner + 1
+        }
+        outer = outer + 1
+    }
+    // +9 more = 29
+
+    // Function with nested blocks
+    func nested_func(a: u64): u64 {
+        if a > 0 {
+            let b: u64 = a * 2
+            if b > 10 {
+                return b
+            }
+            return a
+        }
+        return 0
+    }
+
+    let nf = nested_func(6)  // 6*2=12 > 10, returns 12
+    result = result + nf  // 29 + 12 = 41
+
+    // Block scope
+    {
+        let block_var: u64 = 1
+        result = result + block_var
+    }
+    // result = 42
+
+    return result
+}

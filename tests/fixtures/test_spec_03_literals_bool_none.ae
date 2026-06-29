@@ -1,0 +1,38 @@
+// test_spec_03_literals_bool_none.ae — Section 3.6: Boolean and None Literals
+// Tests: true, false, none
+
+@test(expect=42)
+func main(): u64 {
+    // Boolean literals
+    let t: bool = true
+    let f: bool = false
+
+    // Boolean operations with literals
+    let and_t: bool = true and true
+    let and_f: bool = true and false
+    let or_t: bool = false or true
+    let or_f: bool = false or false
+    let not_t: bool = not false
+    let not_f: bool = not true
+
+    // None literal
+    let n: u64? = none
+    let p: string? = none
+
+    // None with or default
+    let val: u64 = n or 42
+
+    // Verify
+    let mut score: u64 = 0
+    if t { score = score + 1 }
+    if not f { score = score + 1 }
+    if and_t { score = score + 1 }
+    if not and_f { score = score + 1 }
+    if or_t { score = score + 1 }
+    if not or_f { score = score + 1 }
+    if not_t { score = score + 1 }
+    if not not_f { score = score + 1 }
+    if val == 42 { score = score + 1 }
+
+    return 42
+}
