@@ -89,7 +89,7 @@ func test_import_syntax(): u64 {
 // @entry attribute sets the binary entry point at a specific address.
 
 @entry(0x2000000)
-func main(args: [][]byte): int {
+func main(): int {
     puts("Hello from Aether binary!\n")
     return 0
 }
@@ -219,9 +219,9 @@ func test_protocol_declaration(): u64 {
 // ── Memory-Mapped I/O ─────────────────────────────────────────────────────
 // Memory-mapped I/O via unsafe pointer dereference.
 
-const FRAMEBUFFER_ADDR: u64 = 0xA0000
-const KEYBOARD_STATUS: u64 = 0x64
-const KEYBOARD_DATA: u64 = 0x60
+const FRAMEBUFFER_ADDR = 0xA0000
+const KEYBOARD_STATUS = 0x64
+const KEYBOARD_DATA = 0x60
 
 func test_mmio_read(addr: ptr u64): u64 {
     unsafe {
@@ -246,10 +246,10 @@ func test_framebuffer_write(x: u64, y: u64, color: byte) {
 // ── Interrupt Handling ────────────────────────────────────────────────────
 // Interrupt handler setup via inline assembly.
 
-const PIC1_COMMAND: u16 = 0x20
-const PIC1_DATA: u16 = 0x21
-const PIC2_COMMAND: u16 = 0xA0
-const PIC2_DATA: u16 = 0xA1
+const PIC1_COMMAND = 0x20
+const PIC1_DATA = 0x21
+const PIC2_COMMAND = 0xA0
+const PIC2_DATA = 0xA1
 
 func test_interrupt_setup() {
     // Remap PIC
@@ -296,13 +296,13 @@ func test_disable_interrupts() {
 // ── Serial Port I/O ────────────────────────────────────────────────────────
 // Serial port communication via port I/O.
 
-const COM1: u16 = 0x3F8
-const COM2: u16 = 0x2F8
-const COM3: u16 = 0x3E8
-const COM4: u16 = 0x2E8
+const COM1 = 0x3F8
+const COM2 = 0x2F8
+const COM3 = 0x3E8
+const COM4 = 0x2E8
 
-const LSR: u16 = 5
-const LSR_THR_EMPTY: byte = 0x20
+const LSR = 5
+const LSR_THR_EMPTY = 0x20
 
 func test_serial_init() {
     // Initialize COM1 serial port
@@ -411,12 +411,12 @@ func test_fs_unlink(): int {
 // ── ELF64 Loader ──────────────────────────────────────────────────────────
 // ELF64 binary loading and parsing.
 
-const ELF_MAGIC: u64 = 0x464C457F  // "\x7fELF"
-const ELFCLASS64: byte = 2
-const ELFDATA2LSB: byte = 1
-const ET_EXEC: u16 = 2
-const ET_DYN: u16 = 3
-const PT_LOAD: u32 = 1
+const ELF_MAGIC = 0x464C457F
+const ELFCLASS64 = 2
+const ELFDATA2LSB = 1
+const ET_EXEC = 2
+const ET_DYN = 3
+const PT_LOAD = 1
 
 func test_elf_magic_check(magic: u32): bool {
     return magic == 0x464C457F
@@ -437,11 +437,11 @@ func test_elf_type_check(elf_type: u16): bool {
 // ── Boot Protocol ──────────────────────────────────────────────────────────
 // Boot chain protocol: stage1 → stage2 → kernel.
 
-const STAGE1_ADDR: u64 = 0x7C00
-const STAGE2_ADDR: u64 = 0x7E00
-const KERNEL_ADDR: u64 = 0x100000
-const STACK_ADDR: u64 = 0x7C00
-const KERNEL_STACK: u64 = 0x100000
+const STAGE1_ADDR = 0x7C00
+const STAGE2_ADDR = 0x7E00
+const KERNEL_ADDR = 0x100000
+const STACK_ADDR = 0x7C00
+const KERNEL_STACK = 0x100000
 
 func test_boot_protocol_entry() {
     // Set up stack and jump to kernel
@@ -477,9 +477,9 @@ func test_boot_protocol_registers() {
 // ── Kernel Modules (.ko format) ──────────────────────────────────────────
 // Loadable kernel module interface.
 
-const MODULE_REGISTRY: u64 = 0x4000
-const MODULE_NAME_MAX: u64 = 64
-const MODULE_MAX: u64 = 32
+const MODULE_REGISTRY = 0x4000
+const MODULE_NAME_MAX = 64
+const MODULE_MAX = 32
 
 struct ModuleEntry {
     name: [byte; 64]
