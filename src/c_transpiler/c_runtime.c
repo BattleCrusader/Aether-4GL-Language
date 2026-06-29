@@ -15,8 +15,8 @@ void c_emit_runtime(CCodegen *cg) {
      * by checking if ptr == NULL (for strings) or value == 0 (for ints). */
     fputs("typedef string optional;\n\n", cg->out);
 
-    /* Emit slice type */
-    fputs("typedef struct { void *ptr; uint64_t len; } slice;\n\n", cg->out);
+    /* Emit slice type with element size */
+    fputs("typedef struct { void *ptr; uint64_t len; uint64_t elem_size; } slice;\n\n", cg->out);
 
     /* Emit __aether_concat */
     fputs("static string __aether_concat(string a, string b) {\n", cg->out);
@@ -53,4 +53,23 @@ void c_emit_runtime(CCodegen *cg) {
     /* Emit __aether_alloc / __aether_free */
     fputs("static void* __aether_alloc(uint64_t size) { return malloc((size_t)size); }\n", cg->out);
     fputs("static void __aether_free(void *ptr) { free(ptr); }\n\n", cg->out);
+
+    /* Emit __aether_slice_concat — concatenate two slices */
+    fputs("static slice __aether_slice_concat(slice a, slice b) {\n", cg->out);
+    fputs("    if (b.len == 0) return a;\n", cg->out);
+    fputs("    if (a.len == 0) return b;\n", cg->out);
+    fputs("    uint64_t es = a.elem_size ? a.elem_size : b.elem_size;\n", cg->out);
+    fputs("    if (!es) es = 8;\n", cg->out);
+    fputs("    char *buf = malloc((a.len + b.len) * es);\n", cg->out);
+    fputs("    if (!buf) return (slice){ NULL, 0, es };\n", cg->out);
+    fputs("    memcpy(buf, a.ptr, a.len * es);\n", cg->out);
+    fputs("    memcpy(buf + a.len * es, b.ptr, b.len * es);\n", cg->out);
+    fputs("    return (slice){ buf, a.len + b.len, es };\n", cg->out);
+    fputs("}\n\n", cg->out);
+
+    /* Emit __aether_string_eq — compare two strings */
+    fputs("static int __aether_string_eq(string a, string b) {\n", cg->out);
+    fputs("    if (a.len != b.len) return 0;\n", cg->out);
+    fputs("    return memcmp(a.ptr, b.ptr, a.len) == 0;\n", cg->out);
+    fputs("}\n\n", cg->out);
 }

@@ -52,7 +52,7 @@ const char *c_type_name(AstNode *type_node) {
             return "void*";
         }
         case NODE_TYPE_ARRAY:
-            return "void*";  /* placeholder */
+            return "slice";  /* dynamic array → slice */
         case NODE_TYPE_SLICE:
             return "slice";
         case NODE_TYPE_OPTIONAL: {
@@ -69,6 +69,10 @@ const char *c_type_name(AstNode *type_node) {
         case NODE_TYPE_NAMED: {
             /* Named type — use the name string */
             StringView sv = type_node->data.type_node.name;
+            /* Generic type params (single uppercase letter like T, U, V) → uint64_t */
+            if (sv.len == 1 && sv.data[0] >= 'A' && sv.data[0] <= 'Z') {
+                return "uint64_t";
+            }
             static char buf[256];
             int len = (int)sv.len;
             if (len > 255) len = 255;

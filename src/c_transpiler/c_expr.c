@@ -114,8 +114,29 @@ static int is_string_expr(AstNode *node) {
     return 0;
 }
 
+/* Check if an expression produces a slice value */
+static int is_slice_expr(AstNode *node) {
+    if (!node) return 0;
+    if (node->type == NODE_ARRAY_LIT) return 1;
+    if (node->type == NODE_LITERAL_NONE) return 1;
+    if (node->type == NODE_IDENT) {
+        AstNode *decl = node->data.ident.resolved;
+        if (!decl) return 0;
+        AstNode *type_node = NULL;
+        if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+        else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+        if (type_node) {
+            if (type_node->type == NODE_TYPE_ARRAY || type_node->type == NODE_TYPE_SLICE) return 1;
+        }
+    }
+    if (node->type == NODE_BINARY_OP && node->data.binary.op == BIN_ADD) {
+        return is_slice_expr(node->data.binary.left) || is_slice_expr(node->data.binary.right);
+    }
+    return 0;
+}
+
 static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
-    /* BIN_ADD is overloaded: numeric add vs string concat. */
+    /* BIN_ADD is overloaded: numeric add vs string concat vs slice concat. */
     if (node->data.binary.op == BIN_ADD) {
         AstNode *left = node->data.binary.left;
         AstNode *right = node->data.binary.right;
@@ -130,6 +151,17 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
             if (!right_str) fputs("__aether_itoa(", cg->out);
             c_emit_expr(cg, right);
             if (!right_str) fputc(')', cg->out);
+            fputc(')', cg->out);
+            return;
+        }
+        /* Check for slice+slice concatenation */
+        int left_slice = is_slice_expr(left);
+        int right_slice = is_slice_expr(right);
+        if (left_slice || right_slice) {
+            fputs("__aether_slice_concat(", cg->out);
+            c_emit_expr(cg, left);
+            fputs(", ", cg->out);
+            c_emit_expr(cg, right);
             fputc(')', cg->out);
             return;
         }
@@ -161,6 +193,26 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
         fputs(" || ", cg->out);
         c_emit_expr(cg, node->data.binary.right);
         fputc(')', cg->out);
+        return;
+    }
+
+    /* String comparison needs __aether_string_eq */
+    if (node->data.binary.op == BIN_EQ &&
+        (is_string_expr(node->data.binary.left) || is_string_expr(node->data.binary.right))) {
+        fputs("__aether_string_eq(", cg->out);
+        c_emit_expr(cg, node->data.binary.left);
+        fputs(", ", cg->out);
+        c_emit_expr(cg, node->data.binary.right);
+        fputc(')', cg->out);
+        return;
+    }
+    if (node->data.binary.op == BIN_NEQ &&
+        (is_string_expr(node->data.binary.left) || is_string_expr(node->data.binary.right))) {
+        fputs("!__aether_string_eq(", cg->out);
+        c_emit_expr(cg, node->data.binary.left);
+        fputs(", ", cg->out);
+        c_emit_expr(cg, node->data.binary.right);
+        fputs(")", cg->out);
         return;
     }
 
@@ -313,12 +365,12 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
         }
         if (regular_count > 0) fputs(", ", cg->out);
         /* Pack variadic args into a slice using compound literal */
-        fputs("(slice){ (uint64_t[]){", cg->out);
+        fputs("(slice){ (void*)(uint64_t[]){", cg->out);
         for (int i = 0; i < vararg_count; i++) {
             if (i > 0) fputs(", ", cg->out);
             c_emit_expr(cg, node->data.call.args.items[regular_count + i]);
         }
-        fprintf(cg->out, "}, %d }", vararg_count);
+        fprintf(cg->out, "}, %d, 8 }", vararg_count);
         fputs(")", cg->out);
         return;
     }
@@ -357,15 +409,82 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
 }
 
 static void c_emit_index(CCodegen *cg, AstNode *node) {
-    c_emit_expr(cg, node->data.index.target);
-    fputc('[', cg->out);
-    c_emit_expr(cg, node->data.index.index);
-    fputc(']', cg->out);
+    /* Check if target is a slice or string type — use .ptr[index] access */
+    int is_slice_or_string = 0;
+    AstNode *target = node->data.index.target;
+    if (target) {
+        AstNode *type_node = NULL;
+        if (target->type == NODE_IDENT) {
+            AstNode *decl = target->data.ident.resolved;
+            if (decl) {
+                if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+                else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+            }
+        } else if (target->type == NODE_FIELD_ACCESS) {
+            /* Field access on a struct — the field is a slice type.
+               Always use .ptr access for struct field indexing. */
+            is_slice_or_string = 1;
+        }
+        if (type_node) {
+            if (type_node->type == NODE_TYPE_ARRAY || type_node->type == NODE_TYPE_SLICE) {
+                is_slice_or_string = 1;
+            }
+            if (type_node->type == NODE_TYPE_PRIMITIVE &&
+                type_node->data.type_node.prim == PRIM_STRING) {
+                is_slice_or_string = 2;
+            }
+        }
+    }
+    if (is_slice_or_string == 1) {
+        /* Determine element type for slice indexing.
+           Known slice fields from collections.ae: keys=[string], values=[u64], occupied=[bool], data=[u64] */
+        const char *elem_cast = "uint64_t*";
+        int elem_size = 8;
+        if (target && target->type == NODE_FIELD_ACCESS) {
+            StringView fname = target->data.field.field->data.ident.name;
+            if (fname.len == 4 && memcmp(fname.data, "keys", 4) == 0) {
+                elem_cast = "string*";
+                elem_size = 16;
+            } else if (fname.len == 8 && memcmp(fname.data, "occupied", 8) == 0) {
+                elem_cast = "uint8_t*";
+                elem_size = 1;
+            }
+        }
+        /* Use elem_size-aware access: cast ptr to char*, offset by index*elem_size, cast to element type */
+        fprintf(cg->out, "(*((%s)((char*)(", elem_cast);
+        c_emit_expr(cg, node->data.index.target);
+        fputs(".ptr) + (", cg->out);
+        c_emit_expr(cg, node->data.index.index);
+        fprintf(cg->out, ") * %d)))", elem_size);
+    } else if (is_slice_or_string == 2) {
+        c_emit_expr(cg, node->data.index.target);
+        fputs(".ptr[", cg->out);
+        c_emit_expr(cg, node->data.index.index);
+        fputc(']', cg->out);
+    } else {
+        c_emit_expr(cg, node->data.index.target);
+        fputc('[', cg->out);
+        c_emit_expr(cg, node->data.index.index);
+        fputc(']', cg->out);
+    }
 }
 
 static void c_emit_field_access(CCodegen *cg, AstNode *node) {
+    /* Check if target is a pointer type — use -> instead of . */
+    int is_ptr = 0;
+    if (node->data.field.target && node->data.field.target->type == NODE_IDENT) {
+        AstNode *decl = node->data.field.target->data.ident.resolved;
+        if (decl) {
+            AstNode *type_node = NULL;
+            if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+            else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+            if (type_node && (type_node->type == NODE_TYPE_REF || type_node->type == NODE_TYPE_PTR)) {
+                is_ptr = 1;
+            }
+        }
+    }
     c_emit_expr(cg, node->data.field.target);
-    fputc('.', cg->out);
+    fputs(is_ptr ? "->" : ".", cg->out);
     StringView field_name = node->data.field.field->data.ident.name;
     fprintf(cg->out, "%.*s", (int)field_name.len, field_name.data);
 }
@@ -382,7 +501,7 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
         case NODE_LITERAL_STRING: c_emit_literal_string(cg, node); break;
         case NODE_LITERAL_BOOL:   c_emit_literal_bool(cg, node); break;
         case NODE_LITERAL_CHAR:   c_emit_literal_char(cg, node); break;
-        case NODE_LITERAL_NONE:   fputs("{ 0, { 0 } }", cg->out); break;
+        case NODE_LITERAL_NONE:   fputs("0", cg->out); break;
         case NODE_IDENT: {
             /* Check if this is a const declaration — evaluate the const value */
             AstNode *decl = node->data.ident.resolved;
@@ -426,13 +545,23 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
             break;
         }
         case NODE_ARRAY_LIT: {
-            /* Array literal: emit as C compound literal */
-            fputs("{", cg->out);
-            for (int i = 0; i < node->data.array_lit.elements.count; i++) {
-                if (i > 0) fputs(", ", cg->out);
-                c_emit_expr(cg, node->data.array_lit.elements.items[i]);
+            /* Array literal: emit as slice compound literal with elem_size */
+            int count = node->data.array_lit.elements.count;
+            if (count == 0) {
+                fputs("(slice){ NULL, 0, 8 }", cg->out);
+            } else {
+                AstNode *first = node->data.array_lit.elements.items[0];
+                int is_str = (first && first->type == NODE_LITERAL_STRING);
+                int es = is_str ? 16 : 8;
+                fputs("(slice){ (void*)(", cg->out);
+                fputs(is_str ? "string" : "uint64_t", cg->out);
+                fprintf(cg->out, "[]){", count);
+                for (int i = 0; i < count; i++) {
+                    if (i > 0) fputs(", ", cg->out);
+                    c_emit_expr(cg, node->data.array_lit.elements.items[i]);
+                }
+                fprintf(cg->out, "}, %d, %d }", count, es);
             }
-            fputs("}", cg->out);
             break;
         }
         default:
