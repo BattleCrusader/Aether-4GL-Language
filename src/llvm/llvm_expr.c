@@ -67,7 +67,7 @@ static LLVMValueRef cg_literal_float(LlvmCodegen *lc, AstNode *node) {
 
 /* ──────────────────────────────────────────────
  * String literal — create a global string constant
- * and return it as an Aether string struct { len, ptr }.
+ * and return a pointer to it.
  * ────────────────────────────────────────────── */
 static LLVMValueRef cg_literal_string(LlvmCodegen *lc, AstNode *node) {
     StringView sv = node->data.literal.string_val;
@@ -77,7 +77,6 @@ static LLVMValueRef cg_literal_string(LlvmCodegen *lc, AstNode *node) {
     char name[64];
     snprintf(name, sizeof(name), ".str.%d", str_counter++);
 
-    /* Create global string constant */
     LLVMTypeRef arr_type = LLVMArrayType(LLVMInt8TypeInContext(lc->context), len + 1);
     LLVMValueRef global = LLVMAddGlobal(lc->module, arr_type, name);
     LLVMSetInitializer(global, LLVMConstString(sv.data, len, true));
@@ -85,19 +84,11 @@ static LLVMValueRef cg_literal_string(LlvmCodegen *lc, AstNode *node) {
     LLVMSetLinkage(global, LLVMPrivateLinkage);
     LLVMSetUnnamedAddr(global, true);
 
-    /* Get pointer to first element */
     LLVMValueRef indices[2] = {
         LLVMConstInt(LLVMInt64TypeInContext(lc->context), 0, false),
         LLVMConstInt(LLVMInt64TypeInContext(lc->context), 0, false)
     };
-    LLVMValueRef ptr = LLVMConstGEP2(arr_type, global, indices, 2);
-
-    /* Create Aether string struct: { len: i64, ptr: i8* } */
-    LLVMValueRef struct_vals[2] = {
-        LLVMConstInt(LLVMInt64TypeInContext(lc->context), len, false),
-        ptr
-    };
-    return LLVMConstStruct(struct_vals, 2, false);
+    return LLVMConstGEP2(arr_type, global, indices, 2);
 }
 
 /* ──────────────────────────────────────────────
@@ -185,8 +176,9 @@ static LLVMValueRef cg_unary_op(LlvmCodegen *lc, AstNode *node) {
         case UNARY_NEG:
             return LLVMBuildNeg(B, operand, "negtmp");
         case UNARY_NOT: {
-            /* Logical not: icmp eq %operand, 0 */
-            LLVMValueRef zero = LLVMConstInt(LLVMInt64TypeInContext(lc->context), 0, false);
+            /* Logical not: icmp eq %operand, 0 (using operand's type) */
+            LLVMTypeRef op_type = LLVMTypeOf(operand);
+            LLVMValueRef zero = LLVMConstInt(op_type, 0, false);
             return LLVMBuildICmp(B, LLVMIntEQ, operand, zero, "nottmp");
         }
         case UNARY_BIT_NOT:
@@ -269,15 +261,44 @@ static LLVMValueRef cg_call(LlvmCodegen *lc, AstNode *node) {
         free(param_types);
     }
 
-    /* Evaluate arguments */
+    /* Evaluate arguments with optional wrapping */
     LLVMValueRef *args = (LLVMValueRef *)malloc(argc * sizeof(LLVMValueRef));
+    LLVMTypeRef func_type = LLVMGlobalGetValueType(func);
+    LLVMTypeRef *param_types = NULL;
+    int param_count = LLVMCountParamTypes(func_type);
+    if (param_count > 0) {
+        param_types = (LLVMTypeRef *)malloc(param_count * sizeof(LLVMTypeRef));
+        LLVMGetParamTypes(func_type, param_types);
+    }
     for (int i = 0; i < argc; i++) {
         args[i] = llvm_cg_expr(lc, node->data.call.args.items[i]);
+        /* Auto-wrap in optional if param type is T? and arg is T */
+        if (i < param_count && param_types) {
+            LLVMTypeRef ptype = param_types[i];
+            if (LLVMGetTypeKind(ptype) == LLVMStructTypeKind) {
+                unsigned elem_count = LLVMCountStructElementTypes(ptype);
+                if (elem_count == 2) {
+                    LLVMTypeRef *elems = (LLVMTypeRef *)malloc(2 * sizeof(LLVMTypeRef));
+                    LLVMGetStructElementTypes(ptype, elems);
+                    if (LLVMGetTypeKind(elems[0]) == LLVMIntegerTypeKind &&
+                        LLVMGetIntTypeWidth(elems[0]) == 8) {
+                        /* This is T? — wrap the value in { has_value: i8, value: T } */
+                        LLVMValueRef opt = LLVMGetUndef(ptype);
+                        opt = LLVMBuildInsertValue(lc->builder, opt,
+                            LLVMConstInt(LLVMInt8TypeInContext(lc->context), 1, false), 0, "opthas");
+                        opt = LLVMBuildInsertValue(lc->builder, opt, args[i], 1, "optval");
+                        args[i] = opt;
+                    }
+                    free(elems);
+                }
+            }
+        }
     }
 
     LLVMValueRef result = LLVMBuildCall2(lc->builder,
-        LLVMGlobalGetValueType(func), func, args, argc, "calltmp");
+        func_type, func, args, argc, "");
     free(args);
+    if (param_types) free(param_types);
     return result;
 }
 

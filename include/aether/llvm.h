@@ -100,6 +100,9 @@ struct LlvmCodegen {
     int current_line;
     int current_column;
 
+    /* Pre-created types for common Aether types */
+    LLVMTypeRef string_type;    /* { i64, ptr } — Aether string struct */
+
     /* Arena for internal allocations */
     Arena *arena;
 };

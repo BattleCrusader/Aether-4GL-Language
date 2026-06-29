@@ -49,20 +49,8 @@ void llvm_declare_runtime(LlvmCodegen *lc) {
         LLVMSetLinkage(func, LLVMExternalLinkage);
     }
 
-    /* print(string) -> void — no-op stub.
-     * Takes Aether string struct { len: i64, ptr: i8* }.
-     * Will be implemented in std/io.ae as a proper function call. */
-    {
-        LLVMTypeRef elems[2] = { i64, i8ptr };
-        LLVMTypeRef string_struct = LLVMStructType(elems, 2, false);
-        LLVMTypeRef param_types[1] = { string_struct };
-        LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), param_types, 1, false);
-        LLVMValueRef func = LLVMAddFunction(lc->module, "print", func_type);
-        /* Emit a no-op body so the linker doesn't need an external definition */
-        LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
-        LLVMPositionBuilderAtEnd(lc->builder, entry);
-        LLVMBuildRetVoid(lc->builder);
-    }
+    /* print() is defined in std/io.ae — the two-pass codegen
+     * will declare it from the AST with the correct type. */
 }
 
 /* ──────────────────────────────────────────────

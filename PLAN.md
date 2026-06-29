@@ -1,147 +1,239 @@
-# Phase 19 — Week 2: Expressions, Statements, and print()
+# Phase 20 — C Transpiler Backend
 
-> **Branch:** `feature/P19.01-llvm-week2`
-> **Goal:** All simple test fixtures pass through the LLVM backend. `print()` works. If/while/for/assign/defer all generate correct LLVM IR.
+> **Branch:** `feature/P20.00-c-transpiler`
+> **Goal:** Replace NASM codegen and LLVM backend with a modular C transpiler. Every `.ae` file compiles to C, then to native binary via any C11 compiler (gcc, clang, tcc, MSVC). Zero dependencies beyond a C compiler and standard library.
 
 ---
 
-## Overview
+## Why
 
-Week 2 expands the LLVM backend from "hello world only" to handling all common expression and statement types. The `print()` built-in is implemented via write syscall. Control flow (if, while, for) uses LLVM basic blocks. Assignment and compound assignment modify variables in place.
+The NASM codegen is x86_64-only, 2700 lines, and hard to maintain. The LLVM backend is fragile (opaque pointer crashes, version churn, segfaults in `DataLayout`). A C transpiler is:
+
+- **Portable** — any C11 compiler, any architecture
+- **Simple** — emit text, not IR. No opaque pointer issues.
+- **Debuggable** — read the C output, compile it, step through it
+- **Fast to build** — no LLVM linking, compiles in <1s
+- **Bootstrap-friendly** — once Aether is self-hosting, the transpiler is the bootstrap bridge
+
+---
+
+## Architecture
+
+```
+Source (.ae)
+  → Tokenizer (existing)          ✅
+    → Parser (existing)            ✅
+      → AST (existing)             ✅
+        → Import Resolution        ✅
+          → Semantic Analysis      ✅
+            → C Codegen (NEW)      🔴
+              → C Compiler (gcc/clang/tcc) → native binary
+```
+
+The C codegen replaces both `src/codegen.c` (NASM) and `src/llvm/` (LLVM). The frontend stays unchanged.
+
+---
+
+## Module Map
+
+```
+src/c_transpiler/
+├── c_transpiler.h          # 100 lines — Main header: CCodegen state, public API
+├── c_transpiler.c           # 80 lines  — Entry point, walks AST, dispatches
+├── c_types.c                # 120 lines — Aether → C type mapping
+├── c_expr.c                 # 300 lines — Expression codegen (literals, idents, ops, calls)
+├── c_stmt.c                 # 300 lines — Statement codegen (let, if, while, for, return, defer)
+├── c_func.c                 # 200 lines — Function codegen (decl, params, return types)
+├── c_string.c               # 150 lines — String operations (concat, interpolation, itoa)
+├── c_asm.c                  # 100 lines — Inline assembly blocks
+├── c_error.c                # 150 lines — Error handling (try/catch/throw)
+├── c_contract.c             # 80 lines  — Pre/post conditions
+├── c_runtime.c              # 100 lines — Runtime helper declarations (print, alloc, concat)
+└── c_target.c               # 150 lines — Target-specific emission (host, freestanding, kernel, boot)
+
+Total: ~1830 lines across 12 files. Average: ~150 lines per file.
+```
 
 ---
 
 ## Task Breakdown
 
-### P19.10 — Implement `print()` built-in
+### P20.01 — Project structure & build system
 
-**File:** `src/llvm/llvm_expr.c`
-**Lines:** ~30 added
+**Files:** `Makefile`, `src/c_transpiler/c_transpiler.h`, `src/c_transpiler/c_transpiler.c`
 
-Replace the no-op `print()` with a real implementation that emits a write syscall.
+Create the module directory, header, and entry point. Update Makefile with C transpiler compilation rules. The entry point walks the AST and dispatches to sub-modules.
 
-**Approach:** For host targets, emit inline assembly that calls the macOS/Linux write syscall:
-- macOS: `mov rax, 0x2000004; mov rdi, 1; mov rsi, str_ptr; mov rdx, len; syscall`
-- Linux: `mov rax, 1; mov rdi, 1; mov rsi, str_ptr; mov rdx, len; syscall`
+**Deliverable:** `make` builds the compiler with C transpiler support. `--c` flag invokes the transpiler.
 
-For now, use LLVM inline asm to emit the syscall. The string pointer and length are computed from the string argument.
+### P20.02 — Type mapping (c_types.c)
 
-**Test:** `aether --llvm run tests/fixtures/hello.ae` prints "Hello, World!" and exits with 42
+**File:** `src/c_transpiler/c_types.c`
 
-### P19.11 — Unary operations
+Map every Aether type to its C representation:
 
-**File:** `src/llvm/llvm_expr.c`
-**Lines:** ~40 added
+| Aether | C |
+|--------|---|
+| `u8` | `uint8_t` |
+| `u16` | `uint16_t` |
+| `u32` | `uint32_t` |
+| `u64` | `uint64_t` |
+| `i8` | `int8_t` |
+| `i16` | `int16_t` |
+| `i32` | `int32_t` |
+| `i64` | `int64_t` |
+| `f32` | `float` |
+| `f64` | `double` |
+| `bool` | `uint8_t` (0/1) |
+| `byte` | `uint8_t` |
+| `char` | `uint8_t` |
+| `string` | `struct { uint64_t len; const char *ptr; }` |
+| `[T; N]` | `T[N]` |
+| `[T]` | `struct { T *ptr; uint64_t len; }` |
+| `T?` | `struct { uint8_t has_value; T value; }` |
+| `(T1, T2)` | `struct { T1 f0; T2 f1; }` |
+| `*T` | `T*` |
+| `ref T` | `T*` |
+| `func(T): R` | `R(*)(T)` |
 
-Add codegen for all unary operators:
-- `UNARY_NEG` → `LLVMBuildNeg()`
-- `UNARY_NOT` → `LLVMBuildNot()` (logical not: `icmp eq` + `xor 1`)
-- `UNARY_BIT_NOT` → `LLVMBuildNot()`
-- `UNARY_INC` / `UNARY_DEC` → load, add/sub 1, store, return (prefix: new value, postfix: old value)
-- `UNARY_ARRAY_LEN` → load first 8 bytes of array header
-- `UNARY_REF` → return the alloca pointer
-- `UNARY_DEREF` → load from pointer
+Emit `typedef` declarations for all types used in the program.
 
-**Test:** `let x = -5; let y = !true; let z = ~0xFF` all produce correct values
+### P20.03 — Expression codegen (c_expr.c)
 
-### P19.12 — If/elif/else
+**File:** `src/c_transpiler/c_expr.c`
 
-**File:** `src/llvm/llvm_stmt.c`
-**Lines:** ~80 added
+Emit C expressions for every Aether expression type:
 
-Implement if/elif/else using LLVM basic blocks:
-1. Evaluate condition
-2. Compare against zero (or use `icmp ne`)
-3. `LLVMBuildCondBr()` to then block or else/elif chain
-4. Then block: generate body, branch to merge block
-5. Elif chain: each elif is a nested if with its own condition and blocks
-6. Else block: generate body, branch to merge block
-7. Merge block: continue after the if chain
+- Literals: int, float, string, char, bool, none
+- Identifiers: variable/function name lookup
+- Binary ops: arithmetic, comparison, logical, bitwise, concat
+- Unary ops: neg, not, bit_not, ref, deref, inc, dec, array_len
+- Function calls: `func(args...)`
+- Index expressions: `arr[i]`
+- Field access: `obj.field`
+- Cast: `(type)expr`
+- Ternary: `cond ? then : else`
+- Array literals: `{val1, val2, ...}`
+- String interpolation: concat chain with itoa
 
-**Test:** `tests/fixtures/test_if.ae` compiles and runs correctly
+### P20.04 — Statement codegen (c_stmt.c)
 
-### P19.13 — While loops
+**File:** `src/c_transpiler/c_stmt.c`
 
-**File:** `src/llvm/llvm_stmt.c`
-**Lines:** ~40 added
+Emit C statements for every Aether statement type:
 
-Implement while loops:
-1. Create condition block, body block, after block
-2. Branch to condition block
-3. Condition block: evaluate condition, `LLVMBuildCondBr()` to body or after
-4. Body block: generate body, branch back to condition block
-5. After block: continue
+- `let` declarations: `type name = value;`
+- Assignment: `name = expr;`
+- Compound assignment: `name += expr;`
+- `if`/`elif`/`else`: `if (...) { } else if (...) { } else { }`
+- `while`: `while (...) { }`
+- `for` range: `for (i = start; i < end; i++)`
+- `for` array: `for (i = 0; i < len; i++)`
+- `return`: `return value;`
+- `break`/`continue`: `break;` / `continue;`
+- `defer`: push to stack, emit at scope exit
+- Expression statements: `expr;`
+- `match`: `if/else if` chain
+- `unsafe` block: `{ }`
+- `region` block: `{ }`
 
-Push/pop loop context for break/continue support.
+### P20.05 — Function codegen (c_func.c)
 
-**Test:** `tests/fixtures/test_while.ae` compiles and runs correctly
+**File:** `src/c_transpiler/c_func.c`
 
-### P19.14 — For loops
+Emit C function declarations and definitions:
 
-**File:** `src/llvm/llvm_stmt.c`
-**Lines:** ~60 added
+- Function signature: `return_type name(params)`
+- Parameter handling: type conversion, default values
+- Entry block: variable declarations, prologue
+- Exit block: implicit return for void, defer cleanup
+- `throws` functions: return struct `{ value, error_tag }`
+- `extern` functions: `extern` declaration
+- `sys` functions: inline asm syscall wrapper
+- `@entry` / `@export` attributes
 
-Implement for loops (range and array iteration):
-- Range: `for i in 0..10` → create counter variable, compare, increment
-- Array: `for val in arr` → create index variable, load element, increment
-- With index: `for i, val in arr` → both index and value
+### P20.06 — String operations (c_string.c)
 
-**Test:** `tests/fixtures/test_for.ae` and `tests/fixtures/test_for_index.ae` compile and run
+**File:** `src/c_transpiler/c_string.c`
 
-### P19.15 — Assignment (regular and compound)
+Emit string operation code:
 
-**File:** `src/llvm/llvm_stmt.c`
-**Lines:** ~50 added
+- String literal: `{ len, "literal" }` struct initializer
+- String concat: call `__aether_concat(left, right)`
+- String interpolation: build concat chain with itoa
+- `__aether_itoa`: u64 → decimal string
+- String indexing: `s.ptr[i]`
+- String length: `s.len`
 
-Implement assignment statements:
-- Regular: `x = expr` → evaluate expr, store to x's alloca
-- Compound: `x += expr`, `x -= expr`, etc. → load x, apply op, store back
-- Handle field access targets: `obj.field = expr` → GEP + store
+### P20.07 — Inline assembly (c_asm.c)
 
-**Test:** `let mut x = 5; x += 3;` produces x = 8
+**File:** `src/c_transpiler/c_asm.c`
 
-### P19.16 — Defer
+Emit inline assembly blocks:
 
-**File:** `src/llvm/llvm_stmt.c`
-**Lines:** ~40 added
+- Basic `asm { body }`: `__asm__("body");`
+- `asm: (outputs) { body }`: extended asm with output operands
+- Top-level asm: `__asm__(".globl ...");`
 
-Implement defer:
-1. Push deferred body onto `lc->defer_head` (LIFO)
-2. At scope exit (before return, at end of block), pop and emit deferred bodies
-3. Deferred bodies are emitted as regular statement codegen
+### P20.08 — Error handling (c_error.c)
 
-**Test:** `tests/fixtures/test_defer.ae` compiles and runs correctly
+**File:** `src/c_transpiler/c_error.c`
 
-### P19.17 — Index expressions and field access
+Emit try/catch/throw:
 
-**File:** `src/llvm/llvm_expr.c`
-**Lines:** ~50 added
+- `throw expr`: set error tag, longjmp or return error struct
+- `try { body } catch(e) { handler }`: setjmp/longjmp or error struct check
+- Cleanup tables for scope exit during unwinding
 
-Implement:
-- `arr[i]` → GEP into array pointer + load
-- `s[i]` (string indexing) → GEP into string + load byte
-- `obj.field` → GEP into struct + load
-- `obj.field = expr` → GEP into struct + store (in assignment codegen)
+### P20.09 — Contract codegen (c_contract.c)
 
-**Test:** Array indexing and struct field access work correctly
+**File:** `src/c_transpiler/c_contract.c`
 
-### P19.18 — Test all simple fixtures
+Emit pre/post condition checks:
 
-**File:** `Makefile` (test target)
-**Lines:** ~10 added
+- `@pre(condition)`: `if (!(condition)) { fprintf(stderr, "..."); exit(1); }`
+- `@post(condition)`: same at function exit
 
-Add an `llvm-test` target that runs all simple test fixtures through the LLVM backend.
+### P20.10 — Runtime helpers (c_runtime.c)
 
-**Test fixtures to verify:**
-- `hello.ae` — basic function + return
-- `test_if.ae` — if/elif/else
-- `test_while.ae` — while loops
-- `test_for.ae` — for loops
-- `test_for_index.ae` — for with index
-- `test_defer.ae` — defer
-- `test_assign.ae` — assignment
-- `test_math.ae` — arithmetic
-- `test_bool.ae` — boolean logic
+**File:** `src/c_transpiler/c_runtime.c`
+
+Emit runtime helper function declarations and implementations:
+
+- `print(string)`: concatenate args, write to stdout
+- `__aether_alloc(size)`: malloc wrapper
+- `__aether_free(ptr)`: free wrapper
+- `__aether_concat(left, right)`: string concatenation
+- `__aether_itoa(value)`: u64 to decimal string
+
+### P20.11 — Target emission (c_target.c)
+
+**File:** `src/c_transpiler/c_target.c`
+
+Handle target-specific output:
+
+- `host`: standard C with `main()` entry point
+- `freestanding`: `-ffreestanding`, no stdlib
+- `kernel`: freestanding + custom entry point
+- `boot`: freestanding + flat binary via objcopy
+- Compiler invocation: `gcc -o output input.c`
+- Cross-compilation: `clang --target=...`
+
+### P20.12 — Wire up CLI & remove old backends
+
+**File:** `src/aether.c`
+
+- Add `--c` flag to invoke C transpiler
+- Keep `--llvm` flag for backward compat (optional)
+- Remove `src/llvm/` directory
+- Remove `src/codegen.c` and `src/asm_*.c` (NASM backend)
+- Update Makefile
+
+### P20.13 — All test fixtures pass
+
+**File:** `Makefile`
+
+Run all test fixtures through C transpiler. Fix remaining failures.
 
 ---
 
@@ -149,20 +241,84 @@ Add an `llvm-test` target that runs all simple test fixtures through the LLVM ba
 
 ```bash
 make clean && make
-./build/aether --llvm run tests/fixtures/hello.ae    # prints "Hello, World!" exits 42
-./build/aether --llvm run tests/fixtures/test_if.ae   # exits 0
-./build/aether --llvm run tests/fixtures/test_math.ae  # exits 0
+./build/aether --c tests/fixtures/hello.ae -o /tmp/hello
+/tmp/hello; echo $?    # prints "Hello, World!" exits 42
+./build/aether --c tests/fixtures/test_math.ae -o /tmp/test_math
+/tmp/test_math; echo $?  # exits 0
+make test-c             # run all fixtures through C transpiler
 ```
 
 ---
 
-## File Size Budget (Week 2)
+## File Size Budget
 
-| File | Lines added | Total |
-|------|-------------|-------|
-| `src/llvm/llvm_expr.c` | +120 | ~220 |
-| `src/llvm/llvm_stmt.c` | +310 | ~310 |
-| `src/llvm/llvm_func.c` | +20 | ~120 |
-| `src/llvm/llvm_sym.c` | +10 | ~90 |
-| `Makefile` | +10 | — |
-| **Total** | **~470** | |
+| File | Lines | Purpose |
+|------|-------|---------|
+| `c_transpiler.h` | 100 | Main header, CCodegen state |
+| `c_transpiler.c` | 80 | Entry point, AST walker |
+| `c_types.c` | 120 | Type mapping |
+| `c_expr.c` | 300 | Expression codegen |
+| `c_stmt.c` | 300 | Statement codegen |
+| `c_func.c` | 200 | Function codegen |
+| `c_string.c` | 150 | String operations |
+| `c_asm.c` | 100 | Inline assembly |
+| `c_error.c` | 150 | Error handling |
+| `c_contract.c` | 80 | Contract codegen |
+| `c_runtime.c` | 100 | Runtime helpers |
+| `c_target.c` | 150 | Target emission |
+| **Total** | **~1830** | |
+
+---
+
+## Files to Remove
+
+| File | Reason |
+|------|--------|
+| `src/llvm/` (entire directory) | LLVM backend replaced by C transpiler |
+| `src/codegen.c` | NASM codegen replaced by C transpiler |
+| `src/asm_ir.c` | NASM IR generation |
+| `src/asm_parser.c` | NASM parser |
+| `src/asm_backend_x86_64.c` | x86_64 assembler |
+| `src/asm_backend_arm64.c` | ARM64 assembler |
+| `src/asm_backend_riscv64.c` | RISC-V assembler |
+| `src/universal.c` | Universal binary support |
+| `include/aether/codegen.h` | NASM codegen header |
+| `include/aether/asm_ir.h` | NASM IR header |
+| `include/aether/asm_parser.h` | NASM parser header |
+| `include/aether/asm_backend.h` | NASM backend header |
+| `include/aether/universal.h` | Universal binary header |
+| `PLAN.md` | Old LLVM plan |
+| `LLVM_BACKEND.md` | Old LLVM design doc |
+
+## Files to Keep
+
+| File | Reason |
+|------|--------|
+| `src/aether.c` | CLI entry point — add `--c` flag |
+| `src/tokenizer.c` | Tokenizer — unchanged |
+| `src/lexer.c` | Lexer — unchanged |
+| `src/ast.c` | AST helpers — unchanged |
+| `src/parser.c` | Parser — unchanged |
+| `src/semantic.c` | Semantic analysis — unchanged |
+| `src/optimizer.c` | Optimizer — unchanged |
+| `src/arena.c` | Arena allocator — unchanged |
+| `src/str.c` | String view — unchanged |
+| `src/vector.c` | Dynamic array — unchanged |
+| `include/aether/defs.h` | Common definitions |
+| `include/aether/ast.h` | AST node types |
+| `include/aether/tokenizer.h` | Token types |
+| `include/aether/lexer.h` | Lexer state |
+| `include/aether/parser.h` | Parser state |
+| `include/aether/semantic.h` | Semantic analyzer |
+| `include/aether/optimizer.h` | Optimizer config |
+| `include/aether/arena.h` | Arena allocator |
+| `include/aether/str.h` | String view |
+| `include/aether/vector.h` | Dynamic array |
+| `std/*.ae` | Standard library |
+| `tests/*` | Test suite |
+| `Makefile` | Build system — update |
+| `AGENTS.md` | Agent guide — update |
+| `STATUS.md` | Status — update |
+| `SPECIFICATION.md` | Language spec |
+| `REQUIREMENTS.md` | Requirements |
+| `CONTRIBUTING.md` | Contributing guide |

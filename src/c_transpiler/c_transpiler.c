@@ -1,0 +1,96 @@
+#include "aether/c_transpiler.h"
+#include "aether/str.h"
+#include <string.h>
+#include <stdlib.h>
+
+/* ──────────────────────────────────────────────
+ * Create C codegen
+ * ────────────────────────────────────────────── */
+CCodegen *c_create(Arena *arena, Target target, int opt_level) {
+    CCodegen *cg = (CCodegen *)arena_alloc(arena, sizeof(CCodegen));
+    memset(cg, 0, sizeof(*cg));
+    cg->arena = arena;
+    cg->target = target;
+    cg->opt_level = opt_level;
+    cg->indent = 0;
+    cg->str_counter = 0;
+    cg->label_counter = 0;
+    return cg;
+}
+
+/* ──────────────────────────────────────────────
+ * Indentation helpers
+ * ────────────────────────────────────────────── */
+void c_indent(CCodegen *cg) {
+    for (int i = 0; i < cg->indent; i++)
+        fputs("    ", cg->out);
+}
+
+void c_newline(CCodegen *cg) {
+    fputc('\n', cg->out);
+}
+
+/* ──────────────────────────────────────────────
+ * Forward declarations for module functions
+ * ────────────────────────────────────────────── */
+void c_emit_type(CCodegen *cg, AstNode *type_node);
+void c_emit_prim_type(CCodegen *cg, PrimType prim);
+const char *c_type_name(AstNode *type_node);
+const char *c_prim_type_name(PrimType prim);
+void c_emit_expr(CCodegen *cg, AstNode *node);
+void c_emit_stmt(CCodegen *cg, AstNode *node);
+void c_emit_block(CCodegen *cg, AstNode *node);
+void c_emit_func_decl(CCodegen *cg, AstNode *node);
+void c_emit_runtime(CCodegen *cg);
+void c_emit_target_preamble(CCodegen *cg);
+void c_emit_target_postamble(CCodegen *cg);
+int c_compile(CCodegen *cg, const char *c_path, const char *output_path);
+
+/* ──────────────────────────────────────────────
+ * Generate C code for a complete program
+ * ────────────────────────────────────────────── */
+bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
+    if (!program || program->type != NODE_PROGRAM) {
+        fprintf(stderr, "C: expected NODE_PROGRAM\n");
+        return false;
+    }
+
+    cg->out = out;
+
+    /* Emit target preamble (includes, main wrapper) */
+    c_emit_target_preamble(cg);
+
+    /* Emit runtime helpers */
+    c_emit_runtime(cg);
+
+    /* Emit all top-level declarations */
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        switch (decl->type) {
+            case NODE_FUNC_DECL:
+                c_emit_func_decl(cg, decl);
+                break;
+            case NODE_LET:
+                if (decl->data.let_decl.is_global) {
+                    c_emit_stmt(cg, decl);
+                }
+                break;
+            case NODE_CONST_DECL:
+                c_emit_stmt(cg, decl);
+                break;
+            case NODE_STRUCT_DECL:
+            case NODE_CLASS_DECL:
+            case NODE_ENUM_DECL:
+                /* Type declarations emitted as typedefs */
+                c_emit_stmt(cg, decl);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /* Emit target postamble */
+    c_emit_target_postamble(cg);
+
+    return true;
+}

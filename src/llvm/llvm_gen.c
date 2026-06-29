@@ -10,9 +10,9 @@
  * for all top-level declarations.
  *
  * Two-pass approach:
- *   Pass 1: Declare all functions with correct types (no body).
+ *   Pass 1: Declare all functions and globals with correct types (no body).
  *            This ensures forward references in calls find the right type.
- *   Pass 2: Generate function bodies.
+ *   Pass 2: Generate function bodies and initialize globals.
  * ────────────────────────────────────────────── */
 bool llvm_generate(LlvmCodegen *lc, AstNode *program) {
     if (!program || program->type != NODE_PROGRAM) {
@@ -23,7 +23,7 @@ bool llvm_generate(LlvmCodegen *lc, AstNode *program) {
     /* Declare runtime functions */
     llvm_declare_runtime(lc);
 
-    /* Pass 1: Declare all functions with correct types (no body) */
+    /* Pass 1: Declare all functions and globals with correct types (no body) */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
         if (decl->type == NODE_FUNC_DECL) {
@@ -65,14 +65,76 @@ bool llvm_generate(LlvmCodegen *lc, AstNode *program) {
             llvm_declare_global(lc, fname, func, func_type);
 
             free(param_types);
+        } else if (decl->type == NODE_LET && decl->data.let_decl.is_global) {
+            /* Global let declaration — create LLVM global variable */
+            StringView vname = decl->data.let_decl.name->data.ident.name;
+            AstNode *type_node = decl->data.let_decl.type;
+
+            LLVMTypeRef llvm_type = type_node
+                ? llvm_type_from_ast(lc, type_node)
+                : LLVMInt64TypeInContext(lc->context);
+
+            char name[256];
+            int nlen = (int)vname.len;
+            if (nlen > 255) nlen = 255;
+            memcpy(name, vname.data, nlen);
+            name[nlen] = '\0';
+
+            LLVMValueRef global = LLVMAddGlobal(lc->module, llvm_type, name);
+            if (!decl->data.let_decl.is_mut) {
+                LLVMSetGlobalConstant(global, true);
+            }
+            LLVMSetLinkage(global, LLVMInternalLinkage);
+
+            llvm_declare_global(lc, vname, global, llvm_type);
+        } else if (decl->type == NODE_CONST_DECL) {
+            /* Const declaration — create LLVM global constant */
+            StringView vname = decl->data.let_decl.name->data.ident.name;
+            AstNode *type_node = decl->data.let_decl.type;
+
+            LLVMTypeRef llvm_type = type_node
+                ? llvm_type_from_ast(lc, type_node)
+                : LLVMInt64TypeInContext(lc->context);
+
+            char name[256];
+            int nlen = (int)vname.len;
+            if (nlen > 255) nlen = 255;
+            memcpy(name, vname.data, nlen);
+            name[nlen] = '\0';
+
+            LLVMValueRef global = LLVMAddGlobal(lc->module, llvm_type, name);
+            LLVMSetGlobalConstant(global, true);
+            LLVMSetLinkage(global, LLVMInternalLinkage);
+
+            llvm_declare_global(lc, vname, global, llvm_type);
         }
     }
 
-    /* Pass 2: Generate function bodies */
+    /* Pass 2: Generate function bodies and initialize globals */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
         if (decl->type == NODE_FUNC_DECL) {
             llvm_cg_func_decl(lc, decl);
+        } else if (decl->type == NODE_LET && decl->data.let_decl.is_global) {
+            /* Initialize global let with its value */
+            if (decl->data.let_decl.value) {
+                StringView vname = decl->data.let_decl.name->data.ident.name;
+                LLVMValueRef global = llvm_lookup_global(lc, vname);
+                if (global) {
+                    LLVMValueRef val = llvm_cg_expr(lc, decl->data.let_decl.value);
+                    LLVMSetInitializer(global, val);
+                }
+            }
+        } else if (decl->type == NODE_CONST_DECL) {
+            /* Initialize const with its value */
+            if (decl->data.let_decl.value) {
+                StringView vname = decl->data.let_decl.name->data.ident.name;
+                LLVMValueRef global = llvm_lookup_global(lc, vname);
+                if (global) {
+                    LLVMValueRef val = llvm_cg_expr(lc, decl->data.let_decl.value);
+                    LLVMSetInitializer(global, val);
+                }
+            }
         }
     }
 

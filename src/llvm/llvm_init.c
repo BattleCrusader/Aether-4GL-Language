@@ -28,7 +28,7 @@ const char *llvm_target_triple(Target target) {
 const char *llvm_target_data_layout(Target target) {
     (void)target;
     /* x86_64 ELF/Mach-O data layout — valid for all our targets */
-    return "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128";
+    return "e-m:e-p:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128";
 }
 
 /* ──────────────────────────────────────────────
@@ -59,6 +59,16 @@ LlvmCodegen *llvm_create(Arena *arena, Target target, int opt_level) {
 
     const char *layout = llvm_target_data_layout(target);
     LLVMSetDataLayout(lc->module, layout);
+
+    /* Pre-create the Aether string type: { len: i64, ptr: i8* }
+     * Must be done AFTER setting data layout on the module. */
+    {
+        lc->string_type = LLVMStructCreateNamed(lc->context, "aether.string");
+        LLVMTypeRef elems[2];
+        elems[0] = LLVMInt64TypeInContext(lc->context);
+        elems[1] = LLVMPointerType(LLVMInt8TypeInContext(lc->context), 0);
+        LLVMStructSetBody(lc->string_type, elems, 2, false);
+    }
 
     return lc;
 }
