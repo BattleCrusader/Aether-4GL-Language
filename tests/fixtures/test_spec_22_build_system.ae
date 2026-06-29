@@ -184,10 +184,10 @@ func test_cli_flag_release(): u64 {
 // ── Library Format (.aelib) ──────────────────────────────────────────────
 // .aelib archive format: magic, version, code section, metadata section
 
-const AELIB_MAGIC: u64 = 0x0042494C4541  // "AELIB\0"
-const AELIB_VERSION: u16 = 1
-const AELIB_FLAGS_NONE: u16 = 0
-const AELIB_ABI_CURRENT: u16 = 1
+const AELIB_MAGIC = 0x0042494C4541  // "AELIB\0"
+const AELIB_VERSION = 1
+const AELIB_FLAGS_NONE = 0
+const AELIB_ABI_CURRENT = 1
 
 func test_aelib_magic(): u64 {
     return AELIB_MAGIC
@@ -206,8 +206,8 @@ func test_aelib_abi(): u64 {
 }
 
 // .aelib metadata section format
-const AEMETA_MAGIC: u64 = 0x004154454D4145  // "AEMETA\0"
-const AEMETA_VERSION: u16 = 1
+const AEMETA_MAGIC = 0x004154454D4145  // "AEMETA\0"
+const AEMETA_VERSION = 1
 
 func test_aemeta_magic(): u64 {
     return AEMETA_MAGIC

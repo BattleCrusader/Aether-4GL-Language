@@ -109,9 +109,9 @@ func test_arch_dispatch_riscv64(): u64 {
 }
 
 // Architecture dispatch table
-const ARCH_X86_64: u64 = 1
-const ARCH_ARM64: u64 = 2
-const ARCH_RISCV64: u64 = 3
+const ARCH_X86_64 = 1
+const ARCH_ARM64 = 2
+const ARCH_RISCV64 = 3
 
 func test_dispatch_by_arch(arch: u64): u64 {
     if arch == ARCH_X86_64 {
@@ -243,11 +243,11 @@ func test_arch_info_riscv(): ArchInfo {
 // ── Multi-Arch ELF Format ────────────────────────────────────────────────
 // ELF structures for multi-architecture support.
 
-const EI_NIDENT: u64 = 16
-const ELFCLASS32: byte = 1
-const ELFCLASS64: byte = 2
-const ELFDATA2MSB: byte = 2
-const EV_CURRENT: byte = 1
+const EI_NIDENT = 16
+const ELFCLASS32 = 1
+const ELFCLASS64 = 2
+const ELFDATA2MSB = 2
+const EV_CURRENT = 1
 
 func test_elf_ident_check(ident: ptr byte): bool {
     unsafe {

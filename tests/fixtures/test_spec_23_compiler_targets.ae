@@ -157,7 +157,7 @@ func test_target_module_registry() {
 // ELF64 — Userland binary at 0x2000000
 
 @entry(0x2000000)
-func test_target_binary_main(args: [][]byte): int {
+func test_target_binary_main(): int {
     return 0
 }
 
@@ -389,18 +389,18 @@ func test_target_specific_code(target: u64): u64 {
 
 // ── Target Configuration ──────────────────────────────────────────────────
 
-const TARGET_HOST: u64 = 0
-const TARGET_FREESTANDING: u64 = 1
-const TARGET_KERNEL: u64 = 2
-const TARGET_MODULE: u64 = 3
-const TARGET_BINARY: u64 = 4
-const TARGET_BOOT: u64 = 5
-const TARGET_ASM_X86: u64 = 6
-const TARGET_ASM_ARM: u64 = 7
-const TARGET_ASM_RISCV: u64 = 8
-const TARGET_UNIVERSAL: u64 = 9
-const TARGET_UNIVERSAL_ALL: u64 = 10
-const TARGET_WASM: u64 = 11
+const TARGET_HOST = 0
+const TARGET_FREESTANDING = 1
+const TARGET_KERNEL = 2
+const TARGET_MODULE = 3
+const TARGET_BINARY = 4
+const TARGET_BOOT = 5
+const TARGET_ASM_X86 = 6
+const TARGET_ASM_ARM = 7
+const TARGET_ASM_RISCV = 8
+const TARGET_UNIVERSAL = 9
+const TARGET_UNIVERSAL_ALL = 10
+const TARGET_WASM = 11
 
 func test_target_config(target_id: u64): bool {
     if target_id == TARGET_HOST { return true }

@@ -652,12 +652,12 @@ func test_asm_single_output(): u64 {
 // ── Const Values in Assembly ──────────────────────────────────────────────
 // const declarations are emitted as NASM equ directives.
 
-const COM1_DATA: u16 = 0x3F8
-const LSR_THR_EMPTY: byte = 0x20
-const KERNEL_CODE_SEG: u16 = 0x08
-const KERNEL_DATA_SEG: u16 = 0x10
-const USER_CODE_SEG: u16 = 0x23
-const USER_DATA_SEG: u16 = 0x2B
+const COM1_DATA = 0x3F8
+const LSR_THR_EMPTY = 0x20
+const KERNEL_CODE_SEG = 0x08
+const KERNEL_DATA_SEG = 0x10
+const USER_CODE_SEG = 0x23
+const USER_DATA_SEG = 0x2B
 
 func test_const_in_asm() {
     asm {

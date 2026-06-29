@@ -54,14 +54,14 @@ func test_comptime_kernel_layout() {
 
 func test_comptime_memory_map(): u64 {
     // Known memory map regions
-    const BITMAP_BASE: u64 = 0x1000
-    const BITMAP_SIZE: u64 = 0x1000
-    const MODULE_REG_BASE: u64 = 0x4000
-    const MODULE_REG_SIZE: u64 = 0x1000
-    const SYSCALL_PAGE_BASE: u64 = 0x5000
-    const SYSCALL_PAGE_SIZE: u64 = 0x1000
-    const PAGE_TABLE_BASE: u64 = 0x6000
-    const PAGE_TABLE_SIZE: u64 = 0x5000
+    const BITMAP_BASE = 0x1000
+    const BITMAP_SIZE = 0x1000
+    const MODULE_REG_BASE = 0x4000
+    const MODULE_REG_SIZE = 0x1000
+    const SYSCALL_PAGE_BASE = 0x5000
+    const SYSCALL_PAGE_SIZE = 0x1000
+    const PAGE_TABLE_BASE = 0x6000
+    const PAGE_TABLE_SIZE = 0x5000
     return BITMAP_SIZE + MODULE_REG_SIZE + SYSCALL_PAGE_SIZE + PAGE_TABLE_SIZE
 }
 
@@ -395,9 +395,9 @@ func test_comptime_reflection_align(): u64 {
 }
 
 // Compile-time constants
-const FUTURE_MAX_CONNECTIONS: u64 = 1000
-const FUTURE_BUFFER_SIZE: u64 = FUTURE_MAX_CONNECTIONS * 64
-const FUTURE_GREETING: string = "Hello, Future!"
+const FUTURE_MAX_CONNECTIONS = 1000
+const FUTURE_BUFFER_SIZE = FUTURE_MAX_CONNECTIONS * 64
+const FUTURE_GREETING = "Hello, Future!"
 
 func test_comptime_constants(): u64 {
     return FUTURE_MAX_CONNECTIONS + FUTURE_BUFFER_SIZE

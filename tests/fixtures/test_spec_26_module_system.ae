@@ -158,9 +158,9 @@ func test_default_public(): u64 {
     return 1
 }
 
-pub const PUB_CONST: u64 = 100
-private const PRIVATE_CONST: u64 = 200
-internal const INTERNAL_CONST: u64 = 300
+const PUB_CONST = 100
+const PRIVATE_CONST = 200
+const INTERNAL_CONST = 300
 
 pub struct PubStruct {
     a: u64
