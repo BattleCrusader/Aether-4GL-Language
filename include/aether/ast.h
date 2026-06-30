@@ -182,10 +182,8 @@ typedef struct {
     StringView layout_file; /* output filename from @layout(file="name") */
     AstNodeList pre_conditions;  /* pre(expr) contract expressions */
     AstNodeList post_conditions; /* post(expr) contract expressions */
-    /* @Test(expect: N) — test annotation */
-    bool has_test;            /* true if @Test attribute is set */
-    int64_t test_expect_int;  /* numeric expect value (exit code), -1 if not set */
-    StringView test_expect_str; /* string expect value (empty if not set) */
+    /* @test — test annotation */
+    bool has_test;            /* true if @test attribute is set */
 } FuncDecl;
 
 /* Parameter */
@@ -421,10 +419,8 @@ typedef struct {
     /* @module_abi(version=N) params */
     bool has_module_abi;
     int64_t module_abi_version; /* ABI version from @module_abi(version=N), -1 if not set */
-    /* @Test(expect: N) params — test annotation */
+    /* @test — test annotation */
     bool has_test;
-    int64_t test_expect_int;     /* numeric expect value (exit code) */
-    StringView test_expect_str;  /* string expect value (empty if not set) */
 } AttrData;
 
 /* Module declaration */

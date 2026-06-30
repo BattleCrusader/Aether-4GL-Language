@@ -3134,106 +3134,28 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     if (test_func_count > 0 && !has_main && !cg->has_layout) {
         has_test_harness = true;
         cg_comment(cg, "Auto-generated test dispatcher (no main() found, @test functions present)");
-        cg_comment(cg, "Usage: ./binary <test_func_name>  — calls the named @test function, returns its exit code");
-
-        /* Emit test name strings in .rodata */
-        cg_write(cg, "section .rodata\n");
-        for (int i = 0; i < program->data.list.count; i++) {
-            AstNode *node = program->data.list.items[i];
-            if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
-            const char *fname = arena_strndup(cg->arena,
-                node->data.func.name->data.ident.name.data,
-                node->data.func.name->data.ident.name.len);
-            cg_write_fmt(cg, "L_test_name_%d: db \"%s\", 0\n", i, fname);
-        }
-        cg_write(cg, "\n");
+        cg_comment(cg, "Calls all @test functions, returns __test_failures count");
 
         /* Emit main dispatcher in .text */
         cg_write(cg, "section .text\n\n");
 
-        /* main: rdi = inputString (argv[1]), rsi = strlen */
+        /* main: call all @test functions */
         cg_write(cg, "main:\n");
         cg_inst1(cg, "push", "rbp");
         cg_inst1(cg, "mov", "rbp, rsp");
 
-        /* If no argument (rdi=0), return -1 */
-        cg_inst(cg, "test rdi, rdi");
-        cg_inst(cg, "jz L_test_no_arg");
-
-        /* Save inputString ptr in r12 (callee-saved) */
-        cg_inst1(cg, "mov", "r12, rdi");
-
-        /* Try each @test function name */
-        int test_idx = 0;
         for (int i = 0; i < program->data.list.count; i++) {
             AstNode *node = program->data.list.items[i];
             if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
-
             const char *fname = arena_strndup(cg->arena,
                 node->data.func.name->data.ident.name.data,
                 node->data.func.name->data.ident.name.len);
-
-            cg_write_fmt(cg, "; Try: %s\n", fname);
-            cg_inst1(cg, "mov", "rsi, r12");        /* rsi = inputString */
-            cg_write_fmt(cg, "    lea rdi, [rel L_test_name_%d]\n", i);  /* rdi = test name */
-            cg_inst(cg, "call L_test_strcmp");
-            cg_inst(cg, "test rax, rax");
-            int lbl = cg_new_label(cg);
-            char jz_buf[32];
-            snprintf(jz_buf, sizeof(jz_buf), "jnz L_test_call_%d", lbl);
-            cg_inst(cg, jz_buf);
-            /* Not a match — try next */
-            char next_buf[32];
-            snprintf(next_buf, sizeof(next_buf), "jmp L_test_next_%d", lbl);
-            cg_inst(cg, next_buf);
-            /* Match — call the function with default args (0, 0) */
-            snprintf(jz_buf, sizeof(jz_buf), "L_test_call_%d:", lbl);
-            cg_write_fmt(cg, "%s\n", jz_buf);
-            cg_inst(cg, "xor rdi, rdi");
-            cg_inst(cg, "xor rsi, rsi");
             cg_write_fmt(cg, "    call %s\n", fname);
-            cg_write(cg, "    leave\n");
-            cg_write(cg, "    ret\n");
-            snprintf(jz_buf, sizeof(jz_buf), "L_test_next_%d:", lbl);
-            cg_write_fmt(cg, "%s\n", jz_buf);
-            test_idx++;
         }
 
-        /* No match found — return -1 */
-        cg_comment(cg, "no matching @test function found");
-        cg_inst(cg, "mov rax, -1");
+        /* Return __test_failures */
+        cg_inst(cg, "mov rax, [__test_failures]");
         cg_write(cg, "    leave\n");
-        cg_write(cg, "    ret\n");
-
-        /* No argument — return -1 */
-        cg_write(cg, "L_test_no_arg:\n");
-        cg_inst(cg, "mov rax, -1");
-        cg_write(cg, "    leave\n");
-        cg_write(cg, "    ret\n\n");
-
-        /* Simple strcmp: rdi=a, rsi=b, returns 1 if equal, 0 if not */
-        cg_write(cg, "L_test_strcmp:\n");
-        cg_inst1(cg, "push", "rbx");
-        cg_inst1(cg, "mov", "rbx, rdi");
-        cg_write(cg, "L_strcmp_loop:\n");
-        cg_inst(cg, "mov al, [rbx]");
-        cg_inst(cg, "mov dl, [rsi]");
-        cg_inst(cg, "test al, al");
-        cg_inst(cg, "jz L_strcmp_end_a");
-        cg_inst(cg, "cmp al, dl");
-        cg_inst(cg, "jne L_strcmp_neq");
-        cg_inst(cg, "inc rbx");
-        cg_inst(cg, "inc rsi");
-        cg_inst(cg, "jmp L_strcmp_loop");
-        cg_write(cg, "L_strcmp_end_a:\n");
-        cg_inst(cg, "test dl, dl");
-        cg_inst(cg, "jnz L_strcmp_neq");
-        cg_inst(cg, "mov rax, 1");
-        cg_inst(cg, "jmp L_strcmp_done");
-        cg_write(cg, "L_strcmp_neq:\n");
-        cg_inst(cg, "xor rax, rax");
-        cg_write(cg, "L_strcmp_done:\n");
-        cg_inst1(cg, "pop", "rbx");
         cg_write(cg, "    ret\n\n");
     }
 

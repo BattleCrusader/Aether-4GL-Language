@@ -204,8 +204,6 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     func->data.func.is_kernel_layout = true;
                 } else if (strcmp(aname, "test") == 0) {
                     func->data.func.has_test = true;
-                    func->data.func.test_expect_int = last_attr->data.attr.test_expect_int;
-                    func->data.func.test_expect_str = last_attr->data.attr.test_expect_str;
                 }
             }
             node_list_append(decls, func);
@@ -1431,8 +1429,6 @@ AstNode *parse_attribute(Parser *p) {
         attr->data.attr.has_module_abi = false;
         attr->data.attr.module_abi_version = -1;
         attr->data.attr.has_test = false;
-        attr->data.attr.test_expect_int = -1;
-        attr->data.attr.test_expect_str = (StringView){0};
 
         /* @name(payload) — parenthesized attribute arguments */
         if (parser_match(p, TOKEN_LPAREN)) {
@@ -1475,23 +1471,11 @@ AstNode *parse_attribute(Parser *p) {
                             } else if (klen == 7 && strncmp(key.data, "version", 7) == 0) {
                                 attr->data.attr.has_module_abi = true;
                                 attr->data.attr.module_abi_version = (int64_t)val;
-                            } else if (klen == 6 && strncmp(key.data, "expect", 6) == 0) {
-                                attr->data.attr.has_test = true;
-                                attr->data.attr.test_expect_int = (int64_t)val;
-                                attr->data.attr.test_expect_str = (StringView){0};
                             }
                         } else if (parser_check(p, TOKEN_STRING_LITERAL)) {
-                            /* String value — for @Test(expect: "hello") or @layout(file="name") */
+                            /* String value — for @layout(file="name") */
                             StringView sv = p->current.text;
-                            /* Check if this is for expect key */
-                            size_t klen = key.len;
-                            if (klen == 6 && strncmp(key.data, "expect", 6) == 0) {
-                                attr->data.attr.has_test = true;
-                                attr->data.attr.test_expect_int = -1;
-                                attr->data.attr.test_expect_str = sv;
-                            } else {
-                                attr->data.attr.layout_file = sv;
-                            }
+                            attr->data.attr.layout_file = sv;
                             parser_advance(p);
                         } else {
                             /* Skip unknown value */
