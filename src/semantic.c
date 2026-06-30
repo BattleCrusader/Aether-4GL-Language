@@ -319,32 +319,36 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                 semantic_visit_node(sa, node->data.func.body);
             }
 
-            /* Check: if function has a return type, body must end with a return */
+            /* Check: if function has a non-void return type, body must end with a return */
             if (node->data.func.return_type && node->data.func.body) {
-                bool has_return = false;
-                if (node->data.func.body->type == NODE_RETURN) {
-                    has_return = true;
-                } else if (node->data.func.body->type == NODE_ASM_BLOCK) {
-                    /* asm block body counts as having a return (compiler adds epilogue) */
-                    has_return = true;
-                } else if (node->data.func.body->type == NODE_BLOCK) {
-                    AstNodeList *stmts = &node->data.func.body->data.list;
-                    if (stmts->count > 0) {
-                        AstNode *last = stmts->items[stmts->count - 1];
-                        if (last->type == NODE_RETURN) {
-                            has_return = true;
-                        }
-                        /* asm block counts as having a return (compiler adds epilogue) */
-                        if (last->type == NODE_ASM_BLOCK) {
-                            has_return = true;
+                /* Skip check for void functions */
+                if (!(node->data.func.return_type->type == NODE_TYPE_PRIMITIVE &&
+                    node->data.func.return_type->data.type_node.prim == PRIM_VOID)) {
+                    bool has_return = false;
+                    if (node->data.func.body->type == NODE_RETURN) {
+                        has_return = true;
+                    } else if (node->data.func.body->type == NODE_ASM_BLOCK) {
+                        /* asm block body counts as having a return (compiler adds epilogue) */
+                        has_return = true;
+                    } else if (node->data.func.body->type == NODE_BLOCK) {
+                        AstNodeList *stmts = &node->data.func.body->data.list;
+                        if (stmts->count > 0) {
+                            AstNode *last = stmts->items[stmts->count - 1];
+                            if (last->type == NODE_RETURN) {
+                                has_return = true;
+                            }
+                            /* asm block counts as having a return (compiler adds epilogue) */
+                            if (last->type == NODE_ASM_BLOCK) {
+                                has_return = true;
+                            }
                         }
                     }
-                }
-                if (!has_return) {
-                    fprintf(stderr, "Error: function '%.*s' has return type but no return statement\n",
-                        (int)node->data.func.name->data.ident.name.len,
-                        node->data.func.name->data.ident.name.data);
-                    sa->error_count++;
+                    if (!has_return) {
+                        fprintf(stderr, "Error: function '%.*s' has return type but no return statement\n",
+                            (int)node->data.func.name->data.ident.name.len,
+                            node->data.func.name->data.ident.name.data);
+                        sa->error_count++;
+                    }
                 }
             }
 
@@ -623,8 +627,14 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
         case NODE_LITERAL_CHAR:
         case NODE_LITERAL_BOOL:
         case NODE_LITERAL_NONE:
-        case NODE_ARRAY_LIT:
         case NODE_ASM_BLOCK:
+            break;
+
+        case NODE_ARRAY_LIT:
+            /* Visit array literal elements for name resolution */
+            for (int i = 0; i < node->data.array_lit.elements.count; i++) {
+                semantic_visit_expr(sa, node->data.array_lit.elements.items[i]);
+            }
             break;
 
         default:

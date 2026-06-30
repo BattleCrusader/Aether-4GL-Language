@@ -1,8 +1,9 @@
 // test_interp_concat.ae — interpolation combined with explicit concat
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let name = "Aether"
     let msg = "Hello {name}" + "!!"
     print(msg)
-    return 42
 }

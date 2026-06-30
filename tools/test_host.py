@@ -3,47 +3,19 @@
 
 For each .ae fixture:
   1. Compile with `aether --target host`
-  2. If @test is on func main → run binary, check exit code
-  3. If @test is on other functions (no main) → run binary with each
-     func name as argv[1], check exit code against @test(expect=N) or 0
+  2. Run the binary
+  3. Exit code 0 = pass, > 0 = failure count
+
+@test functions return void. The auto-generated dispatcher calls all
+@test functions and returns __test_failures as the exit code.
 
 Usage: python3 tools/test_host.py <aether_binary> <fixture1.ae> [fixture2.ae ...]
 """
 
 import subprocess
 import os
-import re
 import sys
 
-def extract_tests(filepath):
-    """Extract @test annotations paired with their func names.
-    Supports @test(expect=N) and bare @test (expect=0)."""
-    with open(filepath, 'r') as f:
-        lines = f.readlines()
-
-    tests = []
-    for i, line in enumerate(lines):
-        # Match @test(expect=N) or bare @test
-        m = re.search(r'@test(?:\(expect=(\d+)\))?', line)
-        if not m:
-            continue
-        expect = int(m.group(1)) if m.group(1) else 0
-        # Look for the func line (could be same line or next non-empty line)
-        func_name = None
-        # Check if func is on the same line
-        fm = re.search(r'func\s+([a-zA-Z_][a-zA-Z0-9_]*)', line)
-        if fm:
-            func_name = fm.group(1)
-        else:
-            # Look at next few lines for func
-            for j in range(i + 1, min(i + 3, len(lines))):
-                fm = re.search(r'func\s+([a-zA-Z_][a-zA-Z0-9_]*)', lines[j])
-                if fm:
-                    func_name = fm.group(1)
-                    break
-        if func_name:
-            tests.append((func_name, expect))
-    return tests
 
 def main():
     if len(sys.argv) < 3:
@@ -70,43 +42,22 @@ def main():
             print(f"  TEST: {name} ... FAIL (compile)")
             continue
 
-        tests = extract_tests(fixture)
-        if not tests:
-            total += 1
-            print(f"  TEST: {name} ... FAIL (no @test annotation)")
-            continue
-
-        # Check if any test is on main
-        main_tests = [(fn, exp) for fn, exp in tests if fn == 'main']
-        if main_tests:
-            # Single-run mode: @test on main
-            func_name, expect = main_tests[0]
-            total += 1
-            print(f"  TEST: {name} ... ", end="")
-            proc = subprocess.run([binary], capture_output=True)
-            got = proc.returncode
-            if got == expect:
-                print(f"PASS (exit {got})")
-                passed += 1
-            else:
-                print(f"FAIL (expected {expect}, got {got})")
+        # Run the binary
+        total += 1
+        print(f"  TEST: {name} ... ", end="")
+        proc = subprocess.run([binary], capture_output=True)
+        got = proc.returncode
+        if got == 0:
+            print("PASS")
+            passed += 1
         else:
-            # Dispatcher mode: @test on non-main functions
-            for func_name, expect in tests:
-                total += 1
-                print(f"  TEST: {name}.{func_name} ... ", end="")
-                proc = subprocess.run([binary, func_name], capture_output=True)
-                got = proc.returncode
-                if got == expect:
-                    print(f"PASS (exit {got})")
-                    passed += 1
-                else:
-                    print(f"FAIL (expected {expect}, got {got})")
+            print(f"FAIL (exit {got})")
 
     print()
     failed = total - passed
     print(f"=== Results: {passed}/{total} passed, {failed} failed ===")
     sys.exit(0 if passed == total else 1)
+
 
 if __name__ == '__main__':
     main()

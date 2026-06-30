@@ -1,6 +1,8 @@
 // test_segfault.ae — catch a segfault with try/catch
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let mut result: u64 = 0
 
     try {
@@ -14,5 +16,5 @@ func main(): u64 {
         result = 42
     }
 
-    return result
+    assertEquals(42, result, "test_segfault.ae")
 }

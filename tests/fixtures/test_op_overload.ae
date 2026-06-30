@@ -1,4 +1,6 @@
 // test_op_overload.ae — operator overloading
+import "std/test"
+
 struct Vector {
     x: int
     y: int
@@ -8,7 +10,6 @@ func op_add(a: int, b: int): int {
     return a + b
 }
 
-@test(expect=42)
-func main(): u64 {
-    return 42
+@test
+func main(): void {
 }

@@ -1,7 +1,8 @@
 // test_interp_none.ae — no interpolation (plain string, should still work)
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let msg = "Hello World"
     print(msg)
-    return 42
 }

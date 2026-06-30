@@ -202,7 +202,7 @@ static void c_emit_for(CCodegen *cg, AstNode *node) {
     if (var) {
         StringView vname = var->data.ident.name;
         c_indent(cg);
-        fprintf(cg->out, "uint64_t %.*s = ((uint64_t*)__arr.ptr)[__i];\n", (int)vname.len, vname.data);
+        fprintf(cg->out, "uint64_t %.*s = ((uint64_t*)__arr.data)[__i];\n", (int)vname.len, vname.data);
     }
     if (index_var) {
         StringView iname = index_var->data.ident.name;
@@ -380,6 +380,10 @@ void c_emit_stmt(CCodegen *cg, AstNode *node) {
             fputs("}\n", cg->out);
             break;
         }
+        case NODE_ASM_BLOCK:
+            /* Skip asm blocks in C transpiler — they're NASM-specific.
+               The stdlib files with asm blocks are compiled via NASM path. */
+            break;
         default:
             fprintf(stderr, "C: unhandled statement node type %d\n", node->type);
             break;

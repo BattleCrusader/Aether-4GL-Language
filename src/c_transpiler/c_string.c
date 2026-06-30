@@ -66,11 +66,11 @@ void c_emit_interp_concat(CCodegen *cg, AstNode *node) {
 }
 
 /* ──────────────────────────────────────────────
- * Emit string indexing: s[i] → s.ptr[i]
+ * Emit string indexing: s[i] → s.data[i]
  * ────────────────────────────────────────────── */
 void c_emit_string_index(CCodegen *cg, AstNode *target, AstNode *index) {
     c_emit_expr(cg, target);
-    fputs(".ptr[", cg->out);
+    fputs(".data[", cg->out);
     c_emit_expr(cg, index);
     fputc(']', cg->out);
 }

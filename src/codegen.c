@@ -3134,106 +3134,28 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     if (test_func_count > 0 && !has_main && !cg->has_layout) {
         has_test_harness = true;
         cg_comment(cg, "Auto-generated test dispatcher (no main() found, @test functions present)");
-        cg_comment(cg, "Usage: ./binary <test_func_name>  — calls the named @test function, returns its exit code");
-
-        /* Emit test name strings in .rodata */
-        cg_write(cg, "section .rodata\n");
-        for (int i = 0; i < program->data.list.count; i++) {
-            AstNode *node = program->data.list.items[i];
-            if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
-            const char *fname = arena_strndup(cg->arena,
-                node->data.func.name->data.ident.name.data,
-                node->data.func.name->data.ident.name.len);
-            cg_write_fmt(cg, "L_test_name_%d: db \"%s\", 0\n", i, fname);
-        }
-        cg_write(cg, "\n");
+        cg_comment(cg, "Calls all @test functions, returns __test_failures count");
 
         /* Emit main dispatcher in .text */
         cg_write(cg, "section .text\n\n");
 
-        /* main: rdi = inputString (argv[1]), rsi = strlen */
+        /* main: call all @test functions */
         cg_write(cg, "main:\n");
         cg_inst1(cg, "push", "rbp");
         cg_inst1(cg, "mov", "rbp, rsp");
 
-        /* If no argument (rdi=0), return -1 */
-        cg_inst(cg, "test rdi, rdi");
-        cg_inst(cg, "jz L_test_no_arg");
-
-        /* Save inputString ptr in r12 (callee-saved) */
-        cg_inst1(cg, "mov", "r12, rdi");
-
-        /* Try each @test function name */
-        int test_idx = 0;
         for (int i = 0; i < program->data.list.count; i++) {
             AstNode *node = program->data.list.items[i];
             if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
-
             const char *fname = arena_strndup(cg->arena,
                 node->data.func.name->data.ident.name.data,
                 node->data.func.name->data.ident.name.len);
-
-            cg_write_fmt(cg, "; Try: %s\n", fname);
-            cg_inst1(cg, "mov", "rsi, r12");        /* rsi = inputString */
-            cg_write_fmt(cg, "    lea rdi, [rel L_test_name_%d]\n", i);  /* rdi = test name */
-            cg_inst(cg, "call L_test_strcmp");
-            cg_inst(cg, "test rax, rax");
-            int lbl = cg_new_label(cg);
-            char jz_buf[32];
-            snprintf(jz_buf, sizeof(jz_buf), "jnz L_test_call_%d", lbl);
-            cg_inst(cg, jz_buf);
-            /* Not a match — try next */
-            char next_buf[32];
-            snprintf(next_buf, sizeof(next_buf), "jmp L_test_next_%d", lbl);
-            cg_inst(cg, next_buf);
-            /* Match — call the function with default args (0, 0) */
-            snprintf(jz_buf, sizeof(jz_buf), "L_test_call_%d:", lbl);
-            cg_write_fmt(cg, "%s\n", jz_buf);
-            cg_inst(cg, "xor rdi, rdi");
-            cg_inst(cg, "xor rsi, rsi");
             cg_write_fmt(cg, "    call %s\n", fname);
-            cg_write(cg, "    leave\n");
-            cg_write(cg, "    ret\n");
-            snprintf(jz_buf, sizeof(jz_buf), "L_test_next_%d:", lbl);
-            cg_write_fmt(cg, "%s\n", jz_buf);
-            test_idx++;
         }
 
-        /* No match found — return -1 */
-        cg_comment(cg, "no matching @test function found");
-        cg_inst(cg, "mov rax, -1");
+        /* Return __test_failures */
+        cg_inst(cg, "mov rax, [__test_failures]");
         cg_write(cg, "    leave\n");
-        cg_write(cg, "    ret\n");
-
-        /* No argument — return -1 */
-        cg_write(cg, "L_test_no_arg:\n");
-        cg_inst(cg, "mov rax, -1");
-        cg_write(cg, "    leave\n");
-        cg_write(cg, "    ret\n\n");
-
-        /* Simple strcmp: rdi=a, rsi=b, returns 1 if equal, 0 if not */
-        cg_write(cg, "L_test_strcmp:\n");
-        cg_inst1(cg, "push", "rbx");
-        cg_inst1(cg, "mov", "rbx, rdi");
-        cg_write(cg, "L_strcmp_loop:\n");
-        cg_inst(cg, "mov al, [rbx]");
-        cg_inst(cg, "mov dl, [rsi]");
-        cg_inst(cg, "test al, al");
-        cg_inst(cg, "jz L_strcmp_end_a");
-        cg_inst(cg, "cmp al, dl");
-        cg_inst(cg, "jne L_strcmp_neq");
-        cg_inst(cg, "inc rbx");
-        cg_inst(cg, "inc rsi");
-        cg_inst(cg, "jmp L_strcmp_loop");
-        cg_write(cg, "L_strcmp_end_a:\n");
-        cg_inst(cg, "test dl, dl");
-        cg_inst(cg, "jnz L_strcmp_neq");
-        cg_inst(cg, "mov rax, 1");
-        cg_inst(cg, "jmp L_strcmp_done");
-        cg_write(cg, "L_strcmp_neq:\n");
-        cg_inst(cg, "xor rax, rax");
-        cg_write(cg, "L_strcmp_done:\n");
-        cg_inst1(cg, "pop", "rbx");
         cg_write(cg, "    ret\n\n");
     }
 
@@ -3960,46 +3882,45 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         return ret;
     }
 
-    /* .aelib library target: assemble to .o, extract metadata, write .aelib */
+    /* .aelib library target: assemble to .o for archiving */
     if (cg->target == TARGET_LIB) {
         /* Always use ELF64 for .aelib — the object code is used across toolchains */
         const char *nasm_fmt = "elf64";
 
-        /* Assemble .asm → .o via NASM */
-        char obj_file[1024];
-        snprintf(obj_file, sizeof(obj_file), "/tmp/kernel/aether_lib.o");
-
         char cmd[2048];
-        snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o %s %s", nasm_fmt, obj_file, asm_file);
+        snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o \"%s\" \"%s\"", nasm_fmt, output_file, asm_file);
         int ret = system(cmd);
         if (ret != 0) {
             fprintf(stderr, "nasm failed (exit %d)\n", ret);
             return ret;
         }
 
-        /* Read the .o file */
-        FILE *f = fopen(obj_file, "rb");
-        if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", obj_file); return 1; }
-        fseek(f, 0, SEEK_END);
-        long flen = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        uint8_t *code_data = (uint8_t *)malloc((size_t)flen);
-        if (!code_data) { fclose(f); return 1; }
-        size_t rlen = fread(code_data, 1, (size_t)flen, f);
-        fclose(f);
+        /* Also build the .aelib archive from the .o */
+        {
+            /* Read the .o file */
+            FILE *f = fopen(output_file, "rb");
+            if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", output_file); return 1; }
+            fseek(f, 0, SEEK_END);
+            long flen = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            uint8_t *code_data = (uint8_t *)malloc((size_t)flen);
+            if (!code_data) { fclose(f); return 1; }
+            size_t rlen = fread(code_data, 1, (size_t)flen, f);
+            fclose(f);
 
-        /* Set code data on the aelib writer */
-        aelib_set_code(cg->aelib_writer, code_data, rlen);
+            /* Set code data on the aelib writer */
+            aelib_set_code(cg->aelib_writer, code_data, rlen);
 
-        /* Write the .aelib file */
-        ret = aelib_write(cg->aelib_writer, output_file);
-        if (ret != 0) {
-            fprintf(stderr, "aelib_write failed\n");
-            remove(obj_file);
-            return ret;
+            /* Write the .aelib file alongside the .o */
+            char aelib_path[1024];
+            snprintf(aelib_path, sizeof(aelib_path), "%s.aelib", output_file);
+            ret = aelib_write(cg->aelib_writer, aelib_path);
+            if (ret != 0) {
+                fprintf(stderr, "aelib_write failed\n");
+                return ret;
+            }
         }
 
-        remove(obj_file);
         return 0;
     }
 

@@ -26,7 +26,7 @@ func printError(value: string) {
 
 func readLine(): string {
     let mut result: string = ""
-    let buf: u64 = alloc(1)
+    let buf: u64 = heap 1
     let mut done: bool = false
     while !done {
         let bytesRead: u64 = read(0, buf, 1)
@@ -41,7 +41,6 @@ func readLine(): string {
         let s: string = string(tempByte)
         result = result + s
     }
-    free(buf)
     return result
 }
 

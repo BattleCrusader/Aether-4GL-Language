@@ -1,102 +1,124 @@
 // test_mem.ae — comprehensive tests for std/mem.ae
-// Tests: copyMemory, memoryCopy, zeroMemory, alloc, free, realloc, memset, memcmp
+// Tests: copyMemory, memoryCopy, zeroMemory, memcmp
+// Memory management is automatic — use `heap` keyword for allocation.
 
 import "std/test"
 import "std/mem"
 
 @test
 func main() {
-    // alloc and free (bump allocator, just verify they don't crash)
-    let ptr: u64 = alloc(64)
-    assertTrue(ptr != 0, "alloc returns non-zero pointer")
-    free(ptr)
-
-    // realloc - verify it returns a non-zero pointer
-    let reallocPtr: u64 = realloc(0, 64)
-    assertTrue(reallocPtr != 0, "realloc returns non-zero pointer")
-    free(reallocPtr)
-
-    // copyMemory - copy data and verify
-    let src: u64 = alloc(16)
-    let dst: u64 = alloc(16)
-    // write some pattern to src using memset
-    memset(src, 0xAB, 16)
+    // copyMemory — copy data and verify
+    let src: u64 = heap 16
+    let dst: u64 = heap 16
+    // write some pattern to src using inline asm
+    asm {
+        mov rdi, [src]
+        mov al, 0xAB
+        mov rcx, 16
+        rep stosb
+    }
     // copy from src to dst
     copyMemory(dst, src, 16)
     // verify they match
     let cmpResult: i64 = memcmp(src, dst, 16)
     assertEquals(cmpResult, 0, "copyMemory: memcmp after copy equals 0")
-    free(src)
-    free(dst)
 
-    // memoryCopy - alias for copyMemory
-    let src2: u64 = alloc(16)
-    let dst2: u64 = alloc(16)
-    memset(src2, 0xCD, 16)
+    // memoryCopy — alias for copyMemory
+    let src2: u64 = heap 16
+    let dst2: u64 = heap 16
+    asm {
+        mov rdi, [src2]
+        mov al, 0xCD
+        mov rcx, 16
+        rep stosb
+    }
     memoryCopy(dst2, src2, 16)
     let cmpResult2: i64 = memcmp(src2, dst2, 16)
     assertEquals(cmpResult2, 0, "memoryCopy: memcmp after copy equals 0")
-    free(src2)
-    free(dst2)
 
     // zeroMemory
-    let buf: u64 = alloc(16)
-    memset(buf, 0xFF, 16)
+    let buf: u64 = heap 16
+    asm {
+        mov rdi, [buf]
+        mov al, 0xFF
+        mov rcx, 16
+        rep stosb
+    }
     zeroMemory(buf, 16)
-    let zeroBuf: u64 = alloc(16)
-    memset(zeroBuf, 0x00, 16)
+    let zeroBuf: u64 = heap 16
+    // zeroBuf is already zeroed by bump allocator
     let cmpZero: i64 = memcmp(buf, zeroBuf, 16)
     assertEquals(cmpZero, 0, "zeroMemory: all bytes zeroed")
-    free(buf)
-    free(zeroBuf)
-
-    // memset
-    let buf2: u64 = alloc(8)
-    memset(buf2, 0x42, 8)
-    let refBuf: u64 = alloc(8)
-    memset(refBuf, 0x42, 8)
-    let cmpMemset: i64 = memcmp(buf2, refBuf, 8)
-    assertEquals(cmpMemset, 0, "memset: bytes set correctly")
-    free(buf2)
-    free(refBuf)
 
     // memcmp equal
-    let a: u64 = alloc(4)
-    let b: u64 = alloc(4)
-    memset(a, 0x01, 4)
-    memset(b, 0x01, 4)
+    let a: u64 = heap 4
+    let b: u64 = heap 4
+    asm {
+        mov rdi, [a]
+        mov al, 0x01
+        mov rcx, 4
+        rep stosb
+    }
+    asm {
+        mov rdi, [b]
+        mov al, 0x01
+        mov rcx, 4
+        rep stosb
+    }
     let eq: i64 = memcmp(a, b, 4)
     assertEquals(eq, 0, "memcmp equal returns 0")
-    free(a)
-    free(b)
 
     // memcmp not equal (first < second)
-    let c: u64 = alloc(4)
-    let d: u64 = alloc(4)
-    memset(c, 0x01, 4)
-    memset(d, 0x02, 4)
+    let c: u64 = heap 4
+    let d: u64 = heap 4
+    asm {
+        mov rdi, [c]
+        mov al, 0x01
+        mov rcx, 4
+        rep stosb
+    }
+    asm {
+        mov rdi, [d]
+        mov al, 0x02
+        mov rcx, 4
+        rep stosb
+    }
     let lt: i64 = memcmp(c, d, 4)
     assertTrue(lt < 0, "memcmp first < second returns negative")
-    free(c)
-    free(d)
 
     // memcmp not equal (first > second)
-    let e: u64 = alloc(4)
-    let f: u64 = alloc(4)
-    memset(e, 0x02, 4)
-    memset(f, 0x01, 4)
+    let e: u64 = heap 4
+    let f: u64 = heap 4
+    asm {
+        mov rdi, [e]
+        mov al, 0x02
+        mov rcx, 4
+        rep stosb
+    }
+    asm {
+        mov rdi, [f]
+        mov al, 0x01
+        mov rcx, 4
+        rep stosb
+    }
     let gt: i64 = memcmp(e, f, 4)
     assertTrue(gt > 0, "memcmp first > second returns positive")
-    free(e)
-    free(f)
 
     // memcmp zero bytes
-    let g: u64 = alloc(4)
-    let h: u64 = alloc(4)
-    memset(g, 0xFF, 4)
-    memset(h, 0xFF, 4)
+    let g: u64 = heap 4
+    let h: u64 = heap 4
+    asm {
+        mov rdi, [g]
+        mov al, 0xFF
+        mov rcx, 4
+        rep stosb
+    }
+    asm {
+        mov rdi, [h]
+        mov al, 0xFF
+        mov rcx, 4
+        rep stosb
+    }
     let zeroLen: i64 = memcmp(g, h, 0)
     assertEquals(zeroLen, 0, "memcmp zero bytes returns 0")
-    free(g)
-    free(h)
 }

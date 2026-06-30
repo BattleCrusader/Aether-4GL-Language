@@ -57,6 +57,7 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     }
 
     cg->out = out;
+    cg->program = program;
 
     /* Emit target preamble (includes, main wrapper) */
     c_emit_target_preamble(cg);
@@ -128,17 +129,16 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     }
 
     if (test_func_count > 0 && !has_main) {
-        /* Auto-generate test dispatcher: run all @test functions, accumulate results */
+        /* Auto-generate test dispatcher: run all @test functions, return __test_failures */
         fputs("int main(int argc, char **argv) {\n", cg->out);
         fputs("    (void)argc; (void)argv;\n", cg->out);
-        fputs("    uint64_t total = 0;\n", cg->out);
         for (int i = 0; i < program->data.list.count; i++) {
             AstNode *node = program->data.list.items[i];
             if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
             StringView fname = node->data.func.name->data.ident.name;
-            fprintf(cg->out, "    total += %.*s();\n", (int)fname.len, fname.data);
+            fprintf(cg->out, "    %.*s();\n", (int)fname.len, fname.data);
         }
-        fputs("    return (int)total;\n", cg->out);
+        fputs("    return (int)__test_failures;\n", cg->out);
         fputs("}\n", cg->out);
     }
 

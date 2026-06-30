@@ -1,7 +1,9 @@
 // test_asm_comment.ae — Tests that Aether comments (#) inside asm blocks
 // are stripped from the generated NASM output (not passed through to NASM)
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let result: u64 = 0
     asm {
         mov rax, 42
@@ -9,5 +11,5 @@ func main(): u64 {
         mov [rbp-8], rax
         // Another comment that should not reach NASM
     }
-    return result
+    assertEquals(42, result, "test_asm_comment.ae")
 }
