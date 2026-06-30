@@ -57,6 +57,7 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     }
 
     cg->out = out;
+    cg->program = program;
 
     /* Emit target preamble (includes, main wrapper) */
     c_emit_target_preamble(cg);

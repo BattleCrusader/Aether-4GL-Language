@@ -623,8 +623,14 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
         case NODE_LITERAL_CHAR:
         case NODE_LITERAL_BOOL:
         case NODE_LITERAL_NONE:
-        case NODE_ARRAY_LIT:
         case NODE_ASM_BLOCK:
+            break;
+
+        case NODE_ARRAY_LIT:
+            /* Visit array literal elements for name resolution */
+            for (int i = 0; i < node->data.array_lit.elements.count; i++) {
+                semantic_visit_expr(sa, node->data.array_lit.elements.items[i]);
+            }
             break;
 
         default:

@@ -2,6 +2,8 @@
 // JUnit-style assertions. Tracks all failures in a global counter.
 // The test function should return __test_failures.
 
+import "std/io"
+
 let mut __test_failures: u64 = 0
 
 func assertEquals(expectedValue: u64, actualValue: u64, message: string?) {

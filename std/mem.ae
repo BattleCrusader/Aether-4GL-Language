@@ -1,6 +1,7 @@
-// std/mem.ae — Memory operations: copy, zero, alloc, free, realloc
-// Uses asm for pointer operations (Aether cannot express byte-level pointer access natively).
-// Uses Aether's heap keyword for allocation.
+// std/mem.ae — Memory operations: copy, zero, compare
+// Memory management is automatic (bump allocator built into every binary).
+// Use the `heap` keyword for allocation — it's a compiler primitive.
+// These functions provide byte-level pointer operations via inline asm.
 
 func copyMemory(destination: u64, source: u64, byteCount: u64) {
     asm {
@@ -20,30 +21,6 @@ func zeroMemory(pointer: u64, byteCount: u64) {
         mov rdi, rdi
         mov rcx, rsi
         xor al, al
-        rep stosb
-    }
-}
-
-func alloc(byteCount: u64): u64 {
-    return heap byteCount
-}
-
-func free(pointer: u64) {
-    // bump allocator: no-op
-}
-
-func realloc(pointer: u64, newByteCount: u64): u64 {
-    // bump allocator: allocate new block, copy old data, free old
-    // Since we can't know old size from pointer alone, caller must track it.
-    // This is a minimal implementation that just allocates new memory.
-    return heap newByteCount
-}
-
-func memset(destination: u64, value: byte, byteCount: u64) {
-    asm {
-        mov rdi, rdi
-        mov al, sil
-        mov rcx, rdx
         rep stosb
     }
 }

@@ -15,7 +15,7 @@
 // String functions (pure Aether)
 // ============================================================
 
-func strlen(s: string): u64 {
+func stringLength(s: string): u64 {
     let len: u64 = 0
     while s[len] != 0 {
         len = len + 1
@@ -35,8 +35,8 @@ func streq(a: string, b: string): bool {
 }
 
 func strfind(haystack: string, needle: string): i64 {
-    let hlen: u64 = strlen(haystack)
-    let nlen: u64 = strlen(needle)
+    let hlen: u64 = stringLength(haystack)
+    let nlen: u64 = stringLength(needle)
     if nlen > hlen {
         return -1
     }
@@ -63,7 +63,7 @@ func parse_num_at(s: string, pos: u64): i64 {
     let result: i64 = 0
     let found: bool = false
     let ch: byte
-    while pos < strlen(s) {
+    while pos < stringLength(s) {
         ch = s[pos]
         if ch >= '0' {
             if ch <= '9' {
@@ -95,8 +95,8 @@ func extract_expect(src: string): i64 {
 
 // Check if string ends with suffix
 func ends_with(s: string, suffix: string): bool {
-    let slen: u64 = strlen(s)
-    let suffixlen: u64 = strlen(suffix)
+    let slen: u64 = stringLength(s)
+    let suffixlen: u64 = stringLength(suffix)
     if suffixlen > slen {
         return false
     }

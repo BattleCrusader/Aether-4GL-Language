@@ -52,16 +52,15 @@ func test_io_format_string(): string {
 // alloc, free, copy, zero, Pool, Arena
 
 func test_mem_alloc(): u64 {
-    let ptr: u64 = alloc(64)
+    let ptr: u64 = heap 64
     if ptr != 0 {
-        free(ptr)
         return 1
     }
     return 0
 }
 
 func test_mem_alloc_zero(): u64 {
-    let ptr: u64 = alloc(1024)
+    let ptr: u64 = heap 1024
     if ptr == 0 { return 0 }
     // Zero the memory
     asm {
@@ -70,41 +69,31 @@ func test_mem_alloc_zero(): u64 {
         mov rcx, 1024
         rep stosb
     }
-    free(ptr)
     return 1
 }
 
 func test_mem_alloc_large(): u64 {
-    let ptr: u64 = alloc(65536)
+    let ptr: u64 = heap 65536
     if ptr != 0 {
-        free(ptr)
         return 1
     }
     return 0
 }
 
 func test_mem_alloc_multiple(): u64 {
-    let a: u64 = alloc(16)
-    let b: u64 = alloc(32)
-    let c: u64 = alloc(64)
+    let a: u64 = heap 16
+    let b: u64 = heap 32
+    let c: u64 = heap 64
     if a != 0 and b != 0 and c != 0 {
-        free(a)
-        free(b)
-        free(c)
         return 1
     }
-    if a != 0 { free(a) }
-    if b != 0 { free(b) }
-    if c != 0 { free(c) }
     return 0
 }
 
 func test_mem_copy() {
-    let src: u64 = alloc(16)
-    let dst: u64 = alloc(16)
+    let src: u64 = heap 16
+    let dst: u64 = heap 16
     if src == 0 or dst == 0 {
-        if src != 0 { free(src) }
-        if dst != 0 { free(dst) }
         return
     }
     // Copy src to dst
@@ -114,8 +103,6 @@ func test_mem_copy() {
         mov rcx, 16
         rep movsb
     }
-    free(src)
-    free(dst)
 }
 
 // ── 21.3 std/str — String Operations ──────────────────────────────────────

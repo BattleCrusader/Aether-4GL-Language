@@ -1,5 +1,5 @@
 // test_str.ae — comprehensive tests for std/str.ae
-// Tests: concat, strlen, strcmp, strEq, split, trim, toUpper, toLower,
+// Tests: concat, stringLength, stringCompare, strEq, split, trim, toUpper, toLower,
 //        substring, startsWith, endsWith, contains, replace, join,
 //        reverse, repeat, count, indexOf, lastIndexOf, padLeft, padRight,
 //        isAlpha, isDigit, isAlnum, isSpace
@@ -14,16 +14,16 @@ func main() {
     assertEquals(concat("", "test"), "test", "concat empty first")
     assertEquals(concat("test", ""), "test", "concat empty second")
 
-    // strlen
-    assertEquals(strlen("hello"), 5, "strlen basic")
-    assertEquals(strlen(""), 0, "strlen empty")
-    assertEquals(strlen("a"), 1, "strlen single")
-    assertEquals(strlen("hello world"), 11, "strlen with space")
+    // stringLength
+    assertEquals(stringLength("hello"), 5, "stringLength basic")
+    assertEquals(stringLength(""), 0, "stringLength empty")
+    assertEquals(stringLength("a"), 1, "stringLength single")
+    assertEquals(stringLength("hello world"), 11, "stringLength with space")
 
-    // strcmp / strEq
-    assertTrue(strcmp("abc", "abc"), "strcmp equal")
-    assertTrue(!strcmp("abc", "def"), "strcmp not equal")
-    assertTrue(strcmp("", ""), "strcmp both empty")
+    // stringCompare / strEq
+    assertTrue(stringCompare("abc", "abc"), "stringCompare equal")
+    assertTrue(!stringCompare("abc", "def"), "stringCompare not equal")
+    assertTrue(stringCompare("", ""), "stringCompare both empty")
     assertTrue(strEq("hello", "hello"), "strEq equal")
     assertTrue(!strEq("hello", "world"), "strEq not equal")
     assertTrue(strEq("", ""), "strEq both empty")

@@ -3960,46 +3960,45 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         return ret;
     }
 
-    /* .aelib library target: assemble to .o, extract metadata, write .aelib */
+    /* .aelib library target: assemble to .o for archiving */
     if (cg->target == TARGET_LIB) {
         /* Always use ELF64 for .aelib — the object code is used across toolchains */
         const char *nasm_fmt = "elf64";
 
-        /* Assemble .asm → .o via NASM */
-        char obj_file[1024];
-        snprintf(obj_file, sizeof(obj_file), "/tmp/kernel/aether_lib.o");
-
         char cmd[2048];
-        snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o %s %s", nasm_fmt, obj_file, asm_file);
+        snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o \"%s\" \"%s\"", nasm_fmt, output_file, asm_file);
         int ret = system(cmd);
         if (ret != 0) {
             fprintf(stderr, "nasm failed (exit %d)\n", ret);
             return ret;
         }
 
-        /* Read the .o file */
-        FILE *f = fopen(obj_file, "rb");
-        if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", obj_file); return 1; }
-        fseek(f, 0, SEEK_END);
-        long flen = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        uint8_t *code_data = (uint8_t *)malloc((size_t)flen);
-        if (!code_data) { fclose(f); return 1; }
-        size_t rlen = fread(code_data, 1, (size_t)flen, f);
-        fclose(f);
+        /* Also build the .aelib archive from the .o */
+        {
+            /* Read the .o file */
+            FILE *f = fopen(output_file, "rb");
+            if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", output_file); return 1; }
+            fseek(f, 0, SEEK_END);
+            long flen = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            uint8_t *code_data = (uint8_t *)malloc((size_t)flen);
+            if (!code_data) { fclose(f); return 1; }
+            size_t rlen = fread(code_data, 1, (size_t)flen, f);
+            fclose(f);
 
-        /* Set code data on the aelib writer */
-        aelib_set_code(cg->aelib_writer, code_data, rlen);
+            /* Set code data on the aelib writer */
+            aelib_set_code(cg->aelib_writer, code_data, rlen);
 
-        /* Write the .aelib file */
-        ret = aelib_write(cg->aelib_writer, output_file);
-        if (ret != 0) {
-            fprintf(stderr, "aelib_write failed\n");
-            remove(obj_file);
-            return ret;
+            /* Write the .aelib file alongside the .o */
+            char aelib_path[1024];
+            snprintf(aelib_path, sizeof(aelib_path), "%s.aelib", output_file);
+            ret = aelib_write(cg->aelib_writer, aelib_path);
+            if (ret != 0) {
+                fprintf(stderr, "aelib_write failed\n");
+                return ret;
+            }
         }
 
-        remove(obj_file);
         return 0;
     }
 

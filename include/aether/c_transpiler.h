@@ -36,6 +36,9 @@ typedef struct {
     /* Source location */
     const char *current_source_file;
     int current_line;
+
+    /* Program AST for type lookups */
+    AstNode *program;
 } CCodegen;
 
 /* ──────────────────────────────────────────────

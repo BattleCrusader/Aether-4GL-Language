@@ -210,7 +210,7 @@ func scheduler_yield() {
 func test_fiber_stack_alloc(): u64 {
     // Allocate stack for a new fiber
     let stack_size: u64 = 4096 * 4  // 16KB per fiber
-    let stack: u64 = alloc(stack_size)
+    let stack: u64 = heap stack_size
     if stack != 0 {
         // Initialize stack with return address
         asm {
@@ -219,7 +219,6 @@ func test_fiber_stack_alloc(): u64 {
             sub rdi, 8
             mov qword [rdi], 0  ; initial return address
         }
-        free(stack)
         return 1
     }
     return 0

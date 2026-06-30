@@ -1345,8 +1345,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* Phase 4: Code generation — C transpiler (default) */
-    {
+    /* Phase 4: Code generation — C transpiler (default), NASM for asm targets */
+    if (target == TARGET_ASM_X86_64 || target == TARGET_ASM_ARM64 || target == TARGET_ASM_RISCV64) {
+        /* These targets use the NASM codegen path (handled in codegen.c) */
+        /* Fall through to the existing NASM codegen below */
+    } else {
         Arena *c_arena = arena_create();
         CCodegen *cg = c_create(c_arena, target, opt_level);
 
@@ -1405,6 +1408,61 @@ int main(int argc, char **argv) {
             snprintf(cmd, sizeof(cmd), "%s", output_file);
             int ret = system(cmd);
             return WEXITSTATUS(ret);
+        }
+
+        printf("Compilation successful: %s -> %s\n", input_file, output_file);
+        return 0;
+    }
+
+    /* NASM codegen path for lib/asm/freestanding targets */
+    {
+        Arena *cg_arena = arena_create();
+        Codegen *cg = codegen_create(cg_arena);
+        codegen_set_target(cg, target);
+        codegen_generate(cg, program);
+
+        /* Extract metadata for .aelib library target */
+        if (target == TARGET_LIB) {
+            codegen_extract_metadata(cg, program);
+        }
+
+        const char *asm_text = codegen_get_asm(cg);
+        if (!asm_text) {
+            fprintf(stderr, "Code generation failed\n");
+            parser_destroy(parser); free(source);
+            arena_destroy(sa_arena); arena_destroy(cg_arena);
+            return 1;
+        }
+
+        /* Write assembly to temp file */
+        char asm_path[1024];
+        snprintf(asm_path, sizeof(asm_path), "%s.asm", output_file ? output_file : "/tmp/aether_out");
+        FILE *af = fopen(asm_path, "w");
+        if (!af) { fprintf(stderr, "Error: cannot write '%s'\n", asm_path); return 1; }
+        fwrite(asm_text, 1, strlen(asm_text), af);
+        fclose(af);
+
+        /* Assemble and link via codegen.c's assemble function */
+        int ret = codegen_assemble(cg, asm_path, output_file);
+        remove(asm_path);
+
+        if (ret != 0) {
+            fprintf(stderr, "Assembly/link failed\n");
+            parser_destroy(parser); free(source);
+            arena_destroy(sa_arena); arena_destroy(cg_arena);
+            return 1;
+        }
+
+        if (verbose) printf("NASM compilation successful\n");
+        parser_destroy(parser); free(source);
+        arena_destroy(sa_arena); arena_destroy(cg_arena);
+
+        if (run_mode) {
+            if (verbose) printf("Running: %s\n", output_file);
+            char cmd[4096];
+            snprintf(cmd, sizeof(cmd), "%s", output_file);
+            int r = system(cmd);
+            return WEXITSTATUS(r);
         }
 
         printf("Compilation successful: %s -> %s\n", input_file, output_file);

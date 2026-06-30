@@ -135,7 +135,7 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
             fprintf(cg->out, "    %.*s.len = strlen(argv[1]);\n",
                 (int)main_param_name.len, main_param_name.data);
             c_indent(cg);
-            fprintf(cg->out, "    %.*s.ptr = argv[1];\n",
+            fprintf(cg->out, "    %.*s.data = argv[1];\n",
                 (int)main_param_name.len, main_param_name.data);
             cg->indent--;
             c_indent(cg);

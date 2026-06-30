@@ -15,7 +15,6 @@ void c_emit_target_preamble(CCodegen *cg) {
     fputs("#include <stdint.h>\n", cg->out);
     fputs("#include <stdbool.h>\n\n", cg->out);
 }
-
 void c_emit_target_postamble(CCodegen *cg) {
     /* Nothing needed for host target */
     (void)cg;
@@ -109,9 +108,13 @@ int c_compile(CCodegen *cg, const char *c_path, const char *output_path) {
             break;
 
         case TARGET_LIB:
-            /* .aelib library — handled by aelib.c, not here */
-            fprintf(stderr, "C: TARGET_LIB not supported in c_compile\n");
-            return 1;
+            /* .aelib library: compile to .o file for archiving.
+               Use -masm=intel for NASM-style inline asm in stdlib. */
+            snprintf(cmd, sizeof(cmd),
+                "gcc -std=c23 -O%d -masm=intel -c -o \"%s\" \"%s\" 2>&1",
+                cg->opt_level, output_path, c_path);
+            ret = system(cmd);
+            break;
 
         default:
             /* Fallback to host compilation */

@@ -6,7 +6,7 @@ func concat(firstString: string, secondString: string): string {
     return firstString + secondString
 }
 
-func strlen(inputString: string): u64 {
+func stringLength(inputString: string): u64 {
     let mut i: u64 = 0
     while true {
         let c: byte = inputString[i]
@@ -16,14 +16,14 @@ func strlen(inputString: string): u64 {
     return i
 }
 
-func strcmp(a: string, b: string): bool {
+func stringCompare(a: string, b: string): bool {
     return strEq(a, b)
 }
 
 func split(inputString: string, delimiter: string): [string] {
     let mut result: [string] = []
-    let inputLen: u64 = strlen(inputString)
-    let delimLen: u64 = strlen(delimiter)
+    let inputLen: u64 = stringLength(inputString)
+    let delimLen: u64 = stringLength(delimiter)
     if delimLen == 0 {
         let mut i: u64 = 0
         while i < inputLen {
@@ -68,7 +68,7 @@ func split(inputString: string, delimiter: string): [string] {
 }
 
 func trim(inputString: string): string {
-    let len: u64 = strlen(inputString)
+    let len: u64 = stringLength(inputString)
     let mut start: u64 = 0
     while start < len {
         let c: byte = inputString[start]
@@ -151,7 +151,7 @@ func substring(inputString: string, startIndex: u64, endIndex: u64): string {
 }
 
 func startsWith(inputString: string, prefix: string): bool {
-    let prefixLen: u64 = strlen(prefix)
+    let prefixLen: u64 = stringLength(prefix)
     let mut i: u64 = 0
     while i < prefixLen {
         if inputString[i] != prefix[i] { return false }
@@ -161,8 +161,8 @@ func startsWith(inputString: string, prefix: string): bool {
 }
 
 func endsWith(inputString: string, suffix: string): bool {
-    let inputLen: u64 = strlen(inputString)
-    let suffixLen: u64 = strlen(suffix)
+    let inputLen: u64 = stringLength(inputString)
+    let suffixLen: u64 = stringLength(suffix)
     if suffixLen > inputLen { return false }
     let mut i: u64 = 0
     while i < suffixLen {
@@ -173,8 +173,8 @@ func endsWith(inputString: string, suffix: string): bool {
 }
 
 func contains(haystack: string, needle: string): bool {
-    let hayLen: u64 = strlen(haystack)
-    let needleLen: u64 = strlen(needle)
+    let hayLen: u64 = stringLength(haystack)
+    let needleLen: u64 = stringLength(needle)
     if needleLen == 0 { return true }
     if needleLen > hayLen { return false }
     let mut i: u64 = 0
@@ -192,8 +192,8 @@ func contains(haystack: string, needle: string): bool {
 }
 
 func replace(inputString: string, searchFor: string, replaceWith: string): string {
-    let inputLen: u64 = strlen(inputString)
-    let searchLen: u64 = strlen(searchFor)
+    let inputLen: u64 = stringLength(inputString)
+    let searchLen: u64 = stringLength(searchFor)
     if searchLen == 0 { return inputString }
     let mut result: string = ""
     let mut i: u64 = 0
@@ -207,7 +207,7 @@ func replace(inputString: string, searchFor: string, replaceWith: string): strin
         }
         if matches {
             let mut ri: u64 = 0
-            let replaceLen: u64 = strlen(replaceWith)
+            let replaceLen: u64 = stringLength(replaceWith)
             while ri < replaceLen {
                 result = result + replaceWith[ri]
                 ri = ri + 1
@@ -229,13 +229,13 @@ func join(strings: [string], delimiter: string): string {
     while i < count {
         if i > 0 {
             let mut di: u64 = 0
-            let delimLen: u64 = strlen(delimiter)
+            let delimLen: u64 = stringLength(delimiter)
             while di < delimLen {
                 result = result + delimiter[di]
                 di = di + 1
             }
         }
-        let itemLen: u64 = strlen(strings[i])
+        let itemLen: u64 = stringLength(strings[i])
         let mut j: u64 = 0
         while j < itemLen {
             result = result + strings[i][j]
@@ -249,7 +249,7 @@ func join(strings: [string], delimiter: string): string {
 // --- New functions ---
 
 func reverse(inputString: string): string {
-    let len: u64 = strlen(inputString)
+    let len: u64 = stringLength(inputString)
     let mut result: string = ""
     let mut i: u64 = len
     while i > 0 {
@@ -270,8 +270,8 @@ func repeat(inputString: string, count: u64): string {
 }
 
 func count(haystack: string, needle: string): u64 {
-    let hayLen: u64 = strlen(haystack)
-    let needleLen: u64 = strlen(needle)
+    let hayLen: u64 = stringLength(haystack)
+    let needleLen: u64 = stringLength(needle)
     if needleLen == 0 or needleLen > hayLen { return 0 }
     let mut result: u64 = 0
     let mut i: u64 = 0
@@ -293,8 +293,8 @@ func count(haystack: string, needle: string): u64 {
 }
 
 func indexOf(haystack: string, needle: string): i64 {
-    let hayLen: u64 = strlen(haystack)
-    let needleLen: u64 = strlen(needle)
+    let hayLen: u64 = stringLength(haystack)
+    let needleLen: u64 = stringLength(needle)
     if needleLen == 0 or needleLen > hayLen { return -1 }
     let mut i: u64 = 0
     while i <= hayLen - needleLen {
@@ -311,8 +311,8 @@ func indexOf(haystack: string, needle: string): i64 {
 }
 
 func lastIndexOf(haystack: string, needle: string): i64 {
-    let hayLen: u64 = strlen(haystack)
-    let needleLen: u64 = strlen(needle)
+    let hayLen: u64 = stringLength(haystack)
+    let needleLen: u64 = stringLength(needle)
     if needleLen == 0 or needleLen > hayLen { return -1 }
     let mut i: u64 = hayLen - needleLen
     while true {
@@ -330,7 +330,7 @@ func lastIndexOf(haystack: string, needle: string): i64 {
 }
 
 func padLeft(inputString: string, totalLength: u64, padCharacter: byte): string {
-    let len: u64 = strlen(inputString)
+    let len: u64 = stringLength(inputString)
     if len >= totalLength { return inputString }
     let mut result: string = ""
     let mut i: u64 = 0
@@ -344,7 +344,7 @@ func padLeft(inputString: string, totalLength: u64, padCharacter: byte): string 
 }
 
 func padRight(inputString: string, totalLength: u64, padCharacter: byte): string {
-    let len: u64 = strlen(inputString)
+    let len: u64 = stringLength(inputString)
     if len >= totalLength { return inputString }
     let mut result: string = inputString
     let mut i: u64 = 0
