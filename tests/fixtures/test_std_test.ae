@@ -2,8 +2,8 @@
 // Tests both passing and failing assertions, then returns the failure count.
 import "std/test"
 
-@test(expect=4)
-func main(): u64 {
+@test
+func main(): void {
     // Passing assertions
     assertEquals(5, 2 + 3)
     assertEquals(5, 2 + 3, "2 + 3 should be 5")
@@ -18,5 +18,5 @@ func main(): u64 {
     assertTrue(actualValue == false) // Failure: expected true, got false
     assertTrue(actualValue == false, "actualValue should be true") // Failure: actualValue should be true
 
-    return __test_failures
+    assertEquals(4, __test_failures, "test_std_test.ae")
 }

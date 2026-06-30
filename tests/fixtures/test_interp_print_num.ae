@@ -1,7 +1,8 @@
 // test_interp_print_num.ae — print() with numeric argument
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let n: u64 = 42
     print(n)
-    return 42
 }

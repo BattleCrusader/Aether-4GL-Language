@@ -1,4 +1,6 @@
 // test_errors.ae — custom error types with enum variants and discriminant matching
+import "std/test"
+
 enum MyError {
     NotFound
     PermissionDenied
@@ -10,8 +12,8 @@ func do_fail(): u64 throws {
     return 0
 }
 
-@test(expect=42)
-func main(): u64 {
+@test
+func main(): void {
     let mut result: u64 = 0
 
     try {
@@ -24,5 +26,5 @@ func main(): u64 {
         result = 20
     }
 
-    return result
+    assertEquals(42, result, "test_errors.ae")
 }

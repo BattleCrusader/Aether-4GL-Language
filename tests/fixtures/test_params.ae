@@ -1,4 +1,6 @@
 // test_params.ae — function calls: multiple params, recursion
+import "std/test"
+
 func add(a: u64, b: u64): u64 {
     return a + b
 }
@@ -8,9 +10,9 @@ func factorial(n: u64): u64 {
     return n * factorial(n - 1)
 }
 
-@test(expect=150)
-func main(): u64 {
+@test
+func main(): void {
     let r1 = add(10, 20)        // 30
     let r2 = factorial(5)       // 120
-    return r1 + r2              // 150
+    assertEquals(150, r1 + r2, "test_params.ae")
 }

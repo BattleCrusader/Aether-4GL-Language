@@ -1,6 +1,7 @@
 // test_args.ae — test that main() receives argv[1] as string parameter
+import "std/test"
+
 @test
-func main(inputString: string): u64 {
+func main(inputString: string): void {
     print("hello {inputString}\n")
-    return 0
 }

@@ -1,6 +1,8 @@
 // test_trycatch.ae — basic try/catch/throw
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let mut result: u64 = 0
 
     try {
@@ -9,5 +11,5 @@ func main(): u64 {
         result = 0
     }
 
-    return result
+    assertEquals(42, result, "test_trycatch.ae")
 }

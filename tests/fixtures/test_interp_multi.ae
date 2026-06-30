@@ -1,10 +1,11 @@
 // test_interp_multi.ae — multiple interpolations in one string
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let a = "hello"
     let b = "world"
     let c = "!"
     let msg = "{a} {b}{c}"
     print(msg)
-    return 42
 }

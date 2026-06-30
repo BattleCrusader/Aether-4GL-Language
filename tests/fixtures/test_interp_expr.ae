@@ -1,9 +1,10 @@
 // test_interp_expr.ae — interpolation with numeric expressions
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let x: u64 = 40
     let y: u64 = 2
     let msg = "sum = {x + y}"
     print(msg)
-    return 42
 }
