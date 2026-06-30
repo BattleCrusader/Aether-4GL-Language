@@ -343,6 +343,15 @@ void c_emit_stmt(CCodegen *cg, AstNode *node) {
         case NODE_EXPR_STMT:
             c_emit_expr_stmt(cg, node);
             break;
+        case NODE_ASSIGN: {
+            /* Direct assignment: target = value */
+            c_indent(cg);
+            c_emit_expr(cg, node->data.binary.left);
+            fputs(" = ", cg->out);
+            c_emit_expr(cg, node->data.binary.right);
+            fputs(";\n", cg->out);
+            break;
+        }
         case NODE_BLOCK:
             c_emit_block(cg, node);
             break;
@@ -399,6 +408,95 @@ void c_emit_stmt(CCodegen *cg, AstNode *node) {
             break;
         case NODE_CATCH_ARM:
             /* Catch arms are handled inside c_emit_try — skip here */
+            break;
+        case NODE_MODULE_DECL: {
+            /* Emit module body as a block comment, then emit the body declarations */
+            StringView mname = node->data.module_decl.name->data.ident.name;
+            c_indent(cg);
+            fprintf(cg->out, "// module %.*s {\n", (int)mname.len, mname.data);
+            cg->indent++;
+            for (int i = 0; i < node->data.module_decl.body.count; i++) {
+                c_emit_stmt(cg, node->data.module_decl.body.items[i]);
+            }
+            cg->indent--;
+            c_indent(cg);
+            fputs("// }\n", cg->out);
+            break;
+        }
+        case NODE_TYPE_ALIAS: {
+            /* Type alias: typedef <underlying_type> <name>; */
+            /* AST stores name as list.items[0], underlying type as list.items[1] */
+            if (node->data.list.count >= 2) {
+                c_indent(cg);
+                fputs("typedef ", cg->out);
+                c_emit_type(cg, node->data.list.items[1]);
+                fputc(' ', cg->out);
+                /* Emit the name (ident node) */
+                StringView aname = node->data.list.items[0]->data.ident.name;
+                fprintf(cg->out, "%.*s", (int)aname.len, aname.data);
+                fputs(";\n", cg->out);
+            }
+            break;
+        }
+        case NODE_TRAIT_DECL: {
+            /* Traits are compile-time only — emit as comment */
+            StringView tname = node->data.trait_decl.name->data.ident.name;
+            c_indent(cg);
+            fprintf(cg->out, "// trait %.*s { ... }\n", (int)tname.len, tname.data);
+            break;
+        }
+        case NODE_IMPL_BLOCK: {
+            /* Impl blocks are compile-time only — emit as comment */
+            StringView tn = node->data.impl_block.trait_name;
+            StringView tyn = node->data.impl_block.type_name;
+            c_indent(cg);
+            fprintf(cg->out, "// impl %.*s for %.*s { ... }\n",
+                    (int)tn.len, tn.data,
+                    (int)tyn.len, tyn.data);
+            break;
+        }
+        case NODE_POOL_DECL: {
+            /* Pool declarations are compile-time only — emit as comment */
+            StringView pname = node->data.pool_decl.name->data.ident.name;
+            c_indent(cg);
+            fprintf(cg->out, "// pool %.*s of size %llu, count %llu\n",
+                    (int)pname.len, pname.data,
+                    (unsigned long long)node->data.pool_decl.size,
+                    (unsigned long long)node->data.pool_decl.count);
+            break;
+        }
+        case NODE_PROTOCOL_DECL: {
+            /* Protocol declarations are compile-time only — emit as comment */
+            StringView pname = node->data.protocol_decl.name->data.ident.name;
+            c_indent(cg);
+            fprintf(cg->out, "// protocol %.*s { ... }\n", (int)pname.len, pname.data);
+            break;
+        }
+        case NODE_UNSAFE: {
+            /* Unsafe is just a block in C — emit the body */
+            /* Body is stored in data.list (first item is the body block) */
+            if (node->data.list.count > 0 && node->data.list.items[0]) {
+                c_emit_block(cg, node->data.list.items[0]);
+            }
+            break;
+        }
+        case NODE_REGION: {
+            /* Region is just a block in C — emit the body */
+            if (node->data.region_node.body) {
+                c_emit_block(cg, node->data.region_node.body);
+            }
+            break;
+        }
+        case NODE_RUN_BLOCK:
+            /* Compile-time execution — skip entirely */
+            break;
+        case NODE_ATTR:
+            /* Attributes are compile-time metadata — skip entirely */
+            break;
+        case NODE_PROPERTY:
+            /* Properties are compile-time — skip with comment */
+            c_indent(cg);
+            fputs("// property\n", cg->out);
             break;
         default:
             fprintf(stderr, "C: unhandled statement node type %d\n", node->type);
