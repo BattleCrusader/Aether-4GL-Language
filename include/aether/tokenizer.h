@@ -91,6 +91,7 @@ typedef enum {
     TOKEN_KW_INLINE,    /* inline */
     TOKEN_KW_AT,        /* at */
     TOKEN_KW_FINALLY,   /* finally */
+    TOKEN_KW_AS,        /* as */
 
     /* Operators */
     TOKEN_PLUS,         /* + */

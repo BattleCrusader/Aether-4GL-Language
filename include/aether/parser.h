@@ -14,6 +14,7 @@ typedef enum {
     PREC_LOGICAL_OR,    /* || */
     PREC_LOGICAL_AND,   /* && */
     PREC_COMPARISON,    /* == != < > <= >= */
+    PREC_CAST,          /* as */
     PREC_BIT_OR,        /* | */
     PREC_BIT_XOR,       /* ^ */
     PREC_BIT_AND,       /* & */

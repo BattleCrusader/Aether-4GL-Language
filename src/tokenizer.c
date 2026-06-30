@@ -73,6 +73,7 @@ const KeywordEntry KEYWORDS[] = {
     {"inline",   TOKEN_KW_INLINE},
     {"at",       TOKEN_KW_AT},
     {"iflet",    TOKEN_KW_IF_LET},
+    {"as",       TOKEN_KW_AS},
 };
 
 const int KEYWORD_COUNT = sizeof(KEYWORDS) / sizeof(KEYWORDS[0]);

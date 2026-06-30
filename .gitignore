@@ -10,4 +10,4 @@ tests/fixtures/test_struct
 tests/fixtures/test_enum
 tests/fixtures/test_match
 tests/fixtures/hello_native
-tests/fixtures/test_defer
+tests/fixtures/test_defer.codegraph/

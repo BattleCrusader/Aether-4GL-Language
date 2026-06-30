@@ -1216,6 +1216,7 @@ static AstNode *parse_type_base(Parser *p) {
         else if (sv_eq_cstr(name, "u16")) prim = PRIM_U16;
         else if (sv_eq_cstr(name, "u32")) prim = PRIM_U32;
         else if (sv_eq_cstr(name, "u64")) prim = PRIM_U64;
+        else if (sv_eq_cstr(name, "u128")) prim = PRIM_U128;
         else if (sv_eq_cstr(name, "i8")) prim = PRIM_I8;
         else if (sv_eq_cstr(name, "i16")) prim = PRIM_I16;
         else if (sv_eq_cstr(name, "i32")) prim = PRIM_I32;
@@ -1454,6 +1455,7 @@ static Precedence token_precedence(TokenType type) {
         case TOKEN_EQ_EQ: case TOKEN_BANG_EQ: case TOKEN_LT:
         case TOKEN_GT: case TOKEN_LT_EQ: case TOKEN_GT_EQ:
             return PREC_COMPARISON;
+        case TOKEN_KW_AS: return PREC_CAST;
         case TOKEN_PIPE: return PREC_BIT_OR;
         case TOKEN_CARET: return PREC_BIT_XOR;
         case TOKEN_AMPERSAND: return PREC_BIT_AND;
@@ -1798,6 +1800,20 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
     if (token.type == TOKEN_PIPE) {
         /* This would be captured at the lambda level */
         return left;
+    }
+
+    /* Cast: left as Type */
+    if (token.type == TOKEN_KW_AS) {
+        parser_advance(p);
+        AstNode *type_node = parse_type(p);
+        if (!type_node) {
+            parser_error(p, p->current, "expected type after 'as'");
+            return left;
+        }
+        AstNode *cast_node = node_create(p->arena, NODE_CAST, loc);
+        cast_node->data.binary.left = left;
+        cast_node->data.binary.right = type_node;
+        return cast_node;
     }
 
     /* Binary operators */
