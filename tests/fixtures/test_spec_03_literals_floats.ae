@@ -1,8 +1,10 @@
 // test_spec_03_literals_floats.ae — Section 3.6: Float Literals
 // Tests: basic floats, scientific notation, digit separators in floats
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Basic float literals
     let f_basic: f64 = 3.14
     let f_zero: f64 = 0.0
@@ -22,9 +24,8 @@ func main(): u64 {
     let as_int: u64 = f_basic as u64  // truncates to 3
 
     // Verify
-    let mut score: u64 = 0
-    if as_int == 3 { score = score + 1 }
-    if f_whole == 42.0 { score = score + 1 }
-
-    return 42
+    assertEquals(3, as_int, "f_basic as u64 should truncate to 3")
+    assertEquals(42, f_whole as u64, "f_whole as u64 should be 42")
+    assertEquals(0, f_zero as u64, "f_zero as u64 should be 0")
+    assertEquals(100000, f_sci_pos as u64, "1.0e+5 as u64 should be 100000")
 }

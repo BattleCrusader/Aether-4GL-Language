@@ -7,4 +7,5 @@ func divide(a: int, b: int): int pre(b != 0) {
 
 @test
 func main(): void {
+    assertTrue(divide(6, 2) == 3, "divide(6, 2) == 3")
 }

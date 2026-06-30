@@ -3,4 +3,5 @@ import "std/test"
 
 @test
 func main(): void {
+    assertEquals(1, 1, "basic assertion")
 }

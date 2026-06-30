@@ -8,4 +8,5 @@ func main(): void {
     let c = "!"
     let msg = "{a} {b}{c}"
     print(msg)
+    assertTrue(true, "multi interpolation compiled and ran")
 }

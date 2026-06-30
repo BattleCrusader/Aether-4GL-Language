@@ -1,8 +1,10 @@
 // test_spec_04_overflow.ae — Section 4.1: Integer Overflow Semantics
 // Tests: wrapping arithmetic (two's complement for signed, modulo 2^N for unsigned)
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Unsigned wrapping: u8 max + 1 wraps to 0
     let u8_max: u8 = 255
     let u8_wrap: u8 = u8_max + 1  // wraps to 0
@@ -34,14 +36,11 @@ func main(): u64 {
     let i8_neg_mul: i8 = -100 * -2  // 200 wraps to -56
 
     // Verify wrapping behavior
-    let mut score: u64 = 0
-    if u8_wrap == 0 { score = score + 1 }
-    if u8_wrap2 == 255 { score = score + 1 }
-    if u16_wrap == 0 { score = score + 1 }
-    if u32_wrap == 0 { score = score + 1 }
-    if u8_mul == 144 { score = score + 1 }
-    if i8_wrap == -128 { score = score + 1 }
-    if i8_wrap2 == 127 { score = score + 1 }
-
-    return 42
+    assertEquals(0, u8_wrap as u64, "u8 255 + 1 should wrap to 0")
+    assertEquals(255, u8_wrap2 as u64, "u8 0 - 1 should wrap to 255")
+    assertEquals(0, u16_wrap as u64, "u16 65535 + 1 should wrap to 0")
+    assertEquals(0, u32_wrap as u64, "u32 max + 1 should wrap to 0")
+    assertEquals(144, u8_mul as u64, "u8 200 * 2 should wrap to 144")
+    assertEquals(-128, i8_wrap as i64, "i8 127 + 1 should wrap to -128")
+    assertEquals(127, i8_wrap2 as i64, "i8 -128 - 1 should wrap to 127")
 }

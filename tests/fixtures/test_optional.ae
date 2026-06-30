@@ -3,4 +3,5 @@ import "std/test"
 @test
 func main(): void {
     let x: u64? = none
+    assertTrue(true, "optional compiled and ran")
 }

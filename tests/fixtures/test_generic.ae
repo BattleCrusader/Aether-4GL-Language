@@ -6,5 +6,5 @@ func identity<T>(value: T): T {
 
 @test
 func main(): void {
-    identity(42)
+    assertTrue(identity(42) == 42, "identity(42) == 42")
 }

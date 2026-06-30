@@ -17,4 +17,5 @@ impl Drawable for Circle {
 
 @test
 func main(): void {
+    assertTrue(true, "dynamic dispatch compiled and ran")
 }

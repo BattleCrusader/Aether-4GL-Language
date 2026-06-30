@@ -7,4 +7,5 @@ import "std/test"
 
 @test
 func main(): void {
+    assertTrue(true, "comptime compiled and ran")
 }

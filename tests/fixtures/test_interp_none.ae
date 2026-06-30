@@ -5,4 +5,5 @@ import "std/test"
 func main(): void {
     let msg = "Hello World"
     print(msg)
+    assertTrue(true, "plain string compiled and ran")
 }

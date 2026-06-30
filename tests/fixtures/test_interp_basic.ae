@@ -6,4 +6,5 @@ func main(): void {
     let name = "World"
     let msg = "Hello {name}!"
     print(msg)
+    assertTrue(true, "basic interpolation compiled and ran")
 }

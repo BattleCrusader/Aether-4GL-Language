@@ -6,4 +6,5 @@ func main(): void {
     let n: u64 = 42
     let msg = "value: " + n
     print(msg)
+    assertEquals(42, n, "n == 42")
 }

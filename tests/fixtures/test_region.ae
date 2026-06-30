@@ -1,10 +1,11 @@
 import "std/test"
 
 @test
-func main() {
+func main(): void {
     region("test") {
         let p = heap 42
         let val = *p
         print("region works!\n")
+        assertEquals(42, val, "region heap value == 42")
     }
 }

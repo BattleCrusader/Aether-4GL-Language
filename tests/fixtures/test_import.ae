@@ -4,5 +4,5 @@ import "std/test"
 
 @test
 func main(): void {
-    greet()
+    assertEquals(42, greet(), "greet() returns 42")
 }

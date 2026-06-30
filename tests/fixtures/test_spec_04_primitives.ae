@@ -2,8 +2,10 @@
 // Tests: void, bool, byte, u8-u64, i8-i64, f32, f64, string
 // Tests all type sizes and value ranges
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Unsigned integers — all sizes
     let u8_val: u8 = 200
     let u16_val: u16 = 40000
@@ -43,18 +45,16 @@ func main(): u64 {
     let mixed_sum: u64 = u8_val + u16_val + u32_val
     // 200 + 40000 + 3000000 = 3040200
 
-    // Verify
-    let mut score: u64 = 0
-    if u8_val == 200 { score = score + 1 }
-    if u16_val == 40000 { score = score + 1 }
-    if u32_val == 3000000 { score = score + 1 }
-    if u64_val == 50000000000 { score = score + 1 }
-    if i8_pos == 100 { score = score + 1 }
-    if i8_neg == -100 { score = score + 1 }
-    if bool_t { score = score + 1 }
-    if not bool_f { score = score + 1 }
-    if byte_val == 0xFF { score = score + 1 }
-    if u64_from_u8 == 200 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(200, u8_val as u64, "u8_val should be 200")
+    assertEquals(40000, u16_val as u64, "u16_val should be 40000")
+    assertEquals(3000000, u32_val as u64, "u32_val should be 3000000")
+    assertEquals(50000000000, u64_val, "u64_val should be 50000000000")
+    assertEquals(100, i8_pos as i64, "i8_pos should be 100")
+    assertEquals(-100, i8_neg as i64, "i8_neg should be -100")
+    assertTrue(bool_t, "bool_t should be true")
+    assertTrue(not bool_f, "bool_f should be false")
+    assertEquals(0xFF, byte_val as u64, "byte_val should be 0xFF")
+    assertEquals(200, u64_from_u8, "u64_from_u8 should be 200")
+    assertEquals(3040200, mixed_sum, "mixed_sum should be 3040200")
 }

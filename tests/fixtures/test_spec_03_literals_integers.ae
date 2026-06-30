@@ -1,8 +1,10 @@
 // test_spec_03_literals_integers.ae — Section 3.6: Integer Literals
 // Tests: decimal, hex, octal, binary, digit separators, all bases with separators
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Decimal literals
     let dec: u64 = 42
     let dec_large: u64 = 1000000
@@ -50,17 +52,15 @@ func main(): u64 {
     let min_i16: i16 = -32768
     let max_i16: i16 = 32767
 
-    // Verify
-    let mut score: u64 = 0
-    if dec == 42 { score = score + 1 }
-    if hex == 255 { score = score + 1 }
-    if oct == 63 { score = score + 1 }
-    if bin == 10 { score = score + 1 }
-    if sep_dec == 1000000 { score = score + 1 }
-    if sep_hex == 0xFFFFFFFF { score = score + 1 }
-    if sep_bin == 0b10100101 { score = score + 1 }
-    if max_u8 == 255 { score = score + 1 }
-    if max_u16 == 65535 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(42, dec, "decimal literal 42")
+    assertEquals(255, hex, "hex literal 0xFF should be 255")
+    assertEquals(63, oct, "octal literal 0o77 should be 63")
+    assertEquals(10, bin, "binary literal 0b1010 should be 10")
+    assertEquals(1000000, sep_dec, "separator decimal 1_000_000")
+    assertEquals(4294967295, sep_hex, "separator hex 0xFF_FF_FF_FF")
+    assertEquals(165, sep_bin, "separator binary 0b1010_0101 should be 165")
+    assertEquals(255, max_u8 as u64, "max_u8 should be 255")
+    assertEquals(65535, max_u16 as u64, "max_u16 should be 65535")
+    assertEquals(1000, multi_sep, "multiple separators 1___000 should be 1000")
 }

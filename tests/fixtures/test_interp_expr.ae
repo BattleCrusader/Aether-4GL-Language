@@ -7,4 +7,5 @@ func main(): void {
     let y: u64 = 2
     let msg = "sum = {x + y}"
     print(msg)
+    assertEquals(42, x + y, "x + y == 42")
 }

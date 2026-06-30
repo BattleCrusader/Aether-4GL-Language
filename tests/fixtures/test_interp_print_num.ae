@@ -5,4 +5,5 @@ import "std/test"
 func main(): void {
     let n: u64 = 42
     print(n)
+    assertEquals(42, n, "n == 42")
 }

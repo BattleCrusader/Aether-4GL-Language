@@ -1,6 +1,8 @@
 // test_spec_04_classes.ae — Section 4.6: Classes
 // Tests: class definition, methods, self, new/init, field access
 
+import "std/test"
+
 class Counter {
     value: u64
 
@@ -39,8 +41,8 @@ class Point {
     }
 }
 
-@test(expect=42)
-func main(): u64 {
+@test
+func main(): void {
     // Create and use Counter
     let mut c: Counter = Counter::new()
     let initial: u64 = c.get()  // 0
@@ -59,14 +61,11 @@ func main(): u64 {
     let px: i64 = p.x
     let py: i64 = p.y
 
-    // Verify
-    let mut score: u64 = 0
-    if initial == 0 { score = score + 1 }
-    if after_inc == 1 { score = score + 1 }
-    if after_add == 42 { score = score + 1 }
-    if dist == 25 { score = score + 1 }
-    if px == 3 { score = score + 1 }
-    if py == 4 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(0, initial, "initial counter value should be 0")
+    assertEquals(1, after_inc, "after increment should be 1")
+    assertEquals(42, after_add, "after add(41) should be 42")
+    assertEquals(25, dist as u64, "Point(3,4) distance_sq should be 25")
+    assertEquals(3, px as u64, "p.x should be 3")
+    assertEquals(4, py as u64, "p.y should be 4")
 }

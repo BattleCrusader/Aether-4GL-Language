@@ -1,6 +1,8 @@
 // test_spec_03_operators_range.ae — Section 3.4: Range Expressions
 // Tests: .. (half-open), ..= (inclusive)
 
+import "std/test"
+
 // Helper function for range match
 func classify(x: u64): u64 {
     return match x {
@@ -10,8 +12,8 @@ func classify(x: u64): u64 {
     }
 }
 
-@test(expect=42)
-func main(): u64 {
+@test
+func main(): void {
     // Half-open range in for loop
     let mut sum1: u64 = 0
     for i in 0..10 {
@@ -32,15 +34,12 @@ func main(): u64 {
     let r4 = classify(0)   // 0 (default)
     let r5 = classify(99)  // 0 (default)
 
-    // Verify
-    let mut score: u64 = 0
-    if sum1 == 45 { score = score + 1 }
-    if sum2 == 15 { score = score + 1 }
-    if r1 == 10 { score = score + 1 }
-    if r2 == 20 { score = score + 1 }
-    if r3 == 20 { score = score + 1 }
-    if r4 == 0 { score = score + 1 }
-    if r5 == 0 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(45, sum1, "0..10 sum should be 45")
+    assertEquals(15, sum2, "0..=5 sum should be 15")
+    assertEquals(10, r1, "classify(3) in 1..5 should be 10")
+    assertEquals(20, r2, "classify(5) in 5..=10 should be 20")
+    assertEquals(20, r3, "classify(10) in 5..=10 should be 20")
+    assertEquals(0, r4, "classify(0) default should be 0")
+    assertEquals(0, r5, "classify(99) default should be 0")
 }

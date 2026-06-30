@@ -8,4 +8,5 @@ func main(): void {
     print(a)
     let b = "the answer is " + n
     print(b)
+    assertEquals(42, n, "n == 42")
 }

@@ -1,8 +1,10 @@
 // test_spec_03_literals_strings.ae — Section 3.6: String Literals
 // Tests: basic strings, escape sequences, char literals
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Basic string literals
     let s1: string = "hello"
     let s2: string = "world"
@@ -28,10 +30,10 @@ func main(): u64 {
     let ch_quote: char = '\''
     let ch_hex: char = '\x41'  // 'A'
 
-    // Verify
-    let mut score: u64 = 0
-    if first_byte == 0x68 { score = score + 1 }
-    if second_byte == 0x65 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(0x68, first_byte as u64, "s[0] should be 0x68 ('h')")
+    assertEquals(0x65, second_byte as u64, "s[1] should be 0x65 ('e')")
+    assertEquals(0, #s3, "empty string should have length 0")
+    assertEquals(5, #s, "string 'hello' should have length 5")
+    assertEquals(11, #s_concat, "'hello ' + 'world' should have length 11")
 }

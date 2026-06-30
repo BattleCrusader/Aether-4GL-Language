@@ -1,19 +1,21 @@
 // test_spec_03_comments.ae — Section 3.1: Comments
 // Tests: line comments, block comments, nested block comments, doc comments
 
+import "std/test"
+
 /* Block comment before function */
 
 /* Nested /* block */ comments — this should compile */
 
 /// Doc comment for this function
 /// These are attached to the next declaration
-@test(expect=0)
-func main(): u64 {
+@test
+func main(): void {
     // Line comment inside function body
     let x: u64 = 42  // inline comment
     /* Block comment in middle of code */
     let y: u64 = 100
     /* Nested /* comment */ still works */
     let result = x + y
-    return 0
+    assertEquals(142, result, "comment test: x + y should be 142")
 }

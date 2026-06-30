@@ -1,8 +1,10 @@
 // test_spec_04_type_casting.ae — Section 4.2: Type Casting with 'as'
 // Tests: u8 as u64, u64 as u8, f64 as f32, byte as char, etc.
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Integer widening (safe)
     let small: u8 = 42
     let wide: u64 = small as u64  // 42
@@ -39,11 +41,8 @@ func main(): u64 {
     let c2: char = 'A'
     let b2: byte = c2 as byte  // 0x41
 
-    // Verify
-    let mut score: u64 = 0
-    if wide == 42 { score = score + 1 }
-    if narrow == 0xFF { score = score + 1 }
-    if truncated == 3 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(42, wide, "u8 as u64 widening should be 42")
+    assertEquals(0xFF, narrow as u64, "u64 as u8 narrowing should truncate to 0xFF")
+    assertEquals(3, truncated, "f64 3.99 as u64 should truncate to 3")
 }

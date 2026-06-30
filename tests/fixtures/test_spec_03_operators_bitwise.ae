@@ -1,8 +1,10 @@
 // test_spec_03_operators_bitwise.ae — Section 3.4: Bitwise Operators
 // Tests: &, |, ^, ~, <<, >>
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let a: u64 = 0b1010  // 10
     let b: u64 = 0b1100  // 12
 
@@ -31,20 +33,14 @@ func main(): u64 {
     // Compound bitwise expression
     let expr: u64 = (a & b) | (a ^ b)  // 8 | 6 = 14
 
-    // Verify results
-    let mut score: u64 = 0
-    if band == 8 { score = score + 1 }
-    if bor == 14 { score = score + 1 }
-    if bxor == 6 { score = score + 1 }
-    if shl == 40 { score = score + 1 }
-    if shr == 10 { score = score + 1 }
-    if shl_zero == 10 { score = score + 1 }
-    if shr_zero == 10 { score = score + 1 }
-    if expr == 14 { score = score + 1 }
-
-    // bnot should have all bits of a flipped
-    // For u64: ~0b1010 = 0xFFFFFFFFFFFFFFF5
-    if bnot == ~a { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(8, band, "0b1010 & 0b1100 should be 8")
+    assertEquals(14, bor, "0b1010 | 0b1100 should be 14")
+    assertEquals(6, bxor, "0b1010 ^ 0b1100 should be 6")
+    assertEquals(40, shl, "0b1010 << 2 should be 40")
+    assertEquals(10, shr, "0b101000 >> 2 should be 10")
+    assertEquals(10, shl_zero, "a << 0 should be 10")
+    assertEquals(10, shr_zero, "a >> 0 should be 10")
+    assertEquals(14, expr, "(a & b) | (a ^ b) should be 14")
+    assertEquals(bnot, ~a, "~a should equal ~a")
 }

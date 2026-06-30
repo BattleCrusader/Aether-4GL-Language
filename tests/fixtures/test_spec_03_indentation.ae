@@ -1,8 +1,10 @@
 // test_spec_03_indentation.ae — Section 3.8: Significant Indentation
 // Tests: 4-space indentation for block structure
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Nested indentation: if inside if inside for
     let mut result: u64 = 0
     for i in 0..10 {
@@ -55,5 +57,5 @@ func main(): u64 {
     }
     // result = 42
 
-    return result
+    assertEquals(42, result, "indentation test: final result should be 42")
 }

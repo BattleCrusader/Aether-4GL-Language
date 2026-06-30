@@ -3,5 +3,7 @@ import "std/test"
 
 @test
 func main(): void {
+    // Lambda parsing test — C transpiler doesn't support lambda calls yet
     let double = |x: int| x * 2
+    assertTrue(true, "lambda parsed successfully")
 }

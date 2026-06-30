@@ -9,8 +9,10 @@
 //   super, init, drop, inline, var, module, use, extern, sys, heap,
 //   protocol, dyn, pre, post, u128
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Primitive type keywords
     let a_bool: bool = true
     let a_byte: byte = 255
@@ -66,6 +68,10 @@ func main(): u64 {
     const MAX: u64 = 100
     result = result + (MAX - 100)
 
-    // return keyword
-    return 42
+    // result = 1 (if) + 5 (while) + 3 (for sum) + 10 (logical) + 200 (casted) + 0 (const) = 219
+    assertEquals(219, result, "keywords test: final result should be 219")
+    assertTrue(a_bool, "a_bool should be true")
+    assertTrue(not flag, "flag should be false")
+    assertEquals(255, a_byte as u64, "a_byte should be 255")
+    assertEquals(42, a_u64, "a_u64 should be 42")
 }

@@ -2,8 +2,10 @@
 // Tests: arrays [T;N] and [T], pointers *T, references ref T, optionals T?
 //        function types func(...):T, tuples (T1, T2)
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Fixed-size array
     let arr: [u64; 4] = [1, 2, 3, 4]
     let arr_first: u64 = arr[0]
@@ -32,14 +34,11 @@ func main(): u64 {
     // Tuple destructuring
     let (num, str) = pair
 
-    // Verify
-    let mut score: u64 = 0
-    if arr_first == 1 { score = score + 1 }
-    if arr_last == 4 { score = score + 1 }
-    if arr_len == 4 { score = score + 1 }
-    if unwrapped == 42 { score = score + 1 }
-    if defaulted == 42 { score = score + 1 }
-    if num == 42 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(1, arr_first, "arr[0] should be 1")
+    assertEquals(4, arr_last, "arr[3] should be 4")
+    assertEquals(4, arr_len, "#arr should be 4")
+    assertEquals(42, unwrapped, "opt_some or 0 should be 42")
+    assertEquals(42, defaulted, "opt_none or 42 should be 42")
+    assertEquals(42, num, "tuple destructuring num should be 42")
 }

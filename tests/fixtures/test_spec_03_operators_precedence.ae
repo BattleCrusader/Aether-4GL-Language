@@ -1,8 +1,10 @@
 // test_spec_03_operators_precedence.ae — Section 3.5: Operator Precedence
 // Tests: 14 levels of precedence
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Level 3 (* / %) before Level 4 (+ -)
     let prec_mul_add: u64 = 2 + 3 * 4   // 2 + 12 = 14 (not 20)
     let prec_div_sub: u64 = 10 - 6 / 2  // 10 - 3 = 7 (not 2)
@@ -34,16 +36,16 @@ func main(): u64 {
     let complex: u64 = 1 + 2 * 3 - 8 / 4 + (1 << 2)
     // 1 + 6 - 2 + 4 = 9
 
-    let mut score: u64 = 0
-    if prec_mul_add == 14 { score = score + 1 }
-    if prec_div_sub == 7 { score = score + 1 }
-    if prec_shift == 5 { score = score + 1 }
-    if prec_and_or == 9 { score = score + 1 }
-    if prec_cmp_and { score = score + 1 }
-    if prec_and_or_logical { score = score + 1 }
-    if a == 42 and b == 42 and c == 42 { score = score + 1 }
-    if parens == 20 { score = score + 1 }
-    if complex == 9 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(14, prec_mul_add, "2 + 3 * 4 should be 14 (not 20)")
+    assertEquals(7, prec_div_sub, "10 - 6 / 2 should be 7 (not 2)")
+    assertEquals(5, prec_shift, "1 + 2 << 1 should be 5")
+    assertEquals(9, prec_and_or, "0b1100 & 0b1010 | 0b0001 should be 9")
+    assertTrue(prec_cmp_and, "1 < 2 && 3 > 1 should be true")
+    assertTrue(prec_and_or_logical, "true || false && false should be true")
+    assertEquals(42, a, "a should be 42 after right-associative assignment")
+    assertEquals(42, b, "b should be 42 after right-associative assignment")
+    assertEquals(42, c, "c should be 42 after right-associative assignment")
+    assertEquals(20, parens, "(2 + 3) * 4 should be 20")
+    assertEquals(9, complex, "1 + 2*3 - 8/4 + (1<<2) should be 9")
 }

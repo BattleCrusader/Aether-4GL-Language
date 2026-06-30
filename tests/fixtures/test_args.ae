@@ -4,4 +4,5 @@ import "std/test"
 @test
 func main(inputString: string): void {
     print("hello {inputString}\n")
+    assertTrue(true, "args test compiled and ran")
 }

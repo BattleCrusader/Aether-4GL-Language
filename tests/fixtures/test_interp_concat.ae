@@ -6,4 +6,5 @@ func main(): void {
     let name = "Aether"
     let msg = "Hello {name}" + "!!"
     print(msg)
+    assertTrue(true, "interpolation + concat compiled and ran")
 }

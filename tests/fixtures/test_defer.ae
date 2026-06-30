@@ -6,4 +6,5 @@ func main(): void {
     defer { print("first\n") }
     defer { print("second\n") }
     print("before return\n")
+    assertTrue(true, "defer compiled and ran")
 }

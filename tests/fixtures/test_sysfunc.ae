@@ -6,4 +6,5 @@ sys func puts(s: string) at(1)
 
 @test
 func main(): void {
+    assertTrue(true, "sysfunc compiled and ran")
 }

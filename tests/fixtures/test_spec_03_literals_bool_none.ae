@@ -1,8 +1,10 @@
 // test_spec_03_literals_bool_none.ae — Section 3.6: Boolean and None Literals
 // Tests: true, false, none
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Boolean literals
     let t: bool = true
     let f: bool = false
@@ -22,17 +24,14 @@ func main(): u64 {
     // None with or default
     let val: u64 = n or 42
 
-    // Verify
-    let mut score: u64 = 0
-    if t { score = score + 1 }
-    if not f { score = score + 1 }
-    if and_t { score = score + 1 }
-    if not and_f { score = score + 1 }
-    if or_t { score = score + 1 }
-    if not or_f { score = score + 1 }
-    if not_t { score = score + 1 }
-    if not not_f { score = score + 1 }
-    if val == 42 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertTrue(t, "true literal should be true")
+    assertTrue(not f, "false literal should be false")
+    assertTrue(and_t, "true and true should be true")
+    assertTrue(not and_f, "true and false should be false")
+    assertTrue(or_t, "false or true should be true")
+    assertTrue(not or_f, "false or false should be false")
+    assertTrue(not_t, "not false should be true")
+    assertTrue(not not_f, "not true should be false")
+    assertEquals(42, val, "none or 42 should be 42")
 }

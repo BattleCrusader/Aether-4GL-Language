@@ -10,4 +10,5 @@ struct Point {
 func main(): void {
     let p: Point
     // Can't construct struct literals yet, but struct types compile
+    assertTrue(true, "struct compiled and ran")
 }

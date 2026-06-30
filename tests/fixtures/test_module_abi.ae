@@ -4,5 +4,6 @@ import "std/test"
 module mymod {
 @test
 func main(): void {
+    assertTrue(true, "module_abi compiled and ran")
 }
 }

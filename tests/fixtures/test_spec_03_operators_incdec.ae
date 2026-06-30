@@ -1,8 +1,10 @@
 // test_spec_03_operators_incdec.ae — Section 3.4: Prefix/Postfix Increment/Decrement
 // Tests: ++x, x++, --x, x--
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let mut a: u64 = 5
 
     // Prefix increment: returns new value
@@ -25,21 +27,18 @@ func main(): u64 {
     b++               // b = 4, returns 3
     b++               // b = 5, returns 4
 
-    // Verify all results
-    let mut score: u64 = 0
-    if a == 5 { score = score + 1 }       // final value after post_dec
-    if pre_inc == 6 { score = score + 1 }  // prefix returns new value
-    if post_inc == 6 { score = score + 1 } // postfix returns old value
-    if pre_dec == 6 { score = score + 1 }  // prefix returns new value
-    if post_dec == 6 { score = score + 1 } // postfix returns old value
-    if b == 5 { score = score + 1 }        // after 3 pre-inc + 2 post-inc
-
     // Decrement chain
     let mut c: u64 = 10
     --c              // c = 9
     c--              // c = 8, returns 9
     --c              // c = 7
-    if c == 7 { score = score + 1 }
 
-    return 42
+    // Verify with assertions
+    assertEquals(5, a, "final a should be 5 after post_dec")
+    assertEquals(6, pre_inc, "prefix ++ should return new value (6)")
+    assertEquals(6, post_inc, "postfix ++ should return old value (6)")
+    assertEquals(6, pre_dec, "prefix -- should return new value (6)")
+    assertEquals(6, post_dec, "postfix -- should return old value (6)")
+    assertEquals(5, b, "b should be 5 after 3 pre-inc + 2 post-inc")
+    assertEquals(7, c, "c should be 7 after --c, c--, --c")
 }

@@ -1,8 +1,10 @@
 // test_spec_03_operators_arithmetic.ae — Section 3.4: Arithmetic Operators
 // Tests: +, -, *, /, % on all integer types
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Addition
     let add_u64: u64 = 20 + 22
     let add_u32: u32 = 10 + 32
@@ -34,14 +36,11 @@ func main(): u64 {
     let abs_check: i64 = if neg_i64 < 0 { -neg_i64 } else { neg_i64 }
 
     // All results should be 42
-    let check1: u64 = if add_u64 == 42 { 1 } else { 0 }
-    let check2: u64 = if sub_u64 == 42 { 1 } else { 0 }
-    let check3: u64 = if mul_u64 == 42 { 1 } else { 0 }
-    let check4: u64 = if div_u64 == 42 { 1 } else { 0 }
-    let check5: u64 = if mod_u64 == 42 { 1 } else { 0 }
-
-    if check1 + check2 + check3 + check4 + check5 == 5 {
-        return 42
-    }
-    return 0
+    assertEquals(42, add_u64, "20 + 22 should be 42")
+    assertEquals(42, sub_u64, "50 - 8 should be 42")
+    assertEquals(42, mul_u64, "6 * 7 should be 42")
+    assertEquals(42, div_u64, "84 / 2 should be 42")
+    assertEquals(42, mod_u64, "100 % 58 should be 42")
+    assertEquals(50, expr, "(10+20)*2 - 30/3 should be 50")
+    assertEquals(42, abs_check as u64, "abs(-42) should be 42")
 }

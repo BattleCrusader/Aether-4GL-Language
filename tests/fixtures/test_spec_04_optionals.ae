@@ -1,8 +1,10 @@
 // test_spec_04_optionals.ae — Section 4.8: Optional Types
 // Tests: T? syntax, some(), none, if-let, or default
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Optional creation
     let opt_some: u64? = some(42)
     let opt_none: u64? = none
@@ -34,12 +36,9 @@ func main(): u64 {
     let opt_byte: byte? = some(0xFF)
     let opt_i64: i64? = some(-42)
 
-    // Verify
-    let mut score: u64 = 0
-    if val1 == 42 { score = score + 1 }
-    if val2 == 42 { score = score + 1 }
-    if val3 == 100 { score = score + 1 }
-    if result == 42 { score = score + 1 }
-
-    return 42
+    // Verify with assertions
+    assertEquals(42, val1, "opt_some or 0 should be 42")
+    assertEquals(42, val2, "opt_none or 42 should be 42")
+    assertEquals(100, val3, "opt_none or 100 should be 100")
+    assertEquals(42, result, "if-let should add 42 from opt_some")
 }

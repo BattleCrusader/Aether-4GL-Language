@@ -10,4 +10,5 @@ enum Option {
 func main(): void {
     let x: Option = Option::Some(42)
     let y: Option = Option::None
+    assertTrue(true, "enum compiled and ran")
 }

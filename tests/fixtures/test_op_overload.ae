@@ -12,4 +12,5 @@ func op_add(a: int, b: int): int {
 
 @test
 func main(): void {
+    assertTrue(op_add(2, 3) == 5, "op_add(2, 3) == 5")
 }

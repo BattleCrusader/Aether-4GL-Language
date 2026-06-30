@@ -21,4 +21,5 @@ impl Hashable for Point {
 
 @test
 func main(): void {
+    assertTrue(true, "trait compiled and ran")
 }

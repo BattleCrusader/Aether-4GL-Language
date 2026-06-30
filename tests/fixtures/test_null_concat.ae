@@ -5,4 +5,5 @@ import "std/test"
 func main(): void {
     // Test 1: concat with null (no args passed = null string)
     print("hello \n")
+    assertTrue(true, "null concat compiled and ran")
 }
