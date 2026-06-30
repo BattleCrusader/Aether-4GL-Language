@@ -33,6 +33,9 @@ typedef struct {
     int str_counter;
     int label_counter;
 
+    /* Defer counter for LIFO tracking */
+    int defer_counter;
+
     /* Source location */
     const char *current_source_file;
     int current_line;

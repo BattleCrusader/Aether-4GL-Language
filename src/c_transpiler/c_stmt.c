@@ -252,7 +252,10 @@ static void c_emit_defer(CCodegen *cg, AstNode *node) {
 
 static void c_emit_expr_stmt(CCodegen *cg, AstNode *node) {
     c_indent(cg);
-    c_emit_expr(cg, node->data.call.callee);
+    /* NODE_EXPR_STMT stores the expression in data.call.callee (via node_expr_stmt) */
+    if (node->data.call.callee) {
+        c_emit_expr(cg, node->data.call.callee);
+    }
     fputs(";\n", cg->out);
 }
 
