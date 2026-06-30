@@ -8,8 +8,6 @@
 // §10.1: Generic functions — single type parameter
 // ============================================================
 
-import "std/test"
-
 func identity<T>(value: T): T {
     return value
 }
@@ -105,8 +103,8 @@ func constIdentity<T>(value: T): T {
 // Main test runner
 // ============================================================
 
-@test
-func main(): void {
+@test(expect=0)
+func main(): u64 {
     let mut failures: u64 = 0
 
     // §10.1: identity
@@ -133,5 +131,5 @@ func main(): void {
     if emptyGeneric() != 42 { failures += 1 }
     if constIdentity(99) != 99 { failures += 1 }
 
-    assertEquals(0, failures, "test_generics.ae")
+    return failures
 }

@@ -1,10 +1,8 @@
 // test_spec_03_operators_bitwise.ae — Section 3.4: Bitwise Operators
 // Tests: &, |, ^, ~, <<, >>
 
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let a: u64 = 0b1010  // 10
     let b: u64 = 0b1100  // 12
 
@@ -48,4 +46,5 @@ func main(): void {
     // For u64: ~0b1010 = 0xFFFFFFFFFFFFFFF5
     if bnot == ~a { score = score + 1 }
 
+    return 42
 }

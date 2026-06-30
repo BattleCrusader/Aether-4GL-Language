@@ -1,13 +1,10 @@
 // test_match.ae — test match expression
-import "std/test"
-
-@test
-func main(): void {
-    let x = 2
-    let result = match x {
-        case 0 -> 10
-        case 1 -> 20
+@test(expect=30)
+func main(): int {
+    let x = 2;
+    return match x {
+        case 0 -> 10;
+        case 1 -> 20;
         case _ -> 30
-    }
-    assertEquals(30, result, "test_match.ae")
+    };
 }

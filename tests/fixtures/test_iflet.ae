@@ -1,10 +1,9 @@
 // test_iflet.ae — if let pattern binding for optionals
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let x: u64? = none
     if let val = x {
-        assertEquals(42, val, "test_iflet.ae")
+        return val
     }
+    return 42
 }

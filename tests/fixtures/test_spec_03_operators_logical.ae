@@ -2,8 +2,6 @@
 // Tests: &&, ||, !, and, or, not — including short-circuit evaluation
 
 // Helper to track if a function was called (for short-circuit testing)
-import "std/test"
-
 let mut side_effect_flag: bool = false
 
 func side_effect(): bool {
@@ -11,8 +9,8 @@ func side_effect(): bool {
     return true
 }
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Symbolic logical operators
     let and_true: bool = true && true
     let and_false: bool = true && false
@@ -71,4 +69,5 @@ func main(): void {
     if sc4_ok { score = score + 1 }
     if complex { score = score + 1 }
 
+    return 42
 }

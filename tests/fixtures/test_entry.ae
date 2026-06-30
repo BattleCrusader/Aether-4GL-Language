@@ -1,6 +1,5 @@
-import "std/test"
-
 @entry(0x2000000)
-@test
-func main(): void {
+@test(expect=42)
+func main(): int {
+    return 42
 }

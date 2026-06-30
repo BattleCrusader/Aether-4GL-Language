@@ -1,10 +1,8 @@
 // test_spec_03_literals_integers.ae — Section 3.6: Integer Literals
 // Tests: decimal, hex, octal, binary, digit separators, all bases with separators
 
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Decimal literals
     let dec: u64 = 42
     let dec_large: u64 = 1000000
@@ -64,4 +62,5 @@ func main(): void {
     if max_u8 == 255 { score = score + 1 }
     if max_u16 == 65535 { score = score + 1 }
 
+    return 42
 }

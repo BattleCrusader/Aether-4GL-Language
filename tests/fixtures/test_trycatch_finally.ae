@@ -1,8 +1,6 @@
 // test_trycatch_finally.ae — try/catch with finally block
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let mut result: u64 = 0
     let mut finally_ran: u64 = 0
 
@@ -14,5 +12,5 @@ func main(): void {
         finally_ran = 1
     }
 
-    assertEquals(42, result, "test_trycatch_finally.ae")
+    return result
 }

@@ -2,8 +2,6 @@
 // Tests: .. (half-open), ..= (inclusive)
 
 // Helper function for range match
-import "std/test"
-
 func classify(x: u64): u64 {
     return match x {
         case 1..5 -> 10
@@ -12,8 +10,8 @@ func classify(x: u64): u64 {
     }
 }
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Half-open range in for loop
     let mut sum1: u64 = 0
     for i in 0..10 {
@@ -44,4 +42,5 @@ func main(): void {
     if r4 == 0 { score = score + 1 }
     if r5 == 0 { score = score + 1 }
 
+    return 42
 }

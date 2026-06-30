@@ -8,8 +8,6 @@
 // ============================================================
 
 // Basic lambda: single expression body
-import "std/test"
-
 func test_basic_lambda(): u64 {
     let add = |a: int, b: int| -> a + b
     let result: int = add(3, 4)
@@ -229,8 +227,8 @@ func test_lambda_early_return(): u64 {
 // Main test function
 // ============================================================
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let r1: u64 = test_basic_lambda()
     let r2: u64 = test_block_lambda()
     let r3: u64 = test_no_param_lambda()
@@ -247,4 +245,5 @@ func main(): void {
     let r14: u64 = test_lambda_in_loop()
     let r15: u64 = test_nested_lambdas()
     let r16: u64 = test_lambda_early_return()
+    return 42
 }

@@ -1,8 +1,6 @@
 // test_spec_04_classes.ae — Section 4.6: Classes
 // Tests: class definition, methods, self, new/init, field access
 
-import "std/test"
-
 class Counter {
     value: u64
 
@@ -41,8 +39,8 @@ class Point {
     }
 }
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Create and use Counter
     let mut c: Counter = Counter::new()
     let initial: u64 = c.get()  // 0
@@ -70,4 +68,5 @@ func main(): void {
     if px == 3 { score = score + 1 }
     if py == 4 { score = score + 1 }
 
+    return 42
 }

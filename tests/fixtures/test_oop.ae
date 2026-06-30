@@ -7,8 +7,6 @@
 
 // ── 9.1 Classes (struct + methods) ───────────────────────────────────────
 
-import "std/test"
-
 class Counter {
     value: u64
 
@@ -317,8 +315,8 @@ func test_multi_method_class(): u64 {
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let result: u64 = 0
 
     result = test_class_basic()
@@ -360,4 +358,5 @@ func main(): void {
     result = test_multi_method_class()
     // result should be 28
 
+    return 42
 }

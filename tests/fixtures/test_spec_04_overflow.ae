@@ -1,10 +1,8 @@
 // test_spec_04_overflow.ae — Section 4.1: Integer Overflow Semantics
 // Tests: wrapping arithmetic (two's complement for signed, modulo 2^N for unsigned)
 
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Unsigned wrapping: u8 max + 1 wraps to 0
     let u8_max: u8 = 255
     let u8_wrap: u8 = u8_max + 1  // wraps to 0
@@ -45,4 +43,5 @@ func main(): void {
     if i8_wrap == -128 { score = score + 1 }
     if i8_wrap2 == 127 { score = score + 1 }
 
+    return 42
 }

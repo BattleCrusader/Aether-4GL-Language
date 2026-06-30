@@ -1,10 +1,8 @@
 // test_spec_03_string_indexing_concat.ae — Section 3.5: String Indexing and Concatenation
 // Tests: s[i] returns byte, string+string=concat, string+number=auto-itoa, number+number=add
 
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // String indexing returns byte (u8)
     let s: string = "hello"
     let b0: u8 = s[0]  // 'h' = 0x68
@@ -34,4 +32,5 @@ func main(): void {
     if b4 == 0x6F { score = score + 1 }
     if add_nn == 43 { score = score + 1 }
 
+    return 42
 }

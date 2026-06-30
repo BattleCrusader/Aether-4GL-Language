@@ -1,13 +1,12 @@
 // test_enum.ae — test enum declaration, layout, and construction
-import "std/test"
-
 enum Option {
     Some(int)
     None
 }
 
 @test
-func main(): void {
+func main(): int {
     let x: Option = Option::Some(42)
     let y: Option = Option::None
+    return 0
 }

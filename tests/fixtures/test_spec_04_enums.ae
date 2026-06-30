@@ -1,8 +1,6 @@
 // test_spec_04_enums.ae — Section 4.5: Enums (Tagged Unions)
 // Tests: enum definition, :: construction, variants with/without payload
 
-import "std/test"
-
 enum Option {
     Some(u64)
     None
@@ -19,8 +17,8 @@ enum Result {
     Error(string)
 }
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Enum construction with ::
     let opt_some: Option = Option::Some(42)
     let opt_none: Option = Option::None
@@ -40,4 +38,5 @@ func main(): void {
     // but construction and :: syntax should work
     score = score + 1  // reached here = construction works
 
+    return 42
 }

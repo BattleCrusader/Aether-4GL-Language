@@ -7,8 +7,6 @@
 // ============================================================
 
 // Basic trait
-import "std/test"
-
 trait Drawable {
     func draw(self)
     func area(self): int
@@ -265,11 +263,12 @@ protocol FullInterface {
 // Main test function
 // ============================================================
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let t1: u64 = test_static_dispatch()
     let t2: u64 = test_dynamic_dispatch()
     let t3: u64 = test_multiple_traits()
     let t4: u64 = test_trait_return()
     let t5: u64 = test_trait_param()
+    return 42
 }

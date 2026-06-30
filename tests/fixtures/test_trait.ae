@@ -1,5 +1,3 @@
-import "std/test"
-
 struct Point {
     x: int
     y: int
@@ -20,5 +18,6 @@ impl Hashable for Point {
 }
 
 @test
-func main(): void {
+func main(): u64 {
+    return 0
 }

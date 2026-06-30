@@ -1,9 +1,8 @@
 // test_interp_numbers.ae — interpolation with numeric values
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let count: u64 = 42
     let msg = "count = {count}"
     print(msg)
+    return 42
 }

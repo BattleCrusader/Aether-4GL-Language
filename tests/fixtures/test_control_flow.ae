@@ -7,8 +7,8 @@ import "std/test"
 // ============================================================
 // Test 1: Basic if/else (Section 7.1)
 // ============================================================
-@test
-func test_if_basic(): void {
+@test(expect=0)
+func test_if_basic(): u64 {
     let x: u64 = 10
     let mut result: u64 = 0
 
@@ -26,14 +26,14 @@ func test_if_basic(): void {
     }
     assertEquals(0, result, "if false branch")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 2: If/elif/else chain (Section 7.1)
 // ============================================================
-@test
-func test_if_elif_else(): void {
+@test(expect=0)
+func test_if_elif_else(): u64 {
     let mut result: u64 = 0
 
     // Test elif taken
@@ -67,14 +67,14 @@ func test_if_elif_else(): void {
     }
     assertEquals(0, result, "if taken")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 3: Multiple elif chain (Section 7.1)
 // ============================================================
-@test
-func test_multi_elif(): void {
+@test(expect=0)
+func test_multi_elif(): u64 {
     let mut result: u64 = 0
 
     let x: u64 = 7
@@ -99,14 +99,14 @@ func test_multi_elif(): void {
     }
     assertEquals(7, result, "multi-elif picks correct branch")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 4: Nested if/else (Section 7.1)
 // ============================================================
-@test
-func test_nested_if(): void {
+@test(expect=0)
+func test_nested_if(): u64 {
     let mut result: u64 = 0
 
     let a: u64 = 10
@@ -145,14 +145,14 @@ func test_nested_if(): void {
     }
     assertEquals(3, result, "nested if outer false")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 5: If as expression (Section 7.1)
 // ============================================================
-@test
-func test_if_expression(): void {
+@test(expect=0)
+func test_if_expression(): u64 {
     let x: u64 = 10
 
     let result1 = if x > 5 { 1 } else { 0 }
@@ -169,14 +169,14 @@ func test_if_expression(): void {
     }
     assertEquals(1, result3, "nested if expression")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 6: If expression with elif (Section 7.1)
 // ============================================================
-@test
-func test_if_expression_elif(): void {
+@test(expect=0)
+func test_if_expression_elif(): u64 {
     let x: u64 = 10
 
     let result = if x > 20 {
@@ -197,14 +197,14 @@ func test_if_expression_elif(): void {
     }
     assertEquals(2, result2, "if expression with else")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 7: While loop — basic (Section 7.2)
 // ============================================================
-@test
-func test_while_basic(): void {
+@test(expect=0)
+func test_while_basic(): u64 {
     let mut i: u64 = 0
     let mut sum: u64 = 0
 
@@ -215,14 +215,14 @@ func test_while_basic(): void {
 
     assertEquals(45, sum, "while loop sum 0..9 = 45")
     assertEquals(10, i, "while loop counter = 10")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 8: While loop — zero iterations (Section 7.2)
 // ============================================================
-@test
-func test_while_zero(): void {
+@test(expect=0)
+func test_while_zero(): u64 {
     let mut i: u64 = 0
     let mut sum: u64 = 0
 
@@ -233,14 +233,14 @@ func test_while_zero(): void {
 
     assertEquals(0, sum, "while zero iterations sum = 0")
     assertEquals(0, i, "while zero iterations counter = 0")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 9: While loop — single iteration (Section 7.2)
 // ============================================================
-@test
-func test_while_single(): void {
+@test(expect=0)
+func test_while_single(): u64 {
     let mut i: u64 = 0
     let mut sum: u64 = 0
 
@@ -251,14 +251,14 @@ func test_while_single(): void {
 
     assertEquals(0, sum, "while single iteration sum = 0")
     assertEquals(1, i, "while single iteration counter = 1")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 10: While loop with break (Section 7.2, 7.4)
 // ============================================================
-@test
-func test_while_break(): void {
+@test(expect=0)
+func test_while_break(): u64 {
     let mut i: u64 = 0
     let mut sum: u64 = 0
 
@@ -271,14 +271,14 @@ func test_while_break(): void {
     }
 
     assertEquals(45, sum, "while with break sum = 45")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 11: While loop with continue (Section 7.2, 7.4)
 // ============================================================
-@test
-func test_while_continue(): void {
+@test(expect=0)
+func test_while_continue(): u64 {
     let mut i: u64 = 0
     let mut sum: u64 = 0
 
@@ -292,14 +292,14 @@ func test_while_continue(): void {
 
     // Odd numbers: 1, 3, 5, 7, 9 = 25
     assertEquals(25, sum, "while with continue sum odds = 25")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 12: While loop with break and continue combined (Section 7.2, 7.4)
 // ============================================================
-@test
-func test_while_break_continue(): void {
+@test(expect=0)
+func test_while_break_continue(): u64 {
     let mut i: u64 = 0
     let mut sum: u64 = 0
 
@@ -316,14 +316,14 @@ func test_while_break_continue(): void {
 
     // Odd numbers 1..19 = 100
     assertEquals(100, sum, "while break+continue sum odds 1..19 = 100")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 13: For loop — basic range (Section 7.3)
 // ============================================================
-@test
-func test_for_range(): void {
+@test(expect=0)
+func test_for_range(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..10 {
@@ -331,14 +331,14 @@ func test_for_range(): void {
     }
 
     assertEquals(45, sum, "for range 0..10 sum = 45")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 14: For loop — inclusive range (Section 7.3)
 // ============================================================
-@test
-func test_for_range_inclusive(): void {
+@test(expect=0)
+func test_for_range_inclusive(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..=10 {
@@ -346,14 +346,14 @@ func test_for_range_inclusive(): void {
     }
 
     assertEquals(55, sum, "for inclusive range 0..=10 sum = 55")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 15: For loop — empty range (Section 7.3)
 // ============================================================
-@test
-func test_for_empty_range(): void {
+@test(expect=0)
+func test_for_empty_range(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..0 {
@@ -361,14 +361,14 @@ func test_for_empty_range(): void {
     }
 
     assertEquals(0, sum, "for empty range sum = 0")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 16: For loop — single element range (Section 7.3)
 // ============================================================
-@test
-func test_for_single_range(): void {
+@test(expect=0)
+func test_for_single_range(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..1 {
@@ -382,14 +382,14 @@ func test_for_single_range(): void {
     }
 
     assertEquals(0, sum, "for single inclusive range 0..=0 sum = 0")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 17: For loop — array iteration (Section 7.3)
 // ============================================================
-@test
-func test_for_array(): void {
+@test(expect=0)
+func test_for_array(): u64 {
     let arr = [10, 20, 30, 40, 50]
     let mut sum: u64 = 0
 
@@ -398,14 +398,14 @@ func test_for_array(): void {
     }
 
     assertEquals(150, sum, "for array iteration sum = 150")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 18: For loop — with index (Section 7.3)
 // ============================================================
-@test
-func test_for_with_index(): void {
+@test(expect=0)
+func test_for_with_index(): u64 {
     let arr = [1, 2, 3, 4, 5]
     let mut sum_values: u64 = 0
     let mut sum_indices: u64 = 0
@@ -417,14 +417,14 @@ func test_for_with_index(): void {
 
     assertEquals(15, sum_values, "for with index sum values = 15")
     assertEquals(10, sum_indices, "for with index sum indices = 10")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 19: For loop — with break (Section 7.3, 7.4)
 // ============================================================
-@test
-func test_for_break(): void {
+@test(expect=0)
+func test_for_break(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..100 {
@@ -435,14 +435,14 @@ func test_for_break(): void {
     }
 
     assertEquals(45, sum, "for with break sum = 45")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 20: For loop — with continue (Section 7.3, 7.4)
 // ============================================================
-@test
-func test_for_continue(): void {
+@test(expect=0)
+func test_for_continue(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..10 {
@@ -454,14 +454,14 @@ func test_for_continue(): void {
 
     // Odd numbers: 1, 3, 5, 7, 9 = 25
     assertEquals(25, sum, "for with continue sum odds = 25")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 21: For loop — nested loops (Section 7.3)
 // ============================================================
-@test
-func test_nested_for(): void {
+@test(expect=0)
+func test_nested_for(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..5 {
@@ -471,14 +471,14 @@ func test_nested_for(): void {
     }
 
     assertEquals(25, sum, "nested for loops 5x5 = 25")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 22: For loop — nested with break inner (Section 7.3, 7.4)
 // ============================================================
-@test
-func test_nested_for_break_inner(): void {
+@test(expect=0)
+func test_nested_for_break_inner(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..5 {
@@ -492,15 +492,15 @@ func test_nested_for_break_inner(): void {
 
     // Each outer iteration: inner runs 0,1,2 = 3 times. 5 * 3 = 15
     assertEquals(15, sum, "nested for with break inner = 15")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 23: For loop — nested with continue outer (Section 7.3, 7.4)
 // Note: Loop labels (Section 5.6) — break outer, continue outer
 // ============================================================
-@test
-func test_nested_continue_outer(): void {
+@test(expect=0)
+func test_nested_continue_outer(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..5 {
@@ -514,14 +514,14 @@ func test_nested_continue_outer(): void {
 
     // Each outer: inner runs 0,1,3,4 = 4 times. 5 * 4 = 20
     assertEquals(20, sum, "nested for with continue inner = 20")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 24: Match — integer patterns (Section 7.5)
 // ============================================================
-@test
-func test_match_integer(): void {
+@test(expect=0)
+func test_match_integer(): u64 {
     let mut result: u64 = 0
 
     let x: u64 = 2
@@ -541,14 +541,14 @@ func test_match_integer(): void {
     }
     assertEquals(99, result, "match integer default")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 25: Match — range patterns (Section 7.5)
 // ============================================================
-@test
-func test_match_range(): void {
+@test(expect=0)
+func test_match_range(): u64 {
     let mut result: u64 = 0
 
     let x: u64 = 3
@@ -583,14 +583,14 @@ func test_match_range(): void {
     }
     assertEquals(0, result, "match range default for 99")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 26: Match — as expression (Section 7.5)
 // ============================================================
-@test
-func test_match_expression(): void {
+@test(expect=0)
+func test_match_expression(): u64 {
     let x: u64 = 2
 
     let result = match x {
@@ -616,14 +616,14 @@ func test_match_expression(): void {
     }
     assertEquals(0, result3, "match expression default")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 27: Match — multiple cases (Section 7.5)
 // ============================================================
-@test
-func test_match_multi_case(): void {
+@test(expect=0)
+func test_match_multi_case(): u64 {
     let mut result: u64 = 0
 
     let x: u64 = 0
@@ -674,14 +674,14 @@ func test_match_multi_case(): void {
     }
     assertEquals(99, result, "match default case")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 28: Match — range patterns with inclusive range (Section 7.5)
 // ============================================================
-@test
-func test_match_range_inclusive(): void {
+@test(expect=0)
+func test_match_range_inclusive(): u64 {
     let mut result: u64 = 0
 
     let x: u64 = 5
@@ -700,7 +700,7 @@ func test_match_range_inclusive(): void {
     }
     assertEquals(20, result, "match inclusive range 6..=10 matches 6")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -708,8 +708,8 @@ func test_match_range_inclusive(): void {
 // ============================================================
 let mut defer_tracker: u64 = 0
 
-@test
-func test_defer_basic(): void {
+@test(expect=0)
+func test_defer_basic(): u64 {
     defer_tracker = 0
 
     {
@@ -717,14 +717,14 @@ func test_defer_basic(): void {
     }
 
     assertEquals(42, defer_tracker, "defer basic execution")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 30: Defer — LIFO ordering (Section 7.6)
 // ============================================================
-@test
-func test_defer_lifo(): void {
+@test(expect=0)
+func test_defer_lifo(): u64 {
     defer_tracker = 0
 
     {
@@ -738,14 +738,14 @@ func test_defer_lifo(): void {
     // defer 2: 3 * 2 + 2 = 8
     // defer 1: 8 * 2 + 1 = 17
     assertEquals(17, defer_tracker, "defer LIFO ordering")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 31: Defer — multiple defers in same scope (Section 7.6)
 // ============================================================
-@test
-func test_defer_multiple(): void {
+@test(expect=0)
+func test_defer_multiple(): u64 {
     defer_tracker = 0
 
     {
@@ -756,14 +756,14 @@ func test_defer_multiple(): void {
 
     // LIFO: 0+100=100, 100+10=110, 110+1=111
     assertEquals(111, defer_tracker, "defer multiple LIFO")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 32: Defer — in nested scopes (Section 7.6)
 // ============================================================
-@test
-func test_defer_nested_scope(): void {
+@test(expect=0)
+func test_defer_nested_scope(): u64 {
     defer_tracker = 0
 
     {
@@ -777,14 +777,14 @@ func test_defer_nested_scope(): void {
     // Inner defer: 0+10=10
     // Outer defer: 10+1=11
     assertEquals(11, defer_tracker, "defer nested scopes")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 33: Defer — in while loop (Section 7.6)
 // ============================================================
-@test
-func test_defer_in_while(): void {
+@test(expect=0)
+func test_defer_in_while(): u64 {
     defer_tracker = 0
     let mut i: u64 = 0
 
@@ -795,14 +795,14 @@ func test_defer_in_while(): void {
 
     // Defer runs at end of each iteration: 3 times
     assertEquals(3, defer_tracker, "defer in while loop runs per iteration")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 34: Defer — in for loop (Section 7.6)
 // ============================================================
-@test
-func test_defer_in_for(): void {
+@test(expect=0)
+func test_defer_in_for(): u64 {
     defer_tracker = 0
 
     for i in 0..3 {
@@ -811,14 +811,14 @@ func test_defer_in_for(): void {
 
     // Defer runs at end of each iteration: 3 times
     assertEquals(3, defer_tracker, "defer in for loop runs per iteration")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 35: Defer — in try/catch (Section 7.6)
 // ============================================================
-@test
-func test_defer_in_try(): void {
+@test(expect=0)
+func test_defer_in_try(): u64 {
     defer_tracker = 0
 
     try {
@@ -828,7 +828,7 @@ func test_defer_in_try(): void {
     }
 
     assertEquals(42, defer_tracker, "defer in try/catch executes")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -843,19 +843,19 @@ func defer_with_return(): u64 {
     }
 }
 
-@test
-func test_defer_with_return(): void {
+@test(expect=0)
+func test_defer_with_return(): u64 {
     let result = defer_with_return()
     assertEquals(42, result, "defer with return returns correct value")
     assertEquals(99, defer_tracker, "defer with return executes before function exit")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 37: While loop — with complex condition (Section 7.2)
 // ============================================================
-@test
-func test_while_complex_condition(): void {
+@test(expect=0)
+func test_while_complex_condition(): u64 {
     let mut i: u64 = 0
     let mut sum: u64 = 0
 
@@ -868,14 +868,14 @@ func test_while_complex_condition(): void {
     // i=5: sum=15, i=6: sum=21, i=7: sum=28, i=8: sum=36 >= 30, stop
     assertEquals(36, sum, "while complex condition sum")
     assertEquals(8, i, "while complex condition counter")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 38: For loop — with break in nested if (Section 7.3, 7.4)
 // ============================================================
-@test
-func test_for_break_in_if(): void {
+@test(expect=0)
+func test_for_break_in_if(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..100 {
@@ -889,14 +889,14 @@ func test_for_break_in_if(): void {
 
     // i=0: sum=0, i=1: skip, i=2: sum=2, i=3: skip, i=4: sum=6, i=5: skip, i=6: break
     assertEquals(6, sum, "for break in if sum evens 0..4 = 6")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 39: For loop — inclusive range with break (Section 7.3)
 // ============================================================
-@test
-func test_for_inclusive_break(): void {
+@test(expect=0)
+func test_for_inclusive_break(): u64 {
     let mut sum: u64 = 0
 
     for i in 0..=10 {
@@ -907,14 +907,14 @@ func test_for_inclusive_break(): void {
     }
 
     assertEquals(15, sum, "for inclusive range with break 0..5 = 15")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 40: Match — with while loop inside arms (Section 7.5)
 // ============================================================
-@test
-func test_match_with_while(): void {
+@test(expect=0)
+func test_match_with_while(): u64 {
     let mut result: u64 = 0
 
     let x: u64 = 1
@@ -931,14 +931,14 @@ func test_match_with_while(): void {
     }
 
     assertEquals(10, result, "match arm with while loop 0..4 = 10")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 41: If/elif/else with boolean conditions (Section 7.1)
 // ============================================================
-@test
-func test_if_bool_conditions(): void {
+@test(expect=0)
+func test_if_bool_conditions(): u64 {
     let mut result: u64 = 0
 
     if true {
@@ -963,14 +963,14 @@ func test_if_bool_conditions(): void {
     }
     assertEquals(1, result, "if bool variable")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 42: If/elif/else with compound conditions (Section 7.1)
 // ============================================================
-@test
-func test_if_compound_conditions(): void {
+@test(expect=0)
+func test_if_compound_conditions(): u64 {
     let mut result: u64 = 0
     let x: u64 = 10
     let y: u64 = 20
@@ -1003,14 +1003,14 @@ func test_if_compound_conditions(): void {
     }
     assertEquals(0, result, "if compound OR false")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 43: While loop — with compound condition (Section 7.2)
 // ============================================================
-@test
-func test_while_compound_condition(): void {
+@test(expect=0)
+func test_while_compound_condition(): u64 {
     let mut i: u64 = 0
     let mut sum: u64 = 0
 
@@ -1023,14 +1023,14 @@ func test_while_compound_condition(): void {
 
     // Even numbers: 0, 2, 4, 6, 8 = 20
     assertEquals(20, sum, "while with compound condition sum evens = 20")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 44: For loop — with array and break (Section 7.3)
 // ============================================================
-@test
-func test_for_array_break(): void {
+@test(expect=0)
+func test_for_array_break(): u64 {
     let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     let mut sum: u64 = 0
 
@@ -1042,14 +1042,14 @@ func test_for_array_break(): void {
     }
 
     assertEquals(15, sum, "for array with break 1..5 = 15")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 45: For loop — with array and continue (Section 7.3)
 // ============================================================
-@test
-func test_for_array_continue(): void {
+@test(expect=0)
+func test_for_array_continue(): u64 {
     let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     let mut sum: u64 = 0
 
@@ -1062,14 +1062,14 @@ func test_for_array_continue(): void {
 
     // Odd numbers: 1, 3, 5, 7, 9 = 25
     assertEquals(25, sum, "for array with continue odds = 25")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 46: Defer — in nested blocks with multiple defers (Section 7.6)
 // ============================================================
-@test
-func test_defer_nested_multiple(): void {
+@test(expect=0)
+func test_defer_nested_multiple(): u64 {
     defer_tracker = 0
 
     {
@@ -1086,14 +1086,14 @@ func test_defer_nested_multiple(): void {
     // outer defer ran: 110+1=111
 
     assertEquals(111, defer_tracker, "defer nested multiple scopes")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 47: Match — with default only (Section 7.5)
 // ============================================================
-@test
-func test_match_default_only(): void {
+@test(expect=0)
+func test_match_default_only(): u64 {
     let mut result: u64 = 0
 
     let x: u64 = 42
@@ -1102,14 +1102,14 @@ func test_match_default_only(): void {
     }
 
     assertEquals(99, result, "match default only")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 48: Match — single case (Section 7.5)
 // ============================================================
-@test
-func test_match_single_case(): void {
+@test(expect=0)
+func test_match_single_case(): u64 {
     let mut result: u64 = 0
 
     let x: u64 = 5
@@ -1118,14 +1118,14 @@ func test_match_single_case(): void {
     }
 
     assertEquals(42, result, "match single case")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 49: If/elif/else with comparison chains (Section 7.1)
 // ============================================================
-@test
-func test_if_comparison_chains(): void {
+@test(expect=0)
+func test_if_comparison_chains(): u64 {
     let mut result: u64 = 0
     let x: u64 = 5
 
@@ -1157,14 +1157,14 @@ func test_if_comparison_chains(): void {
     }
     assertEquals(1, result, "if x >= 5")
 
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 50: While loop — with continue and counter (Section 7.2)
 // ============================================================
-@test
-func test_while_continue_counter(): void {
+@test(expect=0)
+func test_while_continue_counter(): u64 {
     let mut i: u64 = 0
     let mut even_count: u64 = 0
     let mut odd_count: u64 = 0
@@ -1180,14 +1180,14 @@ func test_while_continue_counter(): void {
 
     assertEquals(5, even_count, "while continue even count = 5")
     assertEquals(5, odd_count, "while continue odd count = 5")
-    assertEquals(0, __test_failures, "test_control_flow.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Main test runner
 // ============================================================
-@test
-func main(): void {
+@test(expect=0)
+func main(): u64 {
     let failures: u64 = 0
 
     failures += test_if_basic()
@@ -1242,5 +1242,5 @@ func main(): void {
     failures += test_while_continue_counter()
 
     print("test_control_flow.ae: {failures} failures total\n")
-    assertEquals(0, failures, "test_control_flow.ae")
+    return failures
 }

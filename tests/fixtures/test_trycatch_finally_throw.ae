@@ -1,13 +1,11 @@
 // test_trycatch_finally_throw.ae — throw with finally
-import "std/test"
-
 func do_throw(): u64 throws {
     throw 99
     return 0
 }
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let mut result: u64 = 0
 
     try {
@@ -18,5 +16,5 @@ func main(): void {
         // finally ran
     }
 
-    assertEquals(42, result, "test_trycatch_finally_throw.ae")
+    return result
 }

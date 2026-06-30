@@ -6,8 +6,6 @@
 // ============================================================
 
 // Basic precondition: divisor must be non-zero
-import "std/test"
-
 func divide(a: int, b: int): int pre(b != 0) {
     return a / b
 }
@@ -176,8 +174,8 @@ func chain_test(a: int, b: int): int
 // Main test function
 // ============================================================
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Test basic divide with precondition
     let r1: int = divide(10, 2)
     
@@ -218,4 +216,5 @@ func main(): void {
     let r13: int = chain_test(10, 5)
     
     // All tests pass
+    return 42
 }

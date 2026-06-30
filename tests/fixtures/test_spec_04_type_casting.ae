@@ -1,10 +1,8 @@
 // test_spec_04_type_casting.ae — Section 4.2: Type Casting with 'as'
 // Tests: u8 as u64, u64 as u8, f64 as f32, byte as char, etc.
 
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Integer widening (safe)
     let small: u8 = 42
     let wide: u64 = small as u64  // 42
@@ -47,4 +45,5 @@ func main(): void {
     if narrow == 0xFF { score = score + 1 }
     if truncated == 3 { score = score + 1 }
 
+    return 42
 }

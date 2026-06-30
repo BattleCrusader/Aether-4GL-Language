@@ -1,8 +1,7 @@
-import "std/test"
-
 @module_abi(version=1)
 module mymod {
-@test
-func main(): void {
+@test(expect=42)
+func main(): int {
+return 42
 }
 }

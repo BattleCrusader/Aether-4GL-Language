@@ -1,8 +1,7 @@
 // test_import.ae — test import functionality
 import "test_lib.ae"
-import "std/test"
 
-@test
-func main(): void {
-    greet()
+@test(expect=42)
+func main(): u64 {
+    return greet()
 }

@@ -1,8 +1,6 @@
 // test_spec_04_traits.ae — Section 4.7: Traits and Impl Blocks
 // Tests: trait definition, impl for struct, method dispatch
 
-import "std/test"
-
 trait Drawable {
     func draw()
     func area(): u64
@@ -39,8 +37,8 @@ impl Drawable for Square {
     }
 }
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Create shapes
     let mut c: Circle
     c.radius = 7
@@ -57,4 +55,5 @@ func main(): void {
     if circle_area == 147 { score = score + 1 }
     if square_area == 25 { score = score + 1 }
 
+    return 42
 }

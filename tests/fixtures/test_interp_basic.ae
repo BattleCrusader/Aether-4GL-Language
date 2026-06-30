@@ -1,9 +1,8 @@
 // test_interp_basic.ae — basic string interpolation with variables
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let name = "World"
     let msg = "Hello {name}!"
     print(msg)
+    return 42
 }

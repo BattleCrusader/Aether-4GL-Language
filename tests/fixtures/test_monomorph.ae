@@ -1,12 +1,10 @@
 // test_monomorph.ae — generics monomorphization
-import "std/test"
-
 func identity<T>(value: T): T {
     return value
 }
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let x = identity(42)
-    assertEquals(42, x, "test_monomorph.ae")
+    return x
 }

@@ -1,10 +1,8 @@
-import "std/test"
-
 func identity<T>(value: T): T {
     return value
 }
 
-@test
-func main(): void {
-    identity(42)
+@test(expect=42)
+func main(): u64 {
+    return identity(42)
 }

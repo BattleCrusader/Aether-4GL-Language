@@ -1,9 +1,8 @@
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): int {
     print("start\n")
     defer { print("first\n") }
     defer { print("second\n") }
     print("before return\n")
+    return 42
 }

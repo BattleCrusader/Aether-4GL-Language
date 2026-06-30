@@ -1,8 +1,6 @@
 // test_spec_04_structs.ae — Section 4.4: Structs
 // Tests: struct definition, field access, field assignment
 
-import "std/test"
-
 struct Point {
     x: u64
     y: u64
@@ -21,8 +19,8 @@ struct Line {
     end: Point
 }
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Create struct via field assignment
     let mut p: Point
     p.x = 10
@@ -65,4 +63,5 @@ func main(): void {
     if line_len_x == 10 { score = score + 1 }
     if line_len_y == 20 { score = score + 1 }
 
+    return 42
 }

@@ -2,10 +2,8 @@
 // Tests: arrays [T;N] and [T], pointers *T, references ref T, optionals T?
 //        function types func(...):T, tuples (T1, T2)
 
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Fixed-size array
     let arr: [u64; 4] = [1, 2, 3, 4]
     let arr_first: u64 = arr[0]
@@ -43,4 +41,5 @@ func main(): void {
     if defaulted == 42 { score = score + 1 }
     if num == 42 { score = score + 1 }
 
+    return 42
 }

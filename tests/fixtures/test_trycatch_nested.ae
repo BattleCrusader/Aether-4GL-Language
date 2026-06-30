@@ -1,13 +1,11 @@
 // test_trycatch_nested.ae — nested try/catch
-import "std/test"
-
 func inner_throw(): u64 throws {
     throw 1
     return 0
 }
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let mut result: u64 = 0
 
     try {
@@ -20,5 +18,5 @@ func main(): void {
         result = 20
     }
 
-    assertEquals(42, result, "test_trycatch_nested.ae")
+    return result
 }

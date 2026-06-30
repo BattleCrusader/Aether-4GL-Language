@@ -1,10 +1,8 @@
 // test_spec_04_optionals.ae — Section 4.8: Optional Types
 // Tests: T? syntax, some(), none, if-let, or default
 
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Optional creation
     let opt_some: u64? = some(42)
     let opt_none: u64? = none
@@ -43,4 +41,5 @@ func main(): void {
     if val3 == 100 { score = score + 1 }
     if result == 42 { score = score + 1 }
 
+    return 42
 }

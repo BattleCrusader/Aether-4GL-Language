@@ -7,8 +7,6 @@
 
 // ── 8.1 Stack Allocation (Default) ──────────────────────────────────────────
 
-import "std/test"
-
 struct Point {
     x: u64
     y: u64
@@ -217,8 +215,8 @@ func test_owned_in_region(): u64 {
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Run all memory tests
     let result: u64 = 0
 
@@ -276,4 +274,5 @@ func main(): void {
     result = test_owned_in_region()
     // result should be 42
 
+    return 42
 }

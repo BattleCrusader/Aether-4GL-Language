@@ -1,7 +1,6 @@
 // test_closure.ae — lambda/closure parsing
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let double = |x: int| x * 2
+    return 42
 }

@@ -1,13 +1,12 @@
 // test_struct.ae — struct declaration, field access
-import "std/test"
-
 struct Point {
     x: int
     y: int
 }
 
 @test
-func main(): void {
+func main(): int {
     let p: Point
     // Can't construct struct literals yet, but struct types compile
+    return 0
 }

@@ -1,11 +1,9 @@
 // test_const.ae — compile-time constant evaluation
-import "std/test"
-
 const TABLE_SIZE = 256
 const HALF_SIZE = TABLE_SIZE / 2
 const MASK = (1 << 8) - 1
 
-@test
-func main(): void {
-    assertEquals(128, HALF_SIZE, "test_const.ae")
+@test(expect=128)
+func main(): u64 {
+    return HALF_SIZE
 }

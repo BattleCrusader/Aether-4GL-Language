@@ -2,8 +2,6 @@
 // Tests: int=i64, float=f32, double=f64, char=byte, custom type aliases
 
 // Standard aliases
-import "std/test"
-
 type MyInt = u64
 type ErrorCode = i32
 type Callback = func(u64): bool
@@ -12,8 +10,8 @@ type Callback = func(u64): bool
 type MyResult = u64
 type MyFloat = f64
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Use standard aliases
     let a: int = 42        // int = i64
     let b: float = 3.14    // float = f32
@@ -36,4 +34,5 @@ func main(): void {
     if h == 42 { score = score + 1 }
     if i == 100 { score = score + 1 }
 
+    return 42
 }

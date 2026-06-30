@@ -2,10 +2,8 @@
 // Tests: void, bool, byte, u8-u64, i8-i64, f32, f64, string
 // Tests all type sizes and value ranges
 
-import "std/test"
-
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Unsigned integers — all sizes
     let u8_val: u8 = 200
     let u16_val: u16 = 40000
@@ -58,4 +56,5 @@ func main(): void {
     if byte_val == 0xFF { score = score + 1 }
     if u64_from_u8 == 200 { score = score + 1 }
 
+    return 42
 }

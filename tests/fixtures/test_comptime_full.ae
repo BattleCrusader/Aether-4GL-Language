@@ -6,8 +6,6 @@
 // ============================================================
 
 // Basic #run block
-import "std/test"
-
 #run {
     let x = 42
 }
@@ -191,8 +189,8 @@ const ARRAY_SIZE = 5
 // Main test function
 // ============================================================
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     // Verify const values are accessible at runtime
     let t1: bool = (TABLE_SIZE == 256)
     let t2: bool = (HALF_SIZE == 128)
@@ -210,4 +208,5 @@ func main(): void {
     let fa: u64 = getFlagsAll()
 
     // All tests pass
+    return 42
 }

@@ -6,8 +6,6 @@
 // 15.1 Property Getters (inferred from return type)
 // ============================================================
 
-import "std/test"
-
 struct Rectangle {
     width: int
     height: int
@@ -288,11 +286,12 @@ func test_3d_ops(): u64 {
 // Main test function
 // ============================================================
 
-@test
-func main(): void {
+@test(expect=42)
+func main(): u64 {
     let t1: u64 = test_property_getters()
     let t2: u64 = test_property_setters()
     let t3: u64 = test_vector_ops()
     let t4: u64 = test_custom_ops()
     let t5: u64 = test_3d_ops()
+    return 42
 }

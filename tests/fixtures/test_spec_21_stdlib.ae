@@ -369,32 +369,32 @@ func test_elf_type_dynamic(): bool {
 // ── 21.9 std/test — Testing Framework ────────────────────────────────────
 // assert, test_runner, benchmark
 
-@test
+@test(expect=0)
 func test_assert_equals() {
     assertEquals(5, 2 + 3)
 }
 
-@test
+@test(expect=0)
 func test_assert_equals_with_message() {
     assertEquals(5, 2 + 3, "2 + 3 should be 5")
 }
 
-@test
+@test(expect=0)
 func test_assert_true() {
     assertTrue(true)
 }
 
-@test
+@test(expect=0)
 func test_assert_true_with_message() {
     assertTrue(true, "true should be true")
 }
 
-@test
+@test(expect=0)
 func test_assert_do_not_equals() {
     assertDoNotEquals(5, 2 + 2)
 }
 
-@test
+@test(expect=0)
 func test_assert_do_not_equals_with_message() {
     assertDoNotEquals(5, 2 + 2, "2+2 should not be 5")
 }

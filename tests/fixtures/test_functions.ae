@@ -22,13 +22,13 @@ func divide(a: u64, b: u64): u64 {
     return a / b
 }
 
-@test
-func test_basic_function_calls(): void {
+@test(expect=0)
+func test_basic_function_calls(): u64 {
     assertEquals(15, add(10, 5), "add(10, 5) = 15")
     assertEquals(5, subtract(10, 5), "subtract(10, 5) = 5")
     assertEquals(50, multiply(10, 5), "multiply(10, 5) = 50")
     assertEquals(2, divide(10, 5), "divide(10, 5) = 2")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -40,13 +40,13 @@ func multiply_expr(a: u64, b: u64): u64 -> a * b
 
 func max_expr(a: u64, b: u64): u64 -> if a > b { a } else { b }
 
-@test
-func test_expression_bodied(): void {
+@test(expect=0)
+func test_expression_bodied(): u64 {
     assertEquals(15, add_expr(10, 5), "add_expr(10, 5) = 15")
     assertEquals(50, multiply_expr(10, 5), "multiply_expr(10, 5) = 50")
     assertEquals(10, max_expr(10, 5), "max_expr(10, 5) = 10")
     assertEquals(20, max_expr(10, 20), "max_expr(10, 20) = 20")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -62,8 +62,8 @@ func void_func_with_param(x: u64) {
     void_side_effect = x
 }
 
-@test
-func test_void_functions(): void {
+@test(expect=0)
+func test_void_functions(): u64 {
     void_side_effect = 0
     void_func()
     assertEquals(42, void_side_effect, "void func sets side effect")
@@ -71,7 +71,7 @@ func test_void_functions(): void {
     void_func_with_param(99)
     assertEquals(99, void_side_effect, "void func with param sets side effect")
 
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -85,11 +85,11 @@ func sum6(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64): u64 {
     return a + b + c + d + e + f
 }
 
-@test
-func test_multi_param(): void {
+@test(expect=0)
+func test_multi_param(): u64 {
     assertEquals(10, sum4(1, 2, 3, 4), "sum4(1,2,3,4) = 10")
     assertEquals(21, sum6(1, 2, 3, 4, 5, 6), "sum6(1..6) = 21")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -99,10 +99,10 @@ func get_forty_two(): u64 {
     return 42
 }
 
-@test
-func test_no_param(): void {
+@test(expect=0)
+func test_no_param(): u64 {
     assertEquals(42, get_forty_two(), "no-param function returns 42")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -116,11 +116,11 @@ func quadruple(x: u64): u64 {
     return double(double(x))
 }
 
-@test
-func test_nested_calls(): void {
+@test(expect=0)
+func test_nested_calls(): u64 {
     assertEquals(40, quadruple(10), "quadruple(10) = 40")
     assertEquals(8, double(double(2)), "nested double(double(2)) = 8")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -134,13 +134,13 @@ func signed_negate(x: i64): i64 {
     return -x
 }
 
-@test
-func test_signed_params(): void {
+@test(expect=0)
+func test_signed_params(): u64 {
     assertEquals(30, signed_add(10, 20), "signed_add(10, 20) = 30")
     assertEquals(-10, signed_add(10, -20), "signed_add(10, -20) = -10")
     assertEquals(-42, signed_negate(42), "signed_negate(42) = -42")
     assertEquals(42, signed_negate(-42), "signed_negate(-42) = 42")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -157,13 +157,13 @@ func logical_and(a: bool, b: bool): bool {
     return a and b
 }
 
-@test
-func test_bool_params(): void {
+@test(expect=0)
+func test_bool_params(): u64 {
     assertEquals(1, bool_to_u64(true), "bool_to_u64(true) = 1")
     assertEquals(0, bool_to_u64(false), "bool_to_u64(false) = 0")
     assertTrue(logical_and(true, true), "true and true = true")
     assertTrue(not logical_and(true, false), "true and false = false")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -173,10 +173,10 @@ inline func inline_add(a: u64, b: u64): u64 {
     return a + b
 }
 
-@test
-func test_inline_attribute(): void {
+@test(expect=0)
+func test_inline_attribute(): u64 {
     assertEquals(30, inline_add(10, 20), "inline function works")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -186,10 +186,10 @@ func test_inline_attribute(): void {
     return x * 2
 }
 
-@test
-func test_force_inline(): void {
+@test(expect=0)
+func test_force_inline(): u64 {
     assertEquals(84, force_inline_double(42), "@force_inline function works")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -199,10 +199,10 @@ func test_force_inline(): void {
     return x + 1
 }
 
-@test
-func test_no_inline(): void {
+@test(expect=0)
+func test_no_inline(): u64 {
     assertEquals(43, no_inline_func(42), "@no_inline function works")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -212,10 +212,10 @@ func test_no_inline(): void {
     return 42
 }
 
-@test
-func test_export_attribute(): void {
+@test(expect=0)
+func test_export_attribute(): u64 {
     assertEquals(42, exported_func(), "@export function works")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -225,19 +225,19 @@ func test_export_attribute(): void {
     return 42
 }
 
-@test
-func test_entry_attribute(): void {
+@test(expect=0)
+func test_entry_attribute(): u64 {
     assertEquals(42, entry_point(), "@entry function works")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Test 14: @test attribute (Section 6.2)
 // ============================================================
-@test
-func test_test_attribute(): void {
+@test(expect=0)
+func test_test_attribute(): u64 {
     assertEquals(0, __test_failures, "@test attribute works")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -251,8 +251,8 @@ func create_rect(width: u64 = 800, height: u64 = 600): u64 {
     return width * height
 }
 
-@test
-func test_default_params(): void {
+@test(expect=0)
+func test_default_params(): u64 {
     // Just verify these compile and run without crash
     let msg1 = greet("World")
     let msg2 = greet("World", "Hi")
@@ -261,7 +261,7 @@ func test_default_params(): void {
 
     assertEquals(480000, area1, "default rect area = 800*600 = 480000")
     assertEquals(786432, area2, "explicit rect area = 1024*768 = 786432")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -277,12 +277,12 @@ func power_default(base: u64, exp: u64 = 2): u64 {
     return result
 }
 
-@test
-func test_default_param_variants(): void {
+@test(expect=0)
+func test_default_param_variants(): u64 {
     assertEquals(25, power_default(5), "5^2 = 25 (default exp)")
     assertEquals(125, power_default(5, 3), "5^3 = 125 (explicit exp)")
     assertEquals(1, power_default(5, 0), "5^0 = 1 (explicit exp=0)")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -292,11 +292,11 @@ func test_default_param_variants(): void {
 // They can't be called in tests without linking, but we verify parsing.
 extern func puts(s: string): i64
 
-@test
-func test_extern_declaration(): void {
+@test(expect=0)
+func test_extern_declaration(): u64 {
     // Just verify the extern declaration compiles
     assertEquals(0, __test_failures, "extern function declaration compiles")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -310,12 +310,12 @@ func variadic_sum(values: ...u64): u64 {
     return total
 }
 
-@test
-func test_variadic_basic(): void {
+@test(expect=0)
+func test_variadic_basic(): u64 {
     assertEquals(15, variadic_sum(1, 2, 3, 4, 5), "variadic sum 1..5 = 15")
     assertEquals(0, variadic_sum(), "empty variadic = 0")
     assertEquals(42, variadic_sum(42), "single variadic = 42")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -329,11 +329,11 @@ func variadic_with_prefix(factor: u64, values: ...u64): u64 {
     return total * factor
 }
 
-@test
-func test_variadic_with_prefix(): void {
+@test(expect=0)
+func test_variadic_with_prefix(): u64 {
     assertEquals(30, variadic_with_prefix(2, 1, 2, 3, 4, 5), "2 * sum(1..5) = 30")
     assertEquals(0, variadic_with_prefix(5), "5 * empty = 0")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -347,13 +347,13 @@ func variadic_many(values: ...u64): u64 {
     return total
 }
 
-@test
-func test_variadic_many(): void {
+@test(expect=0)
+func test_variadic_many(): u64 {
     // 0..9 = 45
     assertEquals(45, variadic_many(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "variadic 0..9 = 45")
     // 0..19 = 190
     assertEquals(190, variadic_many(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19), "variadic 0..19 = 190")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -367,10 +367,10 @@ func variadic_with_index(values: ...u64): u64 {
     return total
 }
 
-@test
-func test_variadic_with_index(): void {
+@test(expect=0)
+func test_variadic_with_index(): u64 {
     assertEquals(15, variadic_with_index(1, 2, 3, 4, 5), "variadic with index = 15")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -392,12 +392,12 @@ func variadic_i64(values: ...i64): i64 {
     return total
 }
 
-@test
-func test_variadic_types(): void {
+@test(expect=0)
+func test_variadic_types(): u64 {
     assertEquals(15, variadic_u8(1, 2, 3, 4, 5), "variadic u8 sum = 15")
     assertEquals(15, variadic_i64(1, 2, 3, 4, 5), "variadic i64 sum = 15")
     assertEquals(-5, variadic_i64(1, 2, 3, 4, -15), "variadic i64 negative = -5")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -411,11 +411,11 @@ func helper_cube(x: u64): u64 {
     return helper_square(x) * x
 }
 
-@test
-func test_function_chaining(): void {
+@test(expect=0)
+func test_function_chaining(): u64 {
     assertEquals(25, helper_square(5), "square(5) = 25")
     assertEquals(125, helper_cube(5), "cube(5) = 125")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -431,12 +431,12 @@ func early_return(x: u64): u64 {
     return x * 2
 }
 
-@test
-func test_early_returns(): void {
+@test(expect=0)
+func test_early_returns(): u64 {
     assertEquals(0, early_return(0), "early return 0")
     assertEquals(1, early_return(1), "early return 1")
     assertEquals(10, early_return(5), "normal return 5*2 = 10")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -451,12 +451,12 @@ func conditional_return(x: i64): i64 {
     return 0
 }
 
-@test
-func test_conditional_return(): void {
+@test(expect=0)
+func test_conditional_return(): u64 {
     assertEquals(1, conditional_return(10), "positive -> 1")
     assertEquals(-1, conditional_return(-10), "negative -> -1")
     assertEquals(0, conditional_return(0), "zero -> 0")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -470,12 +470,12 @@ func string_length(s: string): u64 {
     return len
 }
 
-@test
-func test_string_param(): void {
+@test(expect=0)
+func test_string_param(): u64 {
     assertEquals(5, string_length("hello"), "string_length('hello') = 5")
     assertEquals(0, string_length(""), "string_length('') = 0")
     assertEquals(11, string_length("hello world"), "string_length('hello world') = 11")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -488,11 +488,11 @@ func mixed_params(count: u64, label: string, flag: bool): u64 {
     return 0
 }
 
-@test
-func test_mixed_params(): void {
+@test(expect=0)
+func test_mixed_params(): u64 {
     assertEquals(42, mixed_params(42, "test", true), "mixed params with flag=true")
     assertEquals(0, mixed_params(42, "test", false), "mixed params with flag=false")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -502,12 +502,12 @@ func modulo(a: u64, b: u64): u64 {
     return a % b
 }
 
-@test
-func test_modulo_func(): void {
+@test(expect=0)
+func test_modulo_func(): u64 {
     assertEquals(0, modulo(10, 5), "10 % 5 = 0")
     assertEquals(3, modulo(10, 7), "10 % 7 = 3")
     assertEquals(1, modulo(7, 3), "7 % 3 = 1")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -525,12 +525,12 @@ func bitwise_xor(a: u64, b: u64): u64 {
     return a ^ b
 }
 
-@test
-func test_bitwise_funcs(): void {
+@test(expect=0)
+func test_bitwise_funcs(): u64 {
     assertEquals(0b1000, bitwise_and(0b1010, 0b1100), "bitwise AND")
     assertEquals(0b1110, bitwise_or(0b1010, 0b1100), "bitwise OR")
     assertEquals(0b0110, bitwise_xor(0b1010, 0b1100), "bitwise XOR")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -544,11 +544,11 @@ func shift_right(x: u64, n: u64): u64 {
     return x >> n
 }
 
-@test
-func test_shift_funcs(): void {
+@test(expect=0)
+func test_shift_funcs(): u64 {
     assertEquals(0b101000, shift_left(0b1010, 2), "left shift by 2")
     assertEquals(0b0101, shift_right(0b1010, 1), "right shift by 1")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -570,8 +570,8 @@ func is_greater(a: u64, b: u64): bool {
     return a > b
 }
 
-@test
-func test_comparison_funcs(): void {
+@test(expect=0)
+func test_comparison_funcs(): u64 {
     assertTrue(is_equal(5, 5), "5 == 5")
     assertTrue(not is_equal(5, 6), "5 != 6")
     assertTrue(is_not_equal(5, 6), "5 != 6")
@@ -579,7 +579,7 @@ func test_comparison_funcs(): void {
     assertTrue(not is_less(5, 3), "5 < 3 is false")
     assertTrue(is_greater(5, 3), "5 > 3")
     assertTrue(not is_greater(3, 5), "3 > 5 is false")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -589,11 +589,11 @@ func logical_not(b: bool): bool {
     return not b
 }
 
-@test
-func test_logical_funcs(): void {
+@test(expect=0)
+func test_logical_funcs(): u64 {
     assertTrue(logical_not(false), "not false = true")
     assertTrue(not logical_not(true), "not true = false")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -609,13 +609,13 @@ func sum_to_n(n: u64): u64 {
     return total
 }
 
-@test
-func test_func_with_while(): void {
+@test(expect=0)
+func test_func_with_while(): u64 {
     assertEquals(0, sum_to_n(0), "sum_to_n(0) = 0")
     assertEquals(1, sum_to_n(1), "sum_to_n(1) = 1")
     assertEquals(3, sum_to_n(2), "sum_to_n(2) = 3")
     assertEquals(55, sum_to_n(10), "sum_to_n(10) = 55")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -629,13 +629,13 @@ func sum_range(n: u64): u64 {
     return total
 }
 
-@test
-func test_func_with_for(): void {
+@test(expect=0)
+func test_func_with_for(): u64 {
     assertEquals(0, sum_range(0), "sum_range(0) = 0")
     assertEquals(0, sum_range(1), "sum_range(1) = 0")
     assertEquals(1, sum_range(2), "sum_range(2) = 1")
     assertEquals(45, sum_range(10), "sum_range(10) = 45")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -649,13 +649,13 @@ func classify_number(x: u64): u64 {
     }
 }
 
-@test
-func test_func_with_match(): void {
+@test(expect=0)
+func test_func_with_match(): u64 {
     assertEquals(0, classify_number(0), "classify 0 -> 0")
     assertEquals(1, classify_number(5), "classify 5 -> 1")
     assertEquals(2, classify_number(10), "classify 10 -> 2")
     assertEquals(2, classify_number(100), "classify 100 -> 2")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -672,8 +672,8 @@ func fizzbuzz(n: u64): u64 {
     return 3
 }
 
-@test
-func test_fizzbuzz(): void {
+@test(expect=0)
+func test_fizzbuzz(): u64 {
     assertEquals(0, fizzbuzz(15), "fizzbuzz(15) = 0 (fizzbuzz)")
     assertEquals(1, fizzbuzz(3), "fizzbuzz(3) = 1 (fizz)")
     assertEquals(2, fizzbuzz(5), "fizzbuzz(5) = 2 (buzz)")
@@ -681,7 +681,7 @@ func test_fizzbuzz(): void {
     assertEquals(0, fizzbuzz(30), "fizzbuzz(30) = 0 (fizzbuzz)")
     assertEquals(1, fizzbuzz(9), "fizzbuzz(9) = 1 (fizz)")
     assertEquals(2, fizzbuzz(10), "fizzbuzz(10) = 2 (buzz)")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -694,12 +694,12 @@ func abs(x: i64): u64 {
     return x
 }
 
-@test
-func test_abs(): void {
+@test(expect=0)
+func test_abs(): u64 {
     assertEquals(42, abs(42), "abs(42) = 42")
     assertEquals(42, abs(-42), "abs(-42) = 42")
     assertEquals(0, abs(0), "abs(0) = 0")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -713,11 +713,11 @@ func accumulate(values: ...u64): u64 {
     return result
 }
 
-@test
-func test_accumulate(): void {
+@test(expect=0)
+func test_accumulate(): u64 {
     assertEquals(15, accumulate(1, 2, 3, 4, 5), "accumulate 1..5 = 15")
     assertEquals(0, accumulate(), "accumulate empty = 0")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -727,10 +727,10 @@ func wrapper_sum(a: u64, b: u64, c: u64): u64 {
     return variadic_sum(a, b, c)
 }
 
-@test
-func test_wrapper_variadic(): void {
+@test(expect=0)
+func test_wrapper_variadic(): u64 {
     assertEquals(6, wrapper_sum(1, 2, 3), "wrapper variadic sum = 6")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
@@ -744,18 +744,18 @@ inline func inline_identity(x: u64): u64 {
     return x
 }
 
-@test
-func test_inline_combinations(): void {
+@test(expect=0)
+func test_inline_combinations(): u64 {
     assertEquals(42, inline_identity(42), "inline identity")
     assertEquals(99, force_inline_identity(99), "force_inline identity")
-    assertEquals(0, __test_failures, "test_functions.ae")
+    return __test_failures
 }
 
 // ============================================================
 // Main test runner
 // ============================================================
-@test
-func main(): void {
+@test(expect=0)
+func main(): u64 {
     let failures: u64 = 0
 
     failures += test_basic_function_calls()
@@ -800,5 +800,5 @@ func main(): void {
     failures += test_inline_combinations()
 
     print("test_functions.ae: {failures} failures total\n")
-    assertEquals(0, failures, "test_functions.ae")
+    return failures
 }

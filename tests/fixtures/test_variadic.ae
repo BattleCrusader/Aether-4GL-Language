@@ -196,8 +196,8 @@ func printAndSum(values: ...u64): u64 {
 // ============================================================
 // Main test runner — all tests use u64 assertEquals
 // ============================================================
-@test
-func main(): void {
+@test(expect=0)
+func main(): u64 {
     // Test 1: u64 basic sum
     assertEquals(15, sum(1, 2, 3, 4, 5), "u64 sum 1..5 = 15")
 
@@ -249,5 +249,5 @@ func main(): void {
     // Test 17: print and sum (no crash)
     assertEquals(15, printAndSum(1, 2, 3, 4, 5), "print+sum = 15")
 
-    assertEquals(0, __test_failures, "test_variadic.ae")
+    return __test_failures
 }

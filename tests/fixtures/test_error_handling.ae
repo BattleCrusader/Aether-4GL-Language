@@ -8,8 +8,6 @@
 // §11.1: Error types (enum-based)
 // ============================================================
 
-import "std/test"
-
 enum AppError {
     NotFound
     PermissionDenied
@@ -269,8 +267,8 @@ func testMultipleThrows(): u64 {
 // Main test runner
 // ============================================================
 
-@test
-func main(): void {
+@test(expect=0)
+func main(): u64 {
     let mut failures: u64 = 0
 
     // §11.2: basic try/catch
@@ -308,5 +306,5 @@ func main(): void {
     if testTryFinallyOnly() != 43 { failures += 1 }
     if testMultipleThrows() != 42 { failures += 1 }
 
-    assertEquals(0, failures, "test_error_handling.ae")
+    return failures
 }
