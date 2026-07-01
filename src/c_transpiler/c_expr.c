@@ -614,8 +614,17 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
             }
             if (needs_ref) fputs(")", cg->out);
         } else {
-            /* Omitted optional param — fill with NULL */
-            fputs("(string){ 0, NULL }", cg->out);
+            /* Omitted optional param — fill with default value if available */
+            if (func_decl && i < func_decl->data.func.params.count) {
+                AstNode *param = func_decl->data.func.params.items[i];
+                if (param->data.param.default_value) {
+                    c_emit_expr(cg, param->data.param.default_value);
+                } else {
+                    fputs("(string){ 0, NULL }", cg->out);
+                }
+            } else {
+                fputs("(string){ 0, NULL }", cg->out);
+            }
         }
     }
     fputc(')', cg->out);

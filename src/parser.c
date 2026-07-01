@@ -933,9 +933,25 @@ AstNode *parse_statement(Parser *p) {
         return node_return(p->arena, p->previous.loc, value);
     }
 
-    /* break / continue */
-    if (parser_match(p, TOKEN_KW_BREAK)) return node_break(p->arena, p->previous.loc);
-    if (parser_match(p, TOKEN_KW_CONTINUE)) return node_continue(p->arena, p->previous.loc);
+    /* break / continue with optional label */
+    if (parser_match(p, TOKEN_KW_BREAK)) {
+        AstNode *node = node_break(p->arena, p->previous.loc);
+        /* Check for label: break outer_label */
+        if (parser_check(p, TOKEN_IDENT)) {
+            Token label = p->current; parser_advance(p);
+            node->data.ident.name = label.text;
+        }
+        return node;
+    }
+    if (parser_match(p, TOKEN_KW_CONTINUE)) {
+        AstNode *node = node_continue(p->arena, p->previous.loc);
+        /* Check for label: continue outer_label */
+        if (parser_check(p, TOKEN_IDENT)) {
+            Token label = p->current; parser_advance(p);
+            node->data.ident.name = label.text;
+        }
+        return node;
+    }
 
     /* defer */
     if (parser_match(p, TOKEN_KW_DEFER)) {
@@ -1327,6 +1343,10 @@ static AstNode *parse_type_base(Parser *p) {
         else if (sv_eq_cstr(name, "f32")) prim = PRIM_F32;
         else if (sv_eq_cstr(name, "f64")) prim = PRIM_F64;
         else if (sv_eq_cstr(name, "string")) prim = PRIM_STRING;
+        else if (sv_eq_cstr(name, "int")) prim = PRIM_I64;
+        else if (sv_eq_cstr(name, "float")) prim = PRIM_F32;
+        else if (sv_eq_cstr(name, "double")) prim = PRIM_F64;
+        else if (sv_eq_cstr(name, "char")) prim = PRIM_BYTE;
         else is_prim = false;
 
         if (is_prim) {

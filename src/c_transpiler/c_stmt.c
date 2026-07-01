@@ -233,15 +233,25 @@ static void c_emit_return(CCodegen *cg, AstNode *node) {
 }
 
 static void c_emit_break(CCodegen *cg, AstNode *node) {
-    (void)node;
     c_indent(cg);
-    fputs("break;\n", cg->out);
+    StringView label = node->data.ident.name;
+    if (label.len > 0) {
+        /* Labeled break: goto <label>_end */
+        fprintf(cg->out, "goto %.*s_end;\n", (int)label.len, label.data);
+    } else {
+        fputs("break;\n", cg->out);
+    }
 }
 
 static void c_emit_continue(CCodegen *cg, AstNode *node) {
-    (void)node;
     c_indent(cg);
-    fputs("continue;\n", cg->out);
+    StringView label = node->data.ident.name;
+    if (label.len > 0) {
+        /* Labeled continue: goto <label>_continue */
+        fprintf(cg->out, "goto %.*s_continue;\n", (int)label.len, label.data);
+    } else {
+        fputs("continue;\n", cg->out);
+    }
 }
 
 static void c_emit_defer(CCodegen *cg, AstNode *node) {
@@ -494,9 +504,10 @@ void c_emit_stmt(CCodegen *cg, AstNode *node) {
             /* Attributes are compile-time metadata — skip entirely */
             break;
         case NODE_PROPERTY:
-            /* Properties are compile-time — skip with comment */
-            c_indent(cg);
-            fputs("// property\n", cg->out);
+            /* Properties are methods that look like fields.
+               Emit as a function declaration (same as NODE_FUNC_DECL).
+               The property's getter/setter is stored as a func_decl in data.func. */
+            c_emit_func_decl(cg, node);
             break;
         default:
             fprintf(stderr, "C: unhandled statement node type %d\n", node->type);
