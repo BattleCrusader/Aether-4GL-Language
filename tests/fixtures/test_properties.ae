@@ -39,10 +39,3 @@ func test_property_roundtrip(): void {
     b.doubled(d)
     assertTrue(b.value == 7, "roundtrip: 7 -> 14 -> 7")
 }
-
-@test
-func main(): void {
-    test_property_getter()
-    test_property_setter()
-    test_property_roundtrip()
-}
