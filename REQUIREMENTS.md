@@ -580,15 +580,19 @@ struct Vector3 {
     x: f32, y: f32, z: f32
 }
 
-impl Vector3 {
-    func op_add(other: Vector3): Vector3 {
-        return Vector3 { x: self.x + other.x, y: self.y + other.y, z: self.z + other.z }
-    }
+func op_+(a: Vector3, b: Vector3): Vector3 {
+    let result: Vector3
+    result.x = a.x + b.x
+    result.y = a.y + b.y
+    result.z = a.z + b.z
+    return result
 }
 
-let a = Vector3 { x: 1.0, y: 2.0, z: 3.0 }
-let b = Vector3 { x: 4.0, y: 5.0, z: 6.0 }
-let c = a + b    // calls op_add
+let a: Vector3
+a.x = 1.0; a.y = 2.0; a.z = 3.0
+let b: Vector3
+b.x = 4.0; b.y = 5.0; b.z = 6.0
+let c: Vector3 = a + b    // calls op_+(a, b)
 ```
 
 ### 11.8 Generics

@@ -1646,32 +1646,37 @@ t.fahrenheit = 32    // calls setter → celsius = 0
 
 ### 15.2 Operator Overloading
 
+Operator overloads use explicit left/right parameters (C++ style). The `op_` prefix is reserved — it can only be used for operator overloading.
+
 ```aether
 struct Vector2 {
     x: f64
     y: f64
 }
 
-impl Vector2 {
-    func op_add( other: Vector2): Vector2 {
-        return Vector2 { x: self.x + other.x, y: self.y + other.y }
-    }
+func op_+(a: Vector2, b: Vector2): Vector2 {
+    let result: Vector2
+    result.x = a.x + b.x
+    result.y = a.y + b.y
+    return result
+}
 
-    func op_sub( other: Vector2): Vector2 {
-        return Vector2 { x: self.x - other.x, y: self.y - other.y }
-    }
+func op_-(a: Vector2, b: Vector2): Vector2 {
+    let result: Vector2
+    result.x = a.x - b.x
+    result.y = a.y - b.y
+    return result
+}
 
-    func op_mul( scalar: f64): Vector2 {
-        return Vector2 { x: self.x * scalar, y: self.y * scalar }
-    }
+func op_*(a: Vector2, scalar: f64): Vector2 {
+    let result: Vector2
+    result.x = a.x * scalar
+    result.y = a.y * scalar
+    return result
+}
 
-    func op_neg(): Vector2 {
-        return Vector2 { x: -self.x, y: -self.y }
-    }
-
-    func op_eq( other: Vector2): bool {
-        return self.x == other.x and self.y == other.y
-    }
+func op_==(a: Vector2, b: Vector2): bool {
+    return a.x == b.x and a.y == b.y
 }
 ```
 
