@@ -1171,6 +1171,8 @@ t.fahrenheit = 32    // calls setter → celsius = 0
 
 ### 9.7 Operator Overloading
 
+Operators can be overloaded by defining a function named `op_` followed by the operator symbol. The `op_` prefix is reserved — it can only be used for operator overloading. The symbol can be any sequence of characters (including unicode), making custom operators possible.
+
 ```aether
 struct Vector2 {
     x: f64
@@ -1178,20 +1180,57 @@ struct Vector2 {
 }
 
 impl Vector2 {
-    func op_add( other: Vector2): Vector2 {
+    func op_+(self, other: Vector2): Vector2 {
         return Vector2 { x: self.x + other.x, y: self.y + other.y }
     }
 
-    func op_mul( scalar: f64): Vector2 {
+    func op_*(self, scalar: f64): Vector2 {
         return Vector2 { x: self.x * scalar, y: self.y * scalar }
     }
 }
 
 let a = Vector2 { x: 1, y: 2 }
 let b = Vector2 { x: 3, y: 4 }
-let c = a + b          // calls op_add
-let d = a * 2.0        // calls op_mul
+let c = a + b          // calls op_+
+let d = a * 2.0        // calls op_*
 ```
+
+**Supported operator overloads:**
+
+| Operator | Function name | Type |
+|----------|--------------|------|
+| `+` | `op_+` | Binary |
+| `-` | `op_-` | Binary |
+| `*` | `op_*` | Binary |
+| `/` | `op_/` | Binary |
+| `%` | `op_%` | Binary |
+| `==` | `op_==` | Binary |
+| `!=` | `op_!=` | Binary |
+| `<` | `op_<` | Binary |
+| `>` | `op_>` | Binary |
+| `<=` | `op_<=` | Binary |
+| `>=` | `op_>=` | Binary |
+| `&` | `op_&` | Binary |
+| `\|` | `op_\|` | Binary |
+| `^` | `op_^` | Binary |
+| `<<` | `op_<<` | Binary |
+| `>>` | `op_>>` | Binary |
+| `-` (unary) | `op_-` | Unary |
+| `!` (unary) | `op_!` | Unary |
+| `~` (unary) | `op_~` | Unary |
+
+**Custom operators:** Any unicode symbol can be used as a custom operator:
+
+```aether
+func op_⌛(a: int, b: int): int {
+    return a + b
+}
+
+let result = op_⌛(1, 2)  // direct call
+// Future: let result = 1 ⌛ 2  // infix syntax
+```
+
+> **Note:** Custom operators beyond the standard set require explicit function calls for now. Infix syntax for arbitrary unicode operators is planned.
 
 ---
 

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 /* ──────────────────────────────────────────────
  * Expression codegen — emit C expressions
@@ -12,37 +13,101 @@
  * Operator overloading dispatch helpers
  * ────────────────────────────────────────────── */
 
-/* Map a binary operator to its op_ method name, or NULL if no overload exists */
-static const char *binop_to_op_method(BinOp op) {
+/* Map a binary operator to its symbol string, or NULL if no overload exists */
+static const char *binop_to_op_symbol(BinOp op) {
     switch (op) {
-        case BIN_ADD: return "op_add";
-        case BIN_SUB: return "op_sub";
-        case BIN_MUL: return "op_mul";
-        case BIN_DIV: return "op_div";
-        case BIN_MOD: return "op_mod";
-        case BIN_EQ:  return "op_eq";
-        case BIN_NEQ: return "op_neq";
-        case BIN_LT:  return "op_lt";
-        case BIN_GT:  return "op_gt";
-        case BIN_LE:  return "op_le";
-        case BIN_GE:  return "op_ge";
-        case BIN_BIT_AND: return "op_bitand";
-        case BIN_BIT_OR:  return "op_bitor";
-        case BIN_BIT_XOR: return "op_bitxor";
-        case BIN_SHL: return "op_shl";
-        case BIN_SHR: return "op_shr";
+        case BIN_ADD: return "+";
+        case BIN_SUB: return "-";
+        case BIN_MUL: return "*";
+        case BIN_DIV: return "/";
+        case BIN_MOD: return "%";
+        case BIN_EQ:  return "==";
+        case BIN_NEQ: return "!=";
+        case BIN_LT:  return "<";
+        case BIN_GT:  return ">";
+        case BIN_LE:  return "<=";
+        case BIN_GE:  return ">=";
+        case BIN_BIT_AND: return "&";
+        case BIN_BIT_OR:  return "|";
+        case BIN_BIT_XOR: return "^";
+        case BIN_SHL: return "<<";
+        case BIN_SHR: return ">>";
         default: return NULL;
     }
 }
 
-/* Map a unary operator to its op_ method name, or NULL if no overload exists */
-static const char *unaryop_to_op_method(UnaryOp op) {
+/* Map a unary operator to its symbol string, or NULL if no overload exists */
+static const char *unaryop_to_op_symbol(UnaryOp op) {
     switch (op) {
-        case UNARY_NEG: return "op_neg";
-        case UNARY_NOT: return "op_not";
-        case UNARY_BIT_NOT: return "op_bitnot";
+        case UNARY_NEG: return "-";
+        case UNARY_NOT: return "!";
+        case UNARY_BIT_NOT: return "~";
         default: return NULL;
     }
+}
+
+/* Mangle an operator symbol into a C-safe function name.
+ * Returns a pointer to a static buffer (not thread-safe, fine for single-threaded use). */
+static const char *mangle_op_symbol(const char *symbol) {
+    static char buf[64];
+    int pos = 0;
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "op_");
+    for (const char *p = symbol; *p && pos < (int)sizeof(buf) - 8; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (isalnum(c) || c == '_') {
+            buf[pos++] = (char)c;
+        } else if (c >= 128) {
+            /* Multi-byte UTF-8: decode the codepoint */
+            uint32_t cp = 0;
+            if ((c & 0xE0) == 0xC0) {
+                cp = c & 0x1F;
+                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
+            } else if ((c & 0xF0) == 0xE0) {
+                cp = c & 0x0F;
+                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
+                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
+            } else if ((c & 0xF8) == 0xF0) {
+                cp = c & 0x07;
+                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
+                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
+                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
+            }
+            pos += snprintf(buf + pos, sizeof(buf) - pos, "u%04X", (unsigned)cp);
+        } else if (c == '+') { memcpy(buf + pos, "plus", 4); pos += 4; }
+        else if (c == '-') { memcpy(buf + pos, "minus", 5); pos += 5; }
+        else if (c == '*') { memcpy(buf + pos, "star", 4); pos += 4; }
+        else if (c == '/') { memcpy(buf + pos, "slash", 5); pos += 5; }
+        else if (c == '%') { memcpy(buf + pos, "percent", 7); pos += 7; }
+        else if (c == '=') { memcpy(buf + pos, "eq", 2); pos += 2; }
+        else if (c == '!') { memcpy(buf + pos, "bang", 4); pos += 4; }
+        else if (c == '<') { memcpy(buf + pos, "lt", 2); pos += 2; }
+        else if (c == '>') { memcpy(buf + pos, "gt", 2); pos += 2; }
+        else if (c == '&') { memcpy(buf + pos, "amp", 3); pos += 3; }
+        else if (c == '|') { memcpy(buf + pos, "pipe", 4); pos += 4; }
+        else if (c == '^') { memcpy(buf + pos, "caret", 5); pos += 5; }
+        else if (c == '~') { memcpy(buf + pos, "tilde", 5); pos += 5; }
+        else { buf[pos++] = '_'; }
+    }
+    buf[pos] = '\0';
+    return buf;
+}
+
+/* Build the full op_<symbol> name for a binary operator, e.g. "op_+" */
+static const char *binop_to_op_name(BinOp op) {
+    const char *sym = binop_to_op_symbol(op);
+    if (!sym) return NULL;
+    static char buf[32];
+    snprintf(buf, sizeof(buf), "op_%s", sym);
+    return buf;
+}
+
+/* Build the full op_<symbol> name for a unary operator, e.g. "op_-" */
+static const char *unaryop_to_op_name(UnaryOp op) {
+    const char *sym = unaryop_to_op_symbol(op);
+    if (!sym) return NULL;
+    static char buf[32];
+    snprintf(buf, sizeof(buf), "op_%s", sym);
+    return buf;
 }
 
 /* Search the program for a struct/class declaration matching a given name */
@@ -379,17 +444,40 @@ static int is_var_string_type(CCodegen *cg, StringView vname) {
 
 static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
     /* Operator overloading dispatch: if the left operand is a struct/class type
-       and a matching op_* free function exists, call it instead of using the C operator. */
+       and a matching op_<symbol> free function exists, call it instead of using the C operator. */
     {
-        const char *op_method = binop_to_op_method(node->data.binary.op);
-        if (op_method) {
+        const char *op_name = binop_to_op_name(node->data.binary.op);
+        if (op_name) {
             AstNode *left = node->data.binary.left;
             AstNode *struct_decl = resolve_expr_struct_type(cg, left);
-            if (struct_decl && find_func_by_name(cg->program, op_method)) {
-                c_emit_op_overload_call(cg, left, node->data.binary.right, op_method);
+            if (struct_decl && find_func_by_name(cg->program, op_name)) {
+                /* Emit the mangled C name for the operator function */
+                const char *mangled = mangle_op_symbol(op_name + 3); /* skip "op_" */
+                fputs(mangled, cg->out);
+                fputc('(', cg->out);
+                c_emit_expr(cg, left);
+                fputs(", ", cg->out);
+                c_emit_expr(cg, node->data.binary.right);
+                fputc(')', cg->out);
                 return;
             }
         }
+    }
+
+    /* BIN_CUSTOM: custom operator (unicode symbol like ⌛) — emit as op_<symbol>(left, right) */
+    if (node->data.binary.op == BIN_CUSTOM) {
+        char sym_buf[64];
+        size_t sym_len = node->data.binary.custom_op.len;
+        if (sym_len > 63) sym_len = 63;
+        memcpy(sym_buf, node->data.binary.custom_op.data, sym_len);
+        sym_buf[sym_len] = '\0';
+        fputs(mangle_op_symbol(sym_buf), cg->out);
+        fputc('(', cg->out);
+        c_emit_expr(cg, node->data.binary.left);
+        fputs(", ", cg->out);
+        c_emit_expr(cg, node->data.binary.right);
+        fputc(')', cg->out);
+        return;
     }
 
     /* BIN_ADD is overloaded: numeric add vs string concat vs slice concat. */
@@ -548,14 +636,18 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
 
 static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
     /* Operator overloading dispatch: if the operand is a struct/class type
-       and a matching op_* free function exists, call it instead of using the C operator. */
+       and a matching op_<symbol> free function exists, call it instead of using the C operator. */
     {
-        const char *op_method = unaryop_to_op_method(node->data.unary.op);
-        if (op_method) {
+        const char *op_name = unaryop_to_op_name(node->data.unary.op);
+        if (op_name) {
             AstNode *operand = node->data.unary.operand;
             AstNode *struct_decl = resolve_expr_struct_type(cg, operand);
-            if (struct_decl && find_func_by_name(cg->program, op_method)) {
-                c_emit_unary_op_overload_call(cg, operand, op_method);
+            if (struct_decl && find_func_by_name(cg->program, op_name)) {
+                const char *mangled = mangle_op_symbol(op_name + 3);
+                fputs(mangled, cg->out);
+                fputc('(', cg->out);
+                c_emit_expr(cg, operand);
+                fputc(')', cg->out);
                 return;
             }
         }
@@ -735,7 +827,19 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
     if (func_decl && func_decl->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
     }
-    fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);
+    /* Mangle operator overload function names (op_+ → op_plus, etc.) */
+    if (fname.len >= 3 && memcmp(fname.data, "op_", 3) == 0) {
+        /* Extract the symbol part after "op_" and mangle it */
+        char sym_buf[64];
+        size_t sym_len = fname.len - 3;
+        if (sym_len > 63) sym_len = 63;
+        memcpy(sym_buf, fname.data + 3, sym_len);
+        sym_buf[sym_len] = '\0';
+        fputs(mangle_op_symbol(sym_buf), cg->out);
+        fputc('(', cg->out);
+    } else {
+        fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);
+    }
 
     /* Emit arguments, filling in defaults for omitted optional params */
 

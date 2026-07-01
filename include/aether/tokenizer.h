@@ -157,6 +157,9 @@ typedef enum {
 
     /* Scope resolution */
     TOKEN_COLON_COLON,  /* :: */
+
+    /* Unicode/custom operator (e.g. ⌛) */
+    TOKEN_UNICODE_OP,
 } TokenType;
 
 /* Keyword lookup entry */

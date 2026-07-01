@@ -546,6 +546,10 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
         case NODE_BINARY_OP:
             semantic_visit_expr(sa, node->data.binary.left);
             semantic_visit_expr(sa, node->data.binary.right);
+            /* BIN_CUSTOM: custom operator (unicode symbol) — no special analysis needed */
+            if (node->data.binary.op == BIN_CUSTOM) {
+                break;
+            }
             /* Check for operator overloading: if left resolves to a struct/class
                with an op_ method, mark the node for desugaring */
             if (node->data.binary.left && node->data.binary.left->type == NODE_IDENT &&

@@ -204,6 +204,7 @@ const char *token_type_name(TokenType type) {
         case TOKEN_SEMICOLON: return ";";
         case TOKEN_COLON_COLON: return "::";
         case TOKEN_STAR_STAR: return "**";
+        case TOKEN_UNICODE_OP: return "UNICODE_OP";
     }
     return "UNKNOWN";
 }
@@ -618,6 +619,24 @@ Token tokenizer_next(Tokenizer *t) {
             return tok;
         }
 
+        /* Operator overload prefix: op_ followed by any symbol (including unicode).
+           Must check BEFORE the generic is_ident_start path. */
+        if (c == 'o' && t->pos + 2 < t->end && t->pos[1] == 'p' && t->pos[2] == '_') {
+            t->pos += 3; t->col += 3;
+            /* Scan the operator symbol: everything until a delimiter or whitespace */
+            while (t->pos < t->end && *t->pos != '(' && *t->pos != ')' &&
+                   *t->pos != '{' && *t->pos != '}' &&
+                   *t->pos != '[' && *t->pos != ']' &&
+                   *t->pos != ',' && *t->pos != ';' &&
+                   *t->pos != ':' &&
+                   *t->pos != ' ' && *t->pos != '\t' &&
+                   *t->pos != '\n' && *t->pos != '\r') {
+                t->pos++;
+                t->col++;
+            }
+            return make_token(t, TOKEN_IDENT);
+        }
+
         /* Identifiers and keywords */
         if (is_ident_start(c)) {
             t->pos++; t->col++;
@@ -700,6 +719,17 @@ Token tokenizer_next(Tokenizer *t) {
             case '%': return make_token(t, TOKEN_PERCENT);
             case '@': return make_token(t, TOKEN_AT);
             default:
+                /* Non-ASCII / unicode characters: scan the full multi-byte UTF-8 sequence.
+                   Emit as TOKEN_UNICODE_OP for standalone custom operators (e.g. ⌛). */
+                if ((unsigned char)c > 127) {
+                    /* Count UTF-8 continuation bytes (10xxxxxx) */
+                    t->pos++; t->col++;
+                    while (t->pos < t->end && ((unsigned char)*t->pos & 0xC0) == 0x80) {
+                        t->pos++;
+                        t->col++;
+                    }
+                    return make_token(t, TOKEN_UNICODE_OP);
+                }
                 return error_token(t, "Unexpected character");
         }
     }

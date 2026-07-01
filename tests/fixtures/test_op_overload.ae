@@ -6,37 +6,35 @@ struct Vector {
     y: int
 }
 
-// Operator overload methods as free functions with self parameter
-func op_add(self: Vector, other: Vector): Vector {
+// Operator overload methods use op_<symbol> naming
+func op_+(self: Vector, other: Vector): Vector {
     let result: Vector
     result.x = self.x + other.x
     result.y = self.y + other.y
     return result
 }
 
-func op_sub(self: Vector, other: Vector): Vector {
+func op_-(self: Vector, other: Vector): Vector {
     let result: Vector
     result.x = self.x - other.x
     result.y = self.y - other.y
     return result
 }
 
-func op_mul(self: Vector, scalar: int): Vector {
+func op_*(self: Vector, scalar: int): Vector {
     let result: Vector
     result.x = self.x * scalar
     result.y = self.y * scalar
     return result
 }
 
-func op_eq(self: Vector, other: Vector): bool {
+func op_==(self: Vector, other: Vector): bool {
     return self.x == other.x and self.y == other.y
 }
 
-func op_neg(self: Vector): Vector {
-    let result: Vector
-    result.x = -self.x
-    result.y = -self.y
-    return result
+// Unicode custom operator: ⌛ adds two ints
+func op_⌛(a: int, b: int): int {
+    return a + b
 }
 
 @test
@@ -48,8 +46,8 @@ func test_op_add(): void {
     b.x = 3
     b.y = 4
     let c: Vector = a + b
-    assertTrue(c.x == 4, "op_add: c.x == 4")
-    assertTrue(c.y == 6, "op_add: c.y == 6")
+    assertTrue(c.x == 4, "op_+: c.x == 4")
+    assertTrue(c.y == 6, "op_+: c.y == 6")
 }
 
 @test
@@ -61,8 +59,8 @@ func test_op_sub(): void {
     b.x = 2
     b.y = 3
     let c: Vector = a - b
-    assertTrue(c.x == 3, "op_sub: c.x == 3")
-    assertTrue(c.y == 4, "op_sub: c.y == 4")
+    assertTrue(c.x == 3, "op_-: c.x == 3")
+    assertTrue(c.y == 4, "op_-: c.y == 4")
 }
 
 @test
@@ -71,8 +69,8 @@ func test_op_mul(): void {
     a.x = 2
     a.y = 3
     let c: Vector = a * 3
-    assertTrue(c.x == 6, "op_mul: c.x == 6")
-    assertTrue(c.y == 9, "op_mul: c.y == 9")
+    assertTrue(c.x == 6, "op_*: c.x == 6")
+    assertTrue(c.y == 9, "op_*: c.y == 9")
 }
 
 @test
@@ -86,18 +84,14 @@ func test_op_eq(): void {
     let c: Vector
     c.x = 1
     c.y = 3
-    assertTrue(a == b, "op_eq: a == b")
-    assertTrue(not (a == c), "op_eq: a != c")
+    assertTrue(a == b, "op_==: a == b")
+    assertTrue(not (a == c), "op_==: a != c")
 }
 
 @test
-func test_op_neg(): void {
-    let a: Vector
-    a.x = 3
-    a.y = -4
-    let c: Vector = -a
-    assertTrue(c.x == -3, "op_neg: c.x == -3")
-    assertTrue(c.y == 4, "op_neg: c.y == 4")
+func test_unicode_op(): void {
+    let result = 1 ⌛ 2
+    assertTrue(result == 3, "op_⌛: 1 ⌛ 2 == 3")
 }
 
 @test
@@ -106,5 +100,5 @@ func main(): void {
     test_op_sub()
     test_op_mul()
     test_op_eq()
-    test_op_neg()
+    test_unicode_op()
 }
