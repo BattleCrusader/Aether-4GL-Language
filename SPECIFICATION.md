@@ -1146,8 +1146,8 @@ class BankAccount {
 
 Properties are methods that look like fields. The compiler infers getter/setter from the return type:
 
-- **Getter**: has a return type → `obj.prop` calls the getter
-- **Setter**: has no return type → `obj.prop = value` calls the setter
+- **Getter**: has a return type → `obj.prop()` calls the getter
+- **Setter**: has no return type → `obj.prop(value)` calls the setter
 
 Properties are defined as regular `func` methods inside struct/class bodies. The `self` parameter is auto-injected by the compiler — you never write it yourself.
 
@@ -1168,8 +1168,8 @@ struct Temperature {
 
 let t: Temperature
 t.celsius = 100
-print(t.fahrenheit)  // calls getter → 212.0
-t.fahrenheit = 32    // calls setter → celsius = 0
+print(t.fahrenheit())  // calls getter → 212.0
+t.fahrenheit(32)    // calls setter → celsius = 0
 ```
 
 > **Note:** `self` is a reserved keyword referencing the enclosing object. It is never passed as a parameter — the compiler injects it automatically. You only need `self` when a local variable or parameter name shadows a field name.
@@ -1626,8 +1626,8 @@ let doubled = map(numbers, |x| -> x * 2)
 
 Properties are methods that look like fields. The compiler infers getter/setter from the return type:
 
-- **Getter**: has a return type → `obj.prop` calls the getter
-- **Setter**: has no return type → `obj.prop = value` calls the setter
+- **Getter**: has a return type → `obj.prop()` calls the getter
+- **Setter**: has no return type → `obj.prop(value)` calls the setter
 
 Properties are defined as regular `func` methods inside struct/class bodies. The `self` parameter is auto-injected by the compiler — you never write it yourself.
 
@@ -1648,8 +1648,8 @@ struct Temperature {
 
 let t: Temperature
 t.celsius = 100
-print(t.fahrenheit)  // calls getter → 212.0
-t.fahrenheit = 32    // calls setter → celsius = 0
+print(t.fahrenheit())  // calls getter → 212.0
+t.fahrenheit(32)    // calls setter → celsius = 0
 ```
 
 > **Note:** `self` is a reserved keyword referencing the enclosing object. It is never passed as a parameter — the compiler injects it automatically. You only need `self` when a local variable or parameter name shadows a field name.

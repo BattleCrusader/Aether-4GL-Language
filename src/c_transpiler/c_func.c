@@ -128,9 +128,6 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
     AstNode *return_type_node = node->data.func.return_type;
     AstNode *body = node->data.func.body;
 
-    /* Generic functions: emit as regular functions with uint64_t for generic params */
-    bool is_generic = (node->data.func.type_params.count > 0);
-
     /* Check if this is main() with a string parameter */
     int is_main = (fname.len == 4 && memcmp(fname.data, "main", 4) == 0);
     int main_has_string_param = 0;
@@ -221,12 +218,7 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
             fputs("}\n", cg->out);
         }
 
-        if (is_generic) {
-            /* Generic function: emit body with uint64_t for generic params */
-            c_emit_block(cg, body);
-        } else {
-            c_emit_block(cg, body);
-        }
+        c_emit_block(cg, body);
         cg->indent--;
         c_indent(cg);
         fputs("}\n\n", cg->out);

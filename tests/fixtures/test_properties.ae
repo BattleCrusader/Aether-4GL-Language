@@ -1,4 +1,4 @@
-// test_properties.ae — property getter/setter dispatch via struct methods
+// test_properties.ae — property getter/setter via struct methods
 import "std/test"
 
 struct Box {
@@ -19,7 +19,7 @@ struct Box {
 func test_property_getter(): void {
     let b: Box
     b.value = 5
-    let d: int = b.doubled
+    let d: int = b.doubled()
     assertTrue(d == 10, "getter: 5 * 2 == 10")
 }
 
@@ -27,7 +27,7 @@ func test_property_getter(): void {
 func test_property_setter(): void {
     let mut b: Box
     b.value = 0
-    b.doubled = 10
+    b.doubled(10)
     assertTrue(b.value == 5, "setter: 10 / 2 == 5")
 }
 
@@ -35,8 +35,8 @@ func test_property_setter(): void {
 func test_property_roundtrip(): void {
     let mut b: Box
     b.value = 7
-    let d: int = b.doubled
-    b.doubled = d
+    let d: int = b.doubled()
+    b.doubled(d)
     assertTrue(b.value == 7, "roundtrip: 7 -> 14 -> 7")
 }
 

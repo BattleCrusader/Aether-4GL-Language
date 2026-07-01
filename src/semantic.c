@@ -5,8 +5,322 @@
 #include <stdint.h>
 
 /* ================================================================
- * Compile-time constant evaluator
+ * Generics monomorphization
  * ================================================================ */
+
+/* Deep-clone a type node, substituting generic type params with concrete types.
+ * type_params: list of NODE_IDENT for the generic param names.
+ * concrete_types: list of NODE_TYPE_* nodes to substitute.
+ * Returns a new arena-allocated type node. */
+static AstNode *monomorphize_type(Arena *arena, AstNode *type_node,
+                                   AstNodeList *type_params, AstNodeList *concrete_types) {
+    if (!type_node) return NULL;
+    switch (type_node->type) {
+        case NODE_TYPE_PRIMITIVE:
+            return node_type_prim(arena, type_node->loc, type_node->data.type_node.prim);
+        case NODE_TYPE_NAMED: {
+            /* Check if this named type matches a generic param */
+            for (int i = 0; i < type_params->count; i++) {
+                AstNode *tp = type_params->items[i];
+                if (tp->type == NODE_IDENT && type_node->data.type_node.name.len == tp->data.ident.name.len &&
+                    memcmp(type_node->data.type_node.name.data, tp->data.ident.name.data, type_node->data.type_node.name.len) == 0) {
+                    /* Substitute with concrete type */
+                    if (i < concrete_types->count) {
+                        return monomorphize_type(arena, concrete_types->items[i], type_params, concrete_types);
+                    }
+                }
+            }
+            return node_type_named(arena, type_node->loc, type_node->data.type_node.name);
+        }
+        case NODE_TYPE_REF: {
+            AstNode *t = node_create(arena, NODE_TYPE_REF, type_node->loc);
+            t->data.type_node.elem_type = monomorphize_type(arena, type_node->data.type_node.elem_type, type_params, concrete_types);
+            t->data.type_node.is_ref = type_node->data.type_node.is_ref;
+            return t;
+        }
+        case NODE_TYPE_PTR: {
+            AstNode *t = node_create(arena, NODE_TYPE_PTR, type_node->loc);
+            t->data.type_node.elem_type = monomorphize_type(arena, type_node->data.type_node.elem_type, type_params, concrete_types);
+            return t;
+        }
+        case NODE_TYPE_ARRAY: {
+            AstNode *t = node_create(arena, NODE_TYPE_ARRAY, type_node->loc);
+            t->data.type_node.elem_type = monomorphize_type(arena, type_node->data.type_node.elem_type, type_params, concrete_types);
+            t->data.type_node.array_size = type_node->data.type_node.array_size;
+            return t;
+        }
+        case NODE_TYPE_SLICE: {
+            AstNode *t = node_create(arena, NODE_TYPE_SLICE, type_node->loc);
+            t->data.type_node.elem_type = monomorphize_type(arena, type_node->data.type_node.elem_type, type_params, concrete_types);
+            return t;
+        }
+        case NODE_TYPE_OPTIONAL: {
+            AstNode *t = node_create(arena, NODE_TYPE_OPTIONAL, type_node->loc);
+            t->data.type_node.elem_type = monomorphize_type(arena, type_node->data.type_node.elem_type, type_params, concrete_types);
+            return t;
+        }
+        case NODE_TYPE_TUPLE: {
+            AstNode *t = node_create(arena, NODE_TYPE_TUPLE, type_node->loc);
+            for (int i = 0; i < type_node->data.type_node.param_types.count; i++) {
+                node_list_append(&t->data.type_node.param_types,
+                    monomorphize_type(arena, type_node->data.type_node.param_types.items[i], type_params, concrete_types));
+            }
+            return t;
+        }
+        case NODE_TYPE_FN: {
+            AstNode *t = node_create(arena, NODE_TYPE_FN, type_node->loc);
+            for (int i = 0; i < type_node->data.type_node.param_types.count; i++) {
+                node_list_append(&t->data.type_node.param_types,
+                    monomorphize_type(arena, type_node->data.type_node.param_types.items[i], type_params, concrete_types));
+            }
+            t->data.type_node.return_type = monomorphize_type(arena, type_node->data.type_node.return_type, type_params, concrete_types);
+            return t;
+        }
+        default:
+            return type_node; /* pass through for non-type nodes */
+    }
+}
+
+/* Deep-clone an expression node, substituting generic type params with concrete types. */
+static AstNode *monomorphize_expr(Arena *arena, AstNode *node,
+                                   AstNodeList *type_params, AstNodeList *concrete_types) {
+    if (!node) return NULL;
+    AstNode *copy = node_create(arena, node->type, node->loc);
+    switch (node->type) {
+        case NODE_LITERAL_INT:
+            copy->data.literal.int_val = node->data.literal.int_val;
+            break;
+        case NODE_LITERAL_FLOAT:
+            copy->data.literal.float_val = node->data.literal.float_val;
+            break;
+        case NODE_LITERAL_STRING:
+            copy->data.literal.string_val = node->data.literal.string_val;
+            break;
+        case NODE_LITERAL_CHAR:
+            copy->data.literal.char_val = node->data.literal.char_val;
+            break;
+        case NODE_LITERAL_BOOL:
+            copy->data.literal.bool_val = node->data.literal.bool_val;
+            break;
+        case NODE_LITERAL_NONE:
+            break;
+        case NODE_IDENT:
+            copy->data.ident.name = node->data.ident.name;
+            copy->data.ident.resolved = node->data.ident.resolved;
+            break;
+        case NODE_BINARY_OP:
+            copy->data.binary.op = node->data.binary.op;
+            copy->data.binary.left = monomorphize_expr(arena, node->data.binary.left, type_params, concrete_types);
+            copy->data.binary.right = monomorphize_expr(arena, node->data.binary.right, type_params, concrete_types);
+            break;
+        case NODE_UNARY_OP:
+            copy->data.unary.op = node->data.unary.op;
+            copy->data.unary.operand = monomorphize_expr(arena, node->data.unary.operand, type_params, concrete_types);
+            break;
+        case NODE_CALL:
+            copy->data.call.callee = monomorphize_expr(arena, node->data.call.callee, type_params, concrete_types);
+            for (int i = 0; i < node->data.call.args.count; i++) {
+                node_list_append(&copy->data.call.args,
+                    monomorphize_expr(arena, node->data.call.args.items[i], type_params, concrete_types));
+            }
+            break;
+        case NODE_INDEX:
+            copy->data.index.target = monomorphize_expr(arena, node->data.index.target, type_params, concrete_types);
+            copy->data.index.index = monomorphize_expr(arena, node->data.index.index, type_params, concrete_types);
+            break;
+        case NODE_FIELD_ACCESS:
+            copy->data.field.target = monomorphize_expr(arena, node->data.field.target, type_params, concrete_types);
+            copy->data.field.field = monomorphize_expr(arena, node->data.field.field, type_params, concrete_types);
+            break;
+        case NODE_CAST:
+            copy->data.binary.left = monomorphize_expr(arena, node->data.binary.left, type_params, concrete_types);
+            copy->data.binary.right = monomorphize_type(arena, node->data.binary.right, type_params, concrete_types);
+            break;
+        case NODE_ARRAY_LIT:
+            for (int i = 0; i < node->data.list.count; i++) {
+                node_list_append(&copy->data.list,
+                    monomorphize_expr(arena, node->data.list.items[i], type_params, concrete_types));
+            }
+            break;
+        default:
+            break;
+    }
+    return copy;
+}
+
+/* Deep-clone a statement/declaration node, substituting generic type params with concrete types. */
+static AstNode *monomorphize_node(Arena *arena, AstNode *node,
+                                   AstNodeList *type_params, AstNodeList *concrete_types) {
+    if (!node) return NULL;
+    AstNode *copy = node_create(arena, node->type, node->loc);
+    switch (node->type) {
+        case NODE_BLOCK:
+            for (int i = 0; i < node->data.list.count; i++) {
+                node_list_append(&copy->data.list,
+                    monomorphize_node(arena, node->data.list.items[i], type_params, concrete_types));
+            }
+            break;
+        case NODE_LET:
+            copy->data.let_decl.name = monomorphize_expr(arena, node->data.let_decl.name, type_params, concrete_types);
+            copy->data.let_decl.type = monomorphize_type(arena, node->data.let_decl.type, type_params, concrete_types);
+            copy->data.let_decl.value = monomorphize_expr(arena, node->data.let_decl.value, type_params, concrete_types);
+            copy->data.let_decl.is_mut = node->data.let_decl.is_mut;
+            copy->data.let_decl.is_global = node->data.let_decl.is_global;
+            break;
+        case NODE_RETURN:
+            copy->data.return_node.value = monomorphize_expr(arena, node->data.return_node.value, type_params, concrete_types);
+            break;
+        case NODE_IF:
+            copy->data.if_node.condition = monomorphize_expr(arena, node->data.if_node.condition, type_params, concrete_types);
+            copy->data.if_node.then_block = monomorphize_node(arena, node->data.if_node.then_block, type_params, concrete_types);
+            copy->data.if_node.elif_chain = monomorphize_node(arena, node->data.if_node.elif_chain, type_params, concrete_types);
+            copy->data.if_node.else_block = monomorphize_node(arena, node->data.if_node.else_block, type_params, concrete_types);
+            break;
+        case NODE_WHILE:
+            copy->data.while_node.condition = monomorphize_expr(arena, node->data.while_node.condition, type_params, concrete_types);
+            copy->data.while_node.body = monomorphize_node(arena, node->data.while_node.body, type_params, concrete_types);
+            break;
+        case NODE_FOR:
+            copy->data.for_node.var = monomorphize_expr(arena, node->data.for_node.var, type_params, concrete_types);
+            copy->data.for_node.index_var = monomorphize_expr(arena, node->data.for_node.index_var, type_params, concrete_types);
+            copy->data.for_node.iterable = monomorphize_expr(arena, node->data.for_node.iterable, type_params, concrete_types);
+            copy->data.for_node.body = monomorphize_node(arena, node->data.for_node.body, type_params, concrete_types);
+            break;
+        case NODE_EXPR_STMT:
+            copy->data.call.callee = monomorphize_expr(arena, node->data.call.callee, type_params, concrete_types);
+            break;
+        case NODE_MATCH:
+            copy->data.match_node.value = monomorphize_expr(arena, node->data.match_node.value, type_params, concrete_types);
+            for (int i = 0; i < node->data.match_node.arms.count; i++) {
+                node_list_append(&copy->data.match_node.arms,
+                    monomorphize_node(arena, node->data.match_node.arms.items[i], type_params, concrete_types));
+            }
+            break;
+        case NODE_MATCH_ARM:
+            copy->data.match_arm.pattern = monomorphize_expr(arena, node->data.match_arm.pattern, type_params, concrete_types);
+            copy->data.match_arm.body = monomorphize_node(arena, node->data.match_arm.body, type_params, concrete_types);
+            break;
+        case NODE_TRY:
+            copy->data.try_node.body = monomorphize_node(arena, node->data.try_node.body, type_params, concrete_types);
+            for (int i = 0; i < node->data.try_node.catch_arms.count; i++) {
+                node_list_append(&copy->data.try_node.catch_arms,
+                    monomorphize_node(arena, node->data.try_node.catch_arms.items[i], type_params, concrete_types));
+            }
+            copy->data.try_node.finally_body = monomorphize_node(arena, node->data.try_node.finally_body, type_params, concrete_types);
+            break;
+        case NODE_CATCH_ARM:
+            copy->data.catch_arm.var = monomorphize_expr(arena, node->data.catch_arm.var, type_params, concrete_types);
+            copy->data.catch_arm.body = monomorphize_node(arena, node->data.catch_arm.body, type_params, concrete_types);
+            break;
+        case NODE_THROW:
+            copy->data.throw_node.value = monomorphize_expr(arena, node->data.throw_node.value, type_params, concrete_types);
+            break;
+        case NODE_DEFER:
+            copy->data.defer_node.body = monomorphize_node(arena, node->data.defer_node.body, type_params, concrete_types);
+            break;
+        case NODE_ASM_BLOCK:
+            copy->data.asm_block.text = node->data.asm_block.text;
+            copy->data.asm_block.outputs = node->data.asm_block.outputs;
+            copy->data.asm_block.inputs = node->data.asm_block.inputs;
+            copy->data.asm_block.clobbers = node->data.asm_block.clobbers;
+            break;
+        default:
+            break;
+    }
+    return copy;
+}
+
+/* Create a monomorphized copy of a generic function with concrete types substituted.
+ * The copy is added to the program's top-level declarations. */
+static AstNode *monomorphize_func(Arena *arena, AstNode *program, AstNode *generic_func,
+                                   AstNodeList *concrete_types) {
+    AstNodeList *type_params = &generic_func->data.func.type_params;
+    if (type_params->count == 0) return generic_func;
+
+    /* Build a mangled name: funcName_T_U where T, U are the concrete type names */
+    char mangled_name[256];
+    int pos = 0;
+    StringView fname = generic_func->data.func.name->data.ident.name;
+    if (pos + (int)fname.len < 256) {
+        memcpy(mangled_name + pos, fname.data, fname.len);
+        pos += fname.len;
+    }
+    for (int i = 0; i < concrete_types->count && pos < 250; i++) {
+        mangled_name[pos++] = '_';
+        AstNode *ct = concrete_types->items[i];
+        if (ct->type == NODE_TYPE_PRIMITIVE) {
+            const char *pn = NULL;
+            switch (ct->data.type_node.prim) {
+                case PRIM_VOID: pn = "void"; break;
+                case PRIM_BOOL: pn = "bool"; break;
+                case PRIM_BYTE: case PRIM_U8: pn = "u8"; break;
+                case PRIM_U16: pn = "u16"; break;
+                case PRIM_U32: pn = "u32"; break;
+                case PRIM_U64: pn = "u64"; break;
+                case PRIM_U128: pn = "u128"; break;
+                case PRIM_I8: pn = "i8"; break;
+                case PRIM_I16: pn = "i16"; break;
+                case PRIM_I32: pn = "i32"; break;
+                case PRIM_I64: pn = "i64"; break;
+                case PRIM_F32: pn = "f32"; break;
+                case PRIM_F64: pn = "f64"; break;
+                case PRIM_STRING: pn = "string"; break;
+                default: pn = "unknown"; break;
+            }
+            int plen = strlen(pn);
+            if (pos + plen < 256) {
+                memcpy(mangled_name + pos, pn, plen);
+                pos += plen;
+            }
+        } else if (ct->type == NODE_TYPE_NAMED) {
+            int nlen = (int)ct->data.type_node.name.len;
+            if (pos + nlen < 256) {
+                memcpy(mangled_name + pos, ct->data.type_node.name.data, nlen);
+                pos += nlen;
+            }
+        }
+    }
+    mangled_name[pos] = '\0';
+
+    /* Create the monomorphized function declaration */
+    AstNode *name_node = node_ident(arena, generic_func->data.func.name->loc,
+        (StringView){mangled_name, (size_t)pos});
+    AstNode *mono = node_func_decl(arena, generic_func->loc, name_node,
+        generic_func->data.func.is_pub, generic_func->data.func.is_static);
+    mono->data.func.is_asm = generic_func->data.func.is_asm;
+    mono->data.func.is_sys = generic_func->data.func.is_sys;
+    mono->data.func.is_throws = generic_func->data.func.is_throws;
+    mono->data.func.is_operator = generic_func->data.func.is_operator;
+    mono->data.func.is_inline = generic_func->data.func.is_inline;
+    mono->data.func.is_force_inline = generic_func->data.func.is_force_inline;
+    mono->data.func.is_no_inline = generic_func->data.func.is_no_inline;
+    mono->data.func.access = generic_func->data.func.access;
+
+    /* Monomorphize return type */
+    mono->data.func.return_type = monomorphize_type(arena, generic_func->data.func.return_type, type_params, concrete_types);
+
+    /* Monomorphize parameters */
+    for (int i = 0; i < generic_func->data.func.params.count; i++) {
+        AstNode *param = generic_func->data.func.params.items[i];
+        AstNode *pname = monomorphize_expr(arena, param->data.param.name, type_params, concrete_types);
+        AstNode *ptype = monomorphize_type(arena, param->data.param.type, type_params, concrete_types);
+        AstNode *new_param = node_create(arena, NODE_PARAM, param->loc);
+        new_param->data.param.name = pname;
+        new_param->data.param.type = ptype;
+        new_param->data.param.is_varargs = param->data.param.is_varargs;
+        node_list_append(&mono->data.func.params, new_param);
+    }
+
+    /* Monomorphize body */
+    if (generic_func->data.func.body) {
+        mono->data.func.body = monomorphize_node(arena, generic_func->data.func.body, type_params, concrete_types);
+    }
+
+    /* Add to program */
+    node_list_append(&program->data.list, mono);
+
+    return mono;
+}
 
 /* Forward declaration */
 static uint64_t const_eval_expr(SemanticAnalyzer *sa, AstNode *node, bool *ok);
@@ -300,6 +614,16 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                 node->data.func.name->data.ident.name.len);
             scope_declare(sa, name, node);
             scope_enter(sa, node);
+
+            /* Declare generic type parameters in function scope */
+            for (int i = 0; i < node->data.func.type_params.count; i++) {
+                AstNode *tp = node->data.func.type_params.items[i];
+                if (tp->type == NODE_IDENT) {
+                    const char *tp_name = arena_strndup(sa->arena,
+                        tp->data.ident.name.data, tp->data.ident.name.len);
+                    scope_declare(sa, tp_name, tp);
+                }
+            }
 
             /* Declare parameters in function scope */
             for (int i = 0; i < node->data.func.params.count; i++) {
@@ -608,9 +932,47 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
                 node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
                 AstNode *func = node->data.call.callee->data.ident.resolved;
                 if (func->data.func.type_params.count > 0) {
-                    /* Mark the call as needing monomorphization */
-                    /* Concrete types are inferred from argument types */
-                    /* For now, just mark — full monomorphization deferred to codegen */
+                    /* Infer concrete types from argument types */
+                    AstNodeList concrete_types = {0};
+                    for (int i = 0; i < func->data.func.type_params.count; i++) {
+                        /* For each type param, look at the corresponding argument's type */
+                        if (i < node->data.call.args.count) {
+                            AstNode *arg = node->data.call.args.items[i];
+                            /* Try to infer the type from the argument's resolved declaration */
+                            if (arg->type == NODE_IDENT && arg->data.ident.resolved) {
+                                AstNode *decl = arg->data.ident.resolved;
+                                AstNode *type_node = NULL;
+                                if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+                                else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+                                if (type_node) {
+                                    node_list_append(&concrete_types, type_node);
+                                    continue;
+                                }
+                            }
+                            /* Fallback: use int64_t for numeric literals */
+                            if (arg->type == NODE_LITERAL_INT) {
+                                node_list_append(&concrete_types, node_type_prim(sa->arena, arg->loc, PRIM_I64));
+                                continue;
+                            }
+                            if (arg->type == NODE_LITERAL_FLOAT) {
+                                node_list_append(&concrete_types, node_type_prim(sa->arena, arg->loc, PRIM_F64));
+                                continue;
+                            }
+                            if (arg->type == NODE_LITERAL_STRING) {
+                                node_list_append(&concrete_types, node_type_prim(sa->arena, arg->loc, PRIM_STRING));
+                                continue;
+                            }
+                            if (arg->type == NODE_LITERAL_BOOL) {
+                                node_list_append(&concrete_types, node_type_prim(sa->arena, arg->loc, PRIM_BOOL));
+                                continue;
+                            }
+                        }
+                        /* Default fallback: int64_t */
+                        node_list_append(&concrete_types, node_type_prim(sa->arena, NO_LOCATION, PRIM_I64));
+                    }
+                    /* Create monomorphized copy and redirect the call */
+                    AstNode *mono = monomorphize_func(sa->arena, sa->program, func, &concrete_types);
+                    node->data.call.callee->data.ident.resolved = mono;
                 }
             }
             break;
@@ -654,6 +1016,7 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
 }
 
 void semantic_analyze(SemanticAnalyzer *sa, AstNode *program) {
+    sa->program = program;
     /* Register built-in functions */
     AstNode *print_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
     memset(print_decl, 0, sizeof(AstNode));
