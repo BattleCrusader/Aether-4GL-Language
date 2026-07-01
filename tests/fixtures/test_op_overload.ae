@@ -1,4 +1,4 @@
-// test_op_overload.ae — operator overloading with struct types
+// test_op_overload.ae — operator overloading with struct types and primitives
 import "std/test"
 
 struct Vector {
@@ -32,13 +32,19 @@ func op_==(self: Vector, other: Vector): bool {
     return self.x == other.x and self.y == other.y
 }
 
+// Primitive operator overload — int / int becomes addition
+// (uses / which none of the Vector overloads use internally)
+func op_/(a: int, b: int): int {
+    return a + b
+}
+
 // Unicode custom operator: ⌛ adds two ints
 func op_⌛(a: int, b: int): int {
     return a + b
 }
 
 @test
-func test_op_add(): void {
+func test_op_add_struct(): void {
     let a: Vector
     a.x = 1
     a.y = 2
@@ -46,8 +52,8 @@ func test_op_add(): void {
     b.x = 3
     b.y = 4
     let c: Vector = a + b
-    assertTrue(c.x == 4, "op_+: c.x == 4")
-    assertTrue(c.y == 6, "op_+: c.y == 6")
+    assertTrue(c.x == 4, "op_+ Vector: c.x == 4")
+    assertTrue(c.y == 6, "op_+ Vector: c.y == 6")
 }
 
 @test
@@ -89,6 +95,12 @@ func test_op_eq(): void {
 }
 
 @test
+func test_op_div_int(): void {
+    let result: int = 10 / 3
+    assertTrue(result == 13, "op_/ int: 10 / 3 == 13 (custom: becomes addition)")
+}
+
+@test
 func test_unicode_op(): void {
     let result = 1 ⌛ 2
     assertTrue(result == 3, "op_⌛: 1 ⌛ 2 == 3")
@@ -96,9 +108,10 @@ func test_unicode_op(): void {
 
 @test
 func main(): void {
-    test_op_add()
+    test_op_add_struct()
     test_op_sub()
     test_op_mul()
     test_op_eq()
+    test_op_div_int()
     test_unicode_op()
 }

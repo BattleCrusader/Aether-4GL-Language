@@ -46,52 +46,6 @@ static const char *unaryop_to_op_symbol(UnaryOp op) {
     }
 }
 
-/* Mangle an operator symbol into a C-safe function name.
- * Returns a pointer to a static buffer (not thread-safe, fine for single-threaded use). */
-static const char *mangle_op_symbol(const char *symbol) {
-    static char buf[64];
-    int pos = 0;
-    pos += snprintf(buf + pos, sizeof(buf) - pos, "op_");
-    for (const char *p = symbol; *p && pos < (int)sizeof(buf) - 8; p++) {
-        unsigned char c = (unsigned char)*p;
-        if (isalnum(c) || c == '_') {
-            buf[pos++] = (char)c;
-        } else if (c >= 128) {
-            /* Multi-byte UTF-8: decode the codepoint */
-            uint32_t cp = 0;
-            if ((c & 0xE0) == 0xC0) {
-                cp = c & 0x1F;
-                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
-            } else if ((c & 0xF0) == 0xE0) {
-                cp = c & 0x0F;
-                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
-                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
-            } else if ((c & 0xF8) == 0xF0) {
-                cp = c & 0x07;
-                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
-                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
-                if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); }
-            }
-            pos += snprintf(buf + pos, sizeof(buf) - pos, "u%04X", (unsigned)cp);
-        } else if (c == '+') { memcpy(buf + pos, "plus", 4); pos += 4; }
-        else if (c == '-') { memcpy(buf + pos, "minus", 5); pos += 5; }
-        else if (c == '*') { memcpy(buf + pos, "star", 4); pos += 4; }
-        else if (c == '/') { memcpy(buf + pos, "slash", 5); pos += 5; }
-        else if (c == '%') { memcpy(buf + pos, "percent", 7); pos += 7; }
-        else if (c == '=') { memcpy(buf + pos, "eq", 2); pos += 2; }
-        else if (c == '!') { memcpy(buf + pos, "bang", 4); pos += 4; }
-        else if (c == '<') { memcpy(buf + pos, "lt", 2); pos += 2; }
-        else if (c == '>') { memcpy(buf + pos, "gt", 2); pos += 2; }
-        else if (c == '&') { memcpy(buf + pos, "amp", 3); pos += 3; }
-        else if (c == '|') { memcpy(buf + pos, "pipe", 4); pos += 4; }
-        else if (c == '^') { memcpy(buf + pos, "caret", 5); pos += 5; }
-        else if (c == '~') { memcpy(buf + pos, "tilde", 5); pos += 5; }
-        else { buf[pos++] = '_'; }
-    }
-    buf[pos] = '\0';
-    return buf;
-}
-
 /* Build the full op_<symbol> name for a binary operator, e.g. "op_+" */
 static const char *binop_to_op_name(BinOp op) {
     const char *sym = binop_to_op_symbol(op);
@@ -110,53 +64,73 @@ static const char *unaryop_to_op_name(UnaryOp op) {
     return buf;
 }
 
-/* Search the program for a struct/class declaration matching a given name */
-static AstNode *find_struct_by_name(AstNode *program, StringView name) {
-    if (!program || program->type != NODE_PROGRAM) return NULL;
-    for (int i = 0; i < program->data.list.count; i++) {
-        AstNode *decl = program->data.list.items[i];
-        if (decl->type == NODE_STRUCT_DECL || decl->type == NODE_CLASS_DECL) {
-            AstNode *decl_name = decl->data.struct_decl.name;
-            if (decl_name && decl_name->type == NODE_IDENT) {
-                StringView dn = decl_name->data.ident.name;
-                if (dn.len == name.len && memcmp(dn.data, name.data, dn.len) == 0) {
-                    return decl;
-                }
-            }
-        }
+/* Compute the same signature hash the parser computed for an operator function.
+ * Hash = djb2 over op_<symbol> + param types + return type. */
+static uint32_t compute_op_sig_hash(const char *op_name, AstNode *left_expr, AstNode *right_expr) {
+    uint32_t hash = 5381;
+    size_t nlen = strlen(op_name);
+    for (size_t i = 0; i < nlen; i++) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)op_name[i]);
     }
-    return NULL;
+    /* Hash left operand type */
+    if (left_expr && left_expr->type == NODE_IDENT && left_expr->data.ident.resolved) {
+        AstNode *decl = left_expr->data.ident.resolved;
+        AstNode *type_node = NULL;
+        if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+        else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+        if (type_node && type_node->type == NODE_TYPE_PRIMITIVE) {
+            hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)type_node->data.type_node.prim);
+        } else if (type_node && type_node->type == NODE_TYPE_NAMED) {
+            for (size_t i = 0; i < type_node->data.type_node.name.len; i++) {
+                hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)type_node->data.type_node.name.data[i]);
+            }
+        } else {
+            hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+        }
+    } else if (left_expr && left_expr->type == NODE_LITERAL_INT) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)PRIM_I64);
+    } else if (left_expr && left_expr->type == NODE_LITERAL_FLOAT) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)PRIM_F64);
+    } else {
+        hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+    }
+    /* Hash right operand type */
+    if (right_expr && right_expr->type == NODE_IDENT && right_expr->data.ident.resolved) {
+        AstNode *decl = right_expr->data.ident.resolved;
+        AstNode *type_node = NULL;
+        if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+        else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+        if (type_node && type_node->type == NODE_TYPE_PRIMITIVE) {
+            hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)type_node->data.type_node.prim);
+        } else if (type_node && type_node->type == NODE_TYPE_NAMED) {
+            for (size_t i = 0; i < type_node->data.type_node.name.len; i++) {
+                hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)type_node->data.type_node.name.data[i]);
+            }
+        } else {
+            hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+        }
+    } else if (right_expr && right_expr->type == NODE_LITERAL_INT) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)PRIM_I64);
+    } else if (right_expr && right_expr->type == NODE_LITERAL_FLOAT) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)PRIM_F64);
+    } else {
+        hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+    }
+    return hash;
 }
 
-/* Check if a struct/class has a method with the given name.
- * Returns the method node if found, NULL otherwise. */
-static AstNode *struct_has_method(AstNode *struct_decl, const char *method_name) {
-    if (!struct_decl) return NULL;
-    for (int i = 0; i < struct_decl->data.struct_decl.methods.count; i++) {
-        AstNode *method = struct_decl->data.struct_decl.methods.items[i];
-        if (method->type == NODE_FUNC_DECL && method->data.func.name &&
-            method->data.func.name->type == NODE_IDENT) {
-            StringView mn = method->data.func.name->data.ident.name;
-            if (mn.len == strlen(method_name) &&
-                memcmp(mn.data, method_name, mn.len) == 0) {
-                return method;
-            }
-        }
-    }
-    return NULL;
-}
-
-/* Search the program for a free function with the given name.
+/* Search the program for an operator overload function matching the given name and signature hash.
  * Returns the function node if found, NULL otherwise. */
-static AstNode *find_func_by_name(AstNode *program, const char *func_name) {
+static AstNode *find_op_func_by_sig(AstNode *program, const char *op_name, uint32_t sig_hash) {
     if (!program || program->type != NODE_PROGRAM) return NULL;
-    size_t flen = strlen(func_name);
+    size_t nlen = strlen(op_name);
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
-        if (decl->type == NODE_FUNC_DECL && decl->data.func.name &&
-            decl->data.func.name->type == NODE_IDENT) {
+        if (decl->type == NODE_FUNC_DECL && decl->data.func.is_operator &&
+            decl->data.func.name && decl->data.func.name->type == NODE_IDENT) {
             StringView dn = decl->data.func.name->data.ident.name;
-            if (dn.len == flen && memcmp(dn.data, func_name, flen) == 0) {
+            if (dn.len == nlen && memcmp(dn.data, op_name, nlen) == 0 &&
+                decl->data.func.sig_hash == sig_hash) {
                 return decl;
             }
         }
@@ -164,81 +138,43 @@ static AstNode *find_func_by_name(AstNode *program, const char *func_name) {
     return NULL;
 }
 
-/* Resolve the type of an expression to a struct/class declaration.
- * Returns the struct/class node if the expression's type is a struct/class,
- * NULL otherwise. */
-static AstNode *resolve_expr_struct_type(CCodegen *cg, AstNode *expr) {
-    if (!expr) return NULL;
-
-    /* Handle identifiers: look up the resolved declaration's type */
-    if (expr->type == NODE_IDENT) {
-        AstNode *decl = expr->data.ident.resolved;
-        if (!decl) return NULL;
-        AstNode *type_node = NULL;
-        if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
-        else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
-        if (!type_node) return NULL;
-
-        if (type_node->type == NODE_STRUCT_DECL || type_node->type == NODE_CLASS_DECL) {
-            return type_node;
-        }
-        if (type_node->type == NODE_TYPE_NAMED) {
-            return find_struct_by_name(cg->program, type_node->data.type_node.name);
-        }
-        return NULL;
+/* Mangle an operator symbol + signature hash into a C-safe function name.
+ * e.g. op_+(int,int) → op_plus_1a2b3c4d
+ * Returns a pointer to a static buffer. */
+static const char *mangle_op_sig(const char *op_name, uint32_t sig_hash) {
+    static char buf[64];
+    int pos = 0;
+    /* Mangle the symbol part */
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "op_");
+    for (const char *p = op_name + 3; *p && pos < (int)sizeof(buf) - 12; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (isalnum(c) || c == '_') {
+            buf[pos++] = (char)c;
+        } else if (c >= 128) {
+            uint32_t cp = 0;
+            if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } }
+            else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } }
+            else if ((c & 0xF8) == 0xF0) { cp = c & 0x07; if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } }
+            pos += snprintf(buf + pos, sizeof(buf) - pos, "u%04X", (unsigned)cp);
+        } else if (c == '+') { memcpy(buf + pos, "plus", 4); pos += 4; }
+        else if (c == '-') { memcpy(buf + pos, "minus", 5); pos += 5; }
+        else if (c == '*') { memcpy(buf + pos, "star", 4); pos += 4; }
+        else if (c == '/') { memcpy(buf + pos, "slash", 5); pos += 5; }
+        else if (c == '%') { memcpy(buf + pos, "percent", 7); pos += 7; }
+        else if (c == '=') { memcpy(buf + pos, "eq", 2); pos += 2; }
+        else if (c == '!') { memcpy(buf + pos, "bang", 4); pos += 4; }
+        else if (c == '<') { memcpy(buf + pos, "lt", 2); pos += 2; }
+        else if (c == '>') { memcpy(buf + pos, "gt", 2); pos += 2; }
+        else if (c == '&') { memcpy(buf + pos, "amp", 3); pos += 3; }
+        else if (c == '|') { memcpy(buf + pos, "pipe", 4); pos += 4; }
+        else if (c == '^') { memcpy(buf + pos, "caret", 5); pos += 5; }
+        else if (c == '~') { memcpy(buf + pos, "tilde", 5); pos += 5; }
+        else { buf[pos++] = '_'; }
     }
-
-    /* Handle field access: look up the field's type */
-    if (expr->type == NODE_FIELD_ACCESS) {
-        AstNode *target = expr->data.field.target;
-        AstNode *field = expr->data.field.field;
-        if (!target || !field || field->type != NODE_IDENT) return NULL;
-
-        AstNode *struct_decl = resolve_expr_struct_type(cg, target);
-        if (!struct_decl) return NULL;
-
-        StringView fname = field->data.ident.name;
-        for (int i = 0; i < struct_decl->data.struct_decl.fields.count; i++) {
-            AstNode *f = struct_decl->data.struct_decl.fields.items[i];
-            if (f->type == NODE_FIELD && f->data.param.name &&
-                f->data.param.name->type == NODE_IDENT) {
-                StringView fn = f->data.param.name->data.ident.name;
-                if (fn.len == fname.len && memcmp(fn.data, fname.data, fn.len) == 0) {
-                    AstNode *ftype = f->data.param.type;
-                    if (ftype && ftype->type == NODE_TYPE_NAMED) {
-                        return find_struct_by_name(cg->program, ftype->data.type_node.name);
-                    }
-                    if (ftype && (ftype->type == NODE_STRUCT_DECL || ftype->type == NODE_CLASS_DECL)) {
-                        return ftype;
-                    }
-                    return NULL;
-                }
-            }
-        }
-        return NULL;
-    }
-
-    return NULL;
-}
-
-/* Emit an operator overload call: op_method(self, right) */
-static void c_emit_op_overload_call(CCodegen *cg, AstNode *left, AstNode *right,
-                                     const char *method_name) {
-    fputs(method_name, cg->out);
-    fputc('(', cg->out);
-    c_emit_expr(cg, left);
-    fputs(", ", cg->out);
-    c_emit_expr(cg, right);
-    fputc(')', cg->out);
-}
-
-/* Emit a unary operator overload call: op_method(operand) */
-static void c_emit_unary_op_overload_call(CCodegen *cg, AstNode *operand,
-                                           const char *method_name) {
-    fputs(method_name, cg->out);
-    fputc('(', cg->out);
-    c_emit_expr(cg, operand);
-    fputc(')', cg->out);
+    /* Append hash suffix */
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "_%08x", (unsigned)sig_hash);
+    buf[pos] = '\0';
+    return buf;
 }
 
 static void c_emit_literal_int(CCodegen *cg, AstNode *node) {
@@ -443,21 +379,22 @@ static int is_var_string_type(CCodegen *cg, StringView vname) {
 }
 
 static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
-    /* Operator overloading dispatch: if the left operand is a struct/class type
-       and a matching op_<symbol> free function exists, call it instead of using the C operator. */
+    /* Operator overloading dispatch: look up op_<symbol> by signature hash.
+       Works for all types (primitives, structs, etc.) with proper overloading. */
     {
         const char *op_name = binop_to_op_name(node->data.binary.op);
         if (op_name) {
             AstNode *left = node->data.binary.left;
-            AstNode *struct_decl = resolve_expr_struct_type(cg, left);
-            if (struct_decl && find_func_by_name(cg->program, op_name)) {
-                /* Emit the mangled C name for the operator function */
-                const char *mangled = mangle_op_symbol(op_name + 3); /* skip "op_" */
+            AstNode *right = node->data.binary.right;
+            uint32_t sig_hash = compute_op_sig_hash(op_name, left, right);
+            AstNode *op_func = find_op_func_by_sig(cg->program, op_name, sig_hash);
+            if (op_func) {
+                const char *mangled = mangle_op_sig(op_name, sig_hash);
                 fputs(mangled, cg->out);
                 fputc('(', cg->out);
                 c_emit_expr(cg, left);
                 fputs(", ", cg->out);
-                c_emit_expr(cg, node->data.binary.right);
+                c_emit_expr(cg, right);
                 fputc(')', cg->out);
                 return;
             }
@@ -471,7 +408,12 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
         if (sym_len > 63) sym_len = 63;
         memcpy(sym_buf, node->data.binary.custom_op.data, sym_len);
         sym_buf[sym_len] = '\0';
-        fputs(mangle_op_symbol(sym_buf), cg->out);
+        /* Build op_<symbol> name and compute hash */
+        char op_name[64];
+        snprintf(op_name, sizeof(op_name), "op_%s", sym_buf);
+        uint32_t sig_hash = compute_op_sig_hash(op_name, node->data.binary.left, node->data.binary.right);
+        const char *mangled = mangle_op_sig(op_name, sig_hash);
+        fputs(mangled, cg->out);
         fputc('(', cg->out);
         c_emit_expr(cg, node->data.binary.left);
         fputs(", ", cg->out);
@@ -635,15 +577,15 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
 }
 
 static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
-    /* Operator overloading dispatch: if the operand is a struct/class type
-       and a matching op_<symbol> free function exists, call it instead of using the C operator. */
+    /* Operator overloading dispatch: look up op_<symbol> by signature hash. */
     {
         const char *op_name = unaryop_to_op_name(node->data.unary.op);
         if (op_name) {
             AstNode *operand = node->data.unary.operand;
-            AstNode *struct_decl = resolve_expr_struct_type(cg, operand);
-            if (struct_decl && find_func_by_name(cg->program, op_name)) {
-                const char *mangled = mangle_op_symbol(op_name + 3);
+            uint32_t sig_hash = compute_op_sig_hash(op_name, operand, NULL);
+            AstNode *op_func = find_op_func_by_sig(cg->program, op_name, sig_hash);
+            if (op_func) {
+                const char *mangled = mangle_op_sig(op_name, sig_hash);
                 fputs(mangled, cg->out);
                 fputc('(', cg->out);
                 c_emit_expr(cg, operand);
@@ -827,15 +769,22 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
     if (func_decl && func_decl->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
     }
-    /* Mangle operator overload function names (op_+ → op_plus, etc.) */
+    /* Mangle operator overload function names (op_+ → op_plus_<hash>, etc.) */
     if (fname.len >= 3 && memcmp(fname.data, "op_", 3) == 0) {
-        /* Extract the symbol part after "op_" and mangle it */
-        char sym_buf[64];
-        size_t sym_len = fname.len - 3;
-        if (sym_len > 63) sym_len = 63;
-        memcpy(sym_buf, fname.data + 3, sym_len);
-        sym_buf[sym_len] = '\0';
-        fputs(mangle_op_symbol(sym_buf), cg->out);
+        char op_name[64];
+        size_t nlen = fname.len;
+        if (nlen > 63) nlen = 63;
+        memcpy(op_name, fname.data, nlen);
+        op_name[nlen] = '\0';
+        /* Compute hash from the function's own sig_hash (stored in func_decl) */
+        uint32_t sig_hash = 0;
+        if (func_decl && func_decl->data.func.is_operator) {
+            sig_hash = func_decl->data.func.sig_hash;
+        } else {
+            sig_hash = compute_op_sig_hash(op_name, NULL, NULL);
+        }
+        const char *mangled = mangle_op_sig(op_name, sig_hash);
+        fputs(mangled, cg->out);
         fputc('(', cg->out);
     } else {
         fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);

@@ -566,6 +566,25 @@ AstNode *parse_func_decl(Parser *p) {
             func->data.func.name->data.ident.name.len);
         if (strncmp(fname, "op_", 3) == 0) {
             func->data.func.is_operator = true;
+            /* Compute signature hash: djb2 over op_<symbol> + param types */
+            uint32_t hash = 5381;
+            for (size_t si = 0; si < func->data.func.name->data.ident.name.len; si++) {
+                hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)func->data.func.name->data.ident.name.data[si]);
+            }
+            for (int pi = 0; pi < func->data.func.params.count; pi++) {
+                AstNode *param = func->data.func.params.items[pi];
+                AstNode *ptype = param->data.param.type;
+                if (ptype && ptype->type == NODE_TYPE_PRIMITIVE) {
+                    hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)ptype->data.type_node.prim);
+                } else if (ptype && ptype->type == NODE_TYPE_NAMED) {
+                    for (size_t si = 0; si < ptype->data.type_node.name.len; si++) {
+                        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)ptype->data.type_node.name.data[si]);
+                    }
+                } else {
+                    hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+                }
+            }
+            func->data.func.sig_hash = hash;
         }
     }
 

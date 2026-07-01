@@ -242,6 +242,26 @@ static AstNode *fold_node(AstNode *node, Arena *arena);
 static AstNode *fold_binary_op(AstNode *node, Arena *arena) {
     node->data.binary.left = fold_node(node->data.binary.left, arena);
     node->data.binary.right = fold_node(node->data.binary.right, arena);
+    /* Don't constant-fold if an operator overload exists for this op.
+       The transpiler needs to see the original BIN_ADD to dispatch to op_+. */
+    if (node->data.binary.op == BIN_ADD || node->data.binary.op == BIN_SUB ||
+        node->data.binary.op == BIN_MUL || node->data.binary.op == BIN_DIV ||
+        node->data.binary.op == BIN_MOD || node->data.binary.op == BIN_EQ ||
+        node->data.binary.op == BIN_NEQ || node->data.binary.op == BIN_LT ||
+        node->data.binary.op == BIN_GT || node->data.binary.op == BIN_LE ||
+        node->data.binary.op == BIN_GE || node->data.binary.op == BIN_BIT_AND ||
+        node->data.binary.op == BIN_BIT_OR || node->data.binary.op == BIN_BIT_XOR ||
+        node->data.binary.op == BIN_SHL || node->data.binary.op == BIN_SHR) {
+        /* Check if any operator overload function exists for this op symbol.
+           We can't easily look up by sig_hash here, so just check if any
+           op_<symbol> function exists in the program. */
+        /* For now, skip constant folding for all binary ops when both operands
+           are literals — the transpiler handles the dispatch. */
+        if (is_constant_expr(node->data.binary.left) &&
+            is_constant_expr(node->data.binary.right)) {
+            return node;
+        }
+    }
     if (is_constant_expr(node->data.binary.left) &&
         is_constant_expr(node->data.binary.right)) {
         uint64_t result;

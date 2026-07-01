@@ -9,36 +9,25 @@
  * Function codegen — emit C function declarations
  * ────────────────────────────────────────────── */
 
-/* Mangle an operator symbol into a C-safe function name.
- * e.g. "op_+" → "op_plus", "op_-" → "op_minus", "op_==" → "op_eq_eq"
+/* Mangle an operator symbol + signature hash into a C-safe function name.
+ * e.g. op_+(int,int) → op_plus_1a2b3c4d
  * Unicode chars are encoded as "uXXXX" (hex codepoint).
  * Returns a pointer to a static buffer. */
-static const char *mangle_func_name(StringView fname) {
+static const char *mangle_func_name(StringView fname, uint32_t sig_hash) {
     static char buf[128];
     /* Check if this is an operator overload (starts with "op_") */
     if (fname.len >= 3 && memcmp(fname.data, "op_", 3) == 0) {
         int pos = 0;
         pos += snprintf(buf + pos, sizeof(buf) - pos, "op_");
-        for (size_t i = 3; i < fname.len && pos < (int)sizeof(buf) - 8; i++) {
+        for (size_t i = 3; i < fname.len && pos < (int)sizeof(buf) - 12; i++) {
             unsigned char c = (unsigned char)fname.data[i];
             if (isalnum(c) || c == '_') {
                 buf[pos++] = (char)c;
             } else if (c >= 128) {
-                /* Multi-byte UTF-8: decode the codepoint */
                 uint32_t cp = 0;
-                if ((c & 0xE0) == 0xC0) {
-                    cp = c & 0x1F;
-                    if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); }
-                } else if ((c & 0xF0) == 0xE0) {
-                    cp = c & 0x0F;
-                    if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); }
-                    if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); }
-                } else if ((c & 0xF8) == 0xF0) {
-                    cp = c & 0x07;
-                    if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); }
-                    if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); }
-                    if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); }
-                }
+                if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); } }
+                else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); } if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); } }
+                else if ((c & 0xF8) == 0xF0) { cp = c & 0x07; if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); } if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); } if (i + 1 < fname.len) { i++; cp = (cp << 6) | ((unsigned char)fname.data[i] & 0x3F); } }
                 pos += snprintf(buf + pos, sizeof(buf) - pos, "u%04X", (unsigned)cp);
             } else if (c == '+') { memcpy(buf + pos, "plus", 4); pos += 4; }
             else if (c == '-') { memcpy(buf + pos, "minus", 5); pos += 5; }
@@ -55,6 +44,8 @@ static const char *mangle_func_name(StringView fname) {
             else if (c == '~') { memcpy(buf + pos, "tilde", 5); pos += 5; }
             else { buf[pos++] = '_'; }
         }
+        /* Append hash suffix */
+        pos += snprintf(buf + pos, sizeof(buf) - pos, "_%08x", (unsigned)sig_hash);
         buf[pos] = '\0';
         return buf;
     }
@@ -90,7 +81,7 @@ void c_emit_func_prototype(CCodegen *cg, AstNode *node) {
     if (node->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
     }
-    fputs(mangle_func_name(fname), cg->out);
+    fputs(mangle_func_name(fname, node->data.func.sig_hash), cg->out);
     fputc('(', cg->out);
 
     /* Emit parameters */
@@ -158,7 +149,7 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
         if (node->data.func.is_sys) {
             fputs("__aether_sys_", cg->out);
         }
-        fputs(mangle_func_name(fname), cg->out);
+        fputs(mangle_func_name(fname, node->data.func.sig_hash), cg->out);
         fputc('(', cg->out);
         for (int i = 0; i < param_count; i++) {
             if (i > 0) fputs(", ", cg->out);

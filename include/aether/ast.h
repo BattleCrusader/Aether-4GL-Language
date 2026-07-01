@@ -185,6 +185,7 @@ typedef struct {
     AstNodeList post_conditions; /* post(expr) contract expressions */
     /* @test — test annotation */
     bool has_test;            /* true if @test attribute is set */
+    uint32_t sig_hash;        /* hash of param+return types for operator overload disambiguation */
 } FuncDecl;
 
 /* Parameter */
