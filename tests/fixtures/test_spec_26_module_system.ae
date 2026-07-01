@@ -139,7 +139,7 @@ func test_resolution_error(): u64 {
 // Visibility modifiers control what's visible to importers
 
 // Public by default
-pub func test_pub_function(): u64 {
+public func test_pub_function(): u64 {
     return 1
 }
 
@@ -162,7 +162,7 @@ const PUB_CONST = 100
 const PRIVATE_CONST = 200
 const INTERNAL_CONST = 300
 
-pub struct PubStruct {
+public struct PubStruct {
     a: u64
     b: u64
 }
@@ -250,15 +250,15 @@ func test_multi_arch_metadata(): u64 {
 // Class-level imports avoid ambiguity
 
 module MathLib {
-    pub func add(a: u64, b: u64): u64 {
+    public func add(a: u64, b: u64): u64 {
         return a + b
     }
 
-    pub func sub(a: u64, b: u64): u64 {
+    public func sub(a: u64, b: u64): u64 {
         return a - b
     }
 
-    pub func mul(a: u64, b: u64): u64 {
+    public func mul(a: u64, b: u64): u64 {
         return a * b
     }
 
@@ -268,11 +268,11 @@ module MathLib {
 }
 
 module StringLib {
-    pub func concat(a: string, b: string): string {
+    public func concat(a: string, b: string): string {
         return a + b
     }
 
-    pub func length(s: string): u64 {
+    public func length(s: string): u64 {
         return 5  // simplified
     }
 }
@@ -324,7 +324,7 @@ module ExportModule {
     @export func fini() {
     }
 
-    pub func do_work(): u64 {
+    public func do_work(): u64 {
         return 42
     }
 }
@@ -332,7 +332,7 @@ module ExportModule {
 // Module with ABI version
 @module_abi(version=1)
 module VersionedModule {
-    pub func get_version(): u64 {
+    public func get_version(): u64 {
         return 1
     }
 }
@@ -372,17 +372,17 @@ func test_import_unicode(): u64 {
 // ── Visibility Edge Cases ────────────────────────────────────────────────
 
 // Public struct with private fields
-pub struct ApiStruct {
-    pub exposed: u64
+public struct ApiStruct {
+    public exposed: u64
     private hidden: u64
 }
 
 // Public function returning private type
-pub struct PublicReturnType {
+public struct PublicReturnType {
     value: u64
 }
 
-pub func test_public_return(): PublicReturnType {
+public func test_public_return(): PublicReturnType {
     let result: PublicReturnType
     result.value = 42
     return result

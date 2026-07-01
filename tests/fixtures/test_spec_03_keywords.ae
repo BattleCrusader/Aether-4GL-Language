@@ -3,7 +3,7 @@
 // Keywords tested: bool, byte, u8, u16, u32, u64, i8, i16, i32, i64,
 //   string, true, false, none, void, let, mut, const, func, return,
 //   if, elif, else, while, for, in, break, continue, match, case,
-//   struct, enum, class, trait, impl, type, pub, private, internal,
+//   struct, enum, class, trait, impl, type, public, private, internal,
 //   export, import, as, and, or, not, ref, ptr, owned, rc, static,
 //   unsafe, defer, region, pool, throw, try, catch, yield, self,
 //   super, init, drop, inline, var, module, use, extern, sys, heap,

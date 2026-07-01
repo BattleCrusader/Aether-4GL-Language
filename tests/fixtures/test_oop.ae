@@ -245,7 +245,7 @@ func test_property_setter(): u64 {
 // ── 9.8 Access Modifiers ────────────────────────────────────────────────
 
 class BankAccount {
-    pub balance: u64
+    public balance: u64
     private owner: string
 
     func init(owner: string) {
@@ -253,11 +253,11 @@ class BankAccount {
         self.owner = owner
     }
 
-    pub func deposit(amount: u64) {
+    public func deposit(amount: u64) {
         self.balance += amount
     }
 
-    pub func get_balance(): u64 {
+    public func get_balance(): u64 {
         return self.balance
     }
 

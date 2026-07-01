@@ -77,7 +77,7 @@
 - [x] P04.03 — Auto-destructor insertion
 - [x] P04.04 — Inheritance: single inheritance, `super` keyword — ⚠️ NOT IMPLEMENTED
 - [x] P04.05 — Virtual methods and vtables — ⚠️ NOT IMPLEMENTED
-- [x] P04.06 — Access modifiers: `pub`, `private`, `internal`
+- [x] P04.06 — Access modifiers: `public`, `private`, `internal`
 - [x] P04.07 — Traits: `trait` keyword, `impl` blocks, static dispatch
 - [x] P04.08 — Dynamic dispatch: `dyn Trait` — fat pointer + vtable
 - [x] P04.09 — Generics: `func Name[T](params)` with monomorphization
@@ -197,7 +197,7 @@
 - [x] P11.05 — `+` operator does string concat when either operand is a string
 - [x] P11.06 — `import "path.ae"` resolution
 - [x] P11.07 — Two-pass semantic analysis
-- [x] P11.08 — Module system: `pub`/private visibility across files
+- [x] P11.08 — Module system: `public`/private visibility across files
 - [x] P11.09 — Standard library module path resolution
 - [x] P11.10 — Phase 11 Verification & Cleanup
 

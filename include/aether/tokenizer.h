@@ -62,7 +62,7 @@ typedef enum {
     TOKEN_KW_HEAP,      /* heap */
     TOKEN_KW_REGION,    /* region */
     TOKEN_KW_PRIVATE,   /* private */
-    TOKEN_KW_PUB,       /* pub */
+    TOKEN_KW_PUB,       /* public */
     TOKEN_KW_INTERNAL,  /* internal */
     TOKEN_KW_STATIC,    /* static */
     TOKEN_KW_DEFER,     /* defer */

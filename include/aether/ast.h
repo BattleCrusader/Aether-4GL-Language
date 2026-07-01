@@ -93,6 +93,7 @@ typedef enum {
     NODE_REGION,
     NODE_RUN_BLOCK,
     NODE_PROPERTY,
+    NODE_TYPE_PARAM,    /* generic type parameter with optional constraint */
 } NodeType;
 
 /* ================================================================
@@ -448,6 +449,12 @@ typedef struct {
     AstNode *name;          /* protocol name */
     AstNodeList methods;    /* function declarations (signatures only) */
 } ProtocolDecl;
+
+/* Generic type parameter: T or T: Constraint */
+typedef struct {
+    AstNode *name;          /* ident node for the type param name */
+    AstNode *constraint;    /* constraint type (NODE_TYPE_NAMED for trait name), NULL if unconstrained */
+} TypeParam;
 
 /* ================================================================
  * AST Node structure (tagged union of all the above)

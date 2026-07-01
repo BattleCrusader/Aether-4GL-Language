@@ -358,7 +358,7 @@ static void test_keywords() {
         "return true false none asm break continue "
         "struct enum class match case try throw catch "
         "and or not import const ref owned rc heap "
-        "region pub static defer unsafe module sys "
+        "region public static defer unsafe module sys "
         "pre post drop init self type trait impl "
         "pool protocol virtual dyn throws export entry "
         "layout run prop inline at finally\n";

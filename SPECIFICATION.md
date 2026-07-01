@@ -140,7 +140,7 @@ i32         i64         if          impl        import
 in          init        inline      int         internal
 let         module      mut         none        not
 or          owned       pool        post        pre
-private     protocol    pub         ptr         rc
+private     protocol    public      ptr         rc
 ref         region      return      self        static
 string      struct      super       sys         throw
 trait       true        try         type        u8
@@ -1058,11 +1058,11 @@ class File {
         sys_close(self.fd)
     }
 
-    pub func read( buf: ref [u8]): int {
+    public func read( buf: ref [u8]): int {
         return sys_read(self.fd, buf)
     }
 
-    pub prop path(): string {
+    public prop path(): string {
         return self.path
     }
 }
@@ -1128,11 +1128,11 @@ func save_dynamic(value: ref dyn Serializable) {
 
 ```aether
 class BankAccount {
-    pub balance: u64       // accessible anywhere
+    public balance: u64       // accessible anywhere
     private owner: string  // accessible only within this class
     internal pin: u64      // accessible within the same module
 
-    pub func deposit(amount: u64) {
+    public func deposit(amount: u64) {
         self.balance += amount
     }
 
@@ -1271,12 +1271,12 @@ class Stack<T> {
     data: [T]
     size: int
 
-    pub func push( item: T) {
+    public func push( item: T) {
         self.data[self.size] = item
         self.size += 1
     }
 
-    pub func pop(): T? {
+    public func pop(): T? {
         if self.size == 0 { return none }
         self.size -= 1
         return self.data[self.size]
@@ -2602,7 +2602,7 @@ If none found, the compiler reports an error listing what was tried.
 ### 26.6 Public, Private, Internal Visibility
 
 ```
-pub func exported() { }          // visible to importers
+public func exported() { }          // visible to importers
 private func internal_only() { } // only within this file
 internal func package_only() { }  // within the same package
 func default_public() { }        // public by default (for simplicity)
@@ -2646,7 +2646,7 @@ as, asm, break, case, catch, class, const, continue, default,
 defer, do, dyn, elif, else, enum, export, extern, false, for,
 func, heap, if, impl, import, in, init, drop, let, match, mod,
 module, mut, none, not, or, and, owned, pool, post, pre, private,
-protocol, pub, ptr, rc, ref, region, return, self, static, struct,
+protocol, public, ptr, rc, ref, region, return, self, static, struct,
 super, sys, test, throw, trait, true, try, type, unsafe, use,
 var, where, while, yield
 ```

@@ -1,10 +1,10 @@
 // lib_math.ae — A simple math library for testing .aelib format
 
-pub func add(a: u64, b: u64): u64 {
+public func add(a: u64, b: u64): u64 {
     return a + b
 }
 
-pub func multiply(a: u64, b: u64): u64 {
+public func multiply(a: u64, b: u64): u64 {
     return a * b
 }
 

@@ -612,7 +612,7 @@ Generics are monomorphized at compile time — each concrete instantiation gener
 
 ```
 // math.ae
-pub func square(x: i64): i64 {
+public func square(x: i64): i64 {
     return x * x
 }
 
