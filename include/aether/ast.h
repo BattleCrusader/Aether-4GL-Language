@@ -341,6 +341,7 @@ typedef struct {
     AstNode *name;
     AstNodeList fields;
     AstNodeList methods;    /* method function decls */
+    AstNodeList invariants; /* inv(expr) conditions */
     bool is_pub;
 } StructDecl;
 

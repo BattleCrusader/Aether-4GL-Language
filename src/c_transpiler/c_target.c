@@ -14,7 +14,8 @@ void c_emit_target_preamble(CCodegen *cg) {
     fputs("#include <string.h>\n", cg->out);
     fputs("#include <stdint.h>\n", cg->out);
     fputs("#include <stdbool.h>\n", cg->out);
-    fputs("#include <setjmp.h>\n\n", cg->out);
+    fputs("#include <setjmp.h>\n", cg->out);
+    fputs("#include <assert.h>\n\n", cg->out);
 }
 void c_emit_target_postamble(CCodegen *cg) {
     /* Nothing needed for host target */

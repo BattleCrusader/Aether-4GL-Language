@@ -69,6 +69,7 @@ typedef enum {
     TOKEN_KW_UNSAFE,    /* unsafe */
     TOKEN_KW_MODULE,    /* module */
     TOKEN_KW_SYS,       /* sys */
+    TOKEN_KW_INV,       /* inv */
     TOKEN_KW_IF_LET,    /* if let (contextual) */
     TOKEN_KW_PRE,       /* pre */
     TOKEN_KW_POST,      /* post */

@@ -524,7 +524,7 @@ let x = p.x
 
 ### 4.5 Enums
 
-Enumerations are tagged unions. Variants can carry payload data. Enum construction uses the `::` (scope resolution) syntax:
+Enumerations are **tagged unions** — a type that can hold one of several named variants. Each variant can optionally carry payload data. Enum construction uses the `::` (scope resolution) syntax.
 
 ```aether
 enum Error {
@@ -540,7 +540,25 @@ let custom = Error::InvalidInput("bad data")
 
 **Enum construction with `::`**: The `EnumName::Variant(args)` syntax is handled by the parser. When the codegen encounters a `::` expression where the left side is an enum type and the right side is a variant name, it creates the enum discriminant (data pointer or integer tag) in `rax`. For variants with payload, the payload is stored inline in the struct layout.
 
+**Key rules:**
+- Variants without payload are unit-like (like `NotFound`, `PermissionDenied`)
+- Variants with payload carry data inline (`InvalidInput(string)`, `IoError(u64, string)`)
+- Match expressions can destructure enum variants and bind payload fields
+- Enums are stored as a discriminant + payload (sum type representation)
+
+**Pattern matching on enums:**
+```aether
+match err {
+    Error::NotFound -> print("not found")
+    Error::PermissionDenied -> print("denied")
+    Error::InvalidInput(msg) -> print("invalid: {msg}")
+    Error::IoError(code, msg) -> print("io error {code}: {msg}")
+}
+```
+
 ### 4.6 Classes
+
+Classes are **syntactic sugar over structs + associated functions**. The compiler tracks constructors (`init`) and destructors (`drop`) and inserts calls automatically. Classes differ from structs in that they support `init`/`drop` and automatic memory management.
 
 ```aether
 class Counter {
@@ -559,6 +577,17 @@ class Counter {
     }
 }
 ```
+
+**Key rules:**
+- `init` is the constructor name — called automatically on variable declaration
+- `drop` is the destructor name — called automatically at scope exit
+- Methods defined inside the class body get implicit `self: ref Type` as first parameter
+- Fields are initialized in declaration order
+- Classes are emitted as C structs with companion functions
+
+**Constructors:** You can define multiple `init` methods with different parameters. The compiler selects the matching one based on call-site arguments.
+
+**Destructors:** The `drop` method is called in LIFO order at scope exit. You don't need to write explicit cleanup code.
 
 ### 4.7 Traits
 
@@ -643,6 +672,8 @@ protocol Serial {
 
 ### 4.10 Optional Types
 
+**`T?`** (optional type) represents a value that may be present or absent. It's syntactic sugar for a tagged union: `some(T) | none`. Optionals are the primary way to handle "no value" cases without null pointers.
+
 ```aether
 let x: u64? = some(42)
 let y: u64? = none
@@ -656,19 +687,49 @@ if let val = x {
 let val = x or 0
 ```
 
+**Key rules:**
+- `T?` is a type alias for the optional sum type
+- `some(expr)` wraps a value, `none` represents absence
+- `if let pattern = optional { }` binds the inner value if present
+- `or` operator provides a default: `optional or default_value`
+- Under the hood, optionals use a discriminant byte (0 = none, 1 = some) + payload
+
+**Matching on optionals:**
+```aether
+match x {
+    some(val) -> print("has value: {val}")
+    none -> print("empty")
+}
+```
+
 ---
 
 ## 5. Variables and Bindings
 
 ### 5.1 Let Bindings
 
+**`let`** declares an immutable binding. **`let mut`** declares a mutable binding. Types can be explicit or inferred from the initializer.
+
 ```aether
 let x: u64 = 42          // explicit type
-let y = 42               // type inferred
+let y = 42               // type inferred (u64)
 let mut z = 10           // mutable
 z = 20                   // ok
 
-const MAX = 100          // compile-time constant
+const MAX = 100          // compile-time constant (must be a literal or const expression)
+```
+
+**Key rules:**
+- `let` bindings are immutable by default — use `mut` to allow reassignment
+- Type inference works for all expressions including function calls, arithmetic, and struct literals
+- `const` is evaluated at compile time and substituted inline — no runtime storage
+- Shadowing is allowed: `let x = 10; let x = x + 5;` creates a new binding
+- Destructuring is supported: `let (a, b) = (1, 2);`
+
+**Destructuring example:**
+```aether
+func point() -> (u64, u64) { return (1, 2) }
+let (x, y) = point()   // x = 1, y = 2
 ```
 
 ### 5.2 Scope
@@ -681,12 +742,16 @@ const MAX = 100          // compile-time constant
 // inner not accessible here
 ```
 
+Variables are scoped to the block (`{ ... }`) they are declared in. Nested blocks can see outer variables; outer blocks cannot see inner variables.
+
 ### 5.3 Shadowing
 
 ```aether
 let x = 10
 let x = x + 5   // shadows previous x, now 15
 ```
+
+Shadowing creates a new binding with the same name in the same or inner scope. The previous binding is hidden, not modified. This is different from mutation (`mut`) — shadowing changes the binding, mutation changes the value.
 
 ### 5.4 Global Variables
 
@@ -730,8 +795,9 @@ Labels are identifiers followed by a colon (`:`). They can be applied to `for`, 
 ---
 
 ## 6. Functions
-
 ### 6.1 Function Declaration
+
+Functions are declared with the `func` keyword. Parameters are written as `name: type` pairs. The return type follows the parameter list after `:`. The body is a block or an expression (for expression-bodied functions).
 
 ```aether
 // Basic function
@@ -747,13 +813,21 @@ func greet(name: string) {
     print("Hello, {name}")
 }
 
-// Multiple return values via struct
+// Multiple return values via tuple
 func divide(a: u64, b: u64): (u64, u64) {
     return (a / b, a % b)
 }
 ```
 
+**Key rules:**
+- Parameters are passed by value (copy) unless `ref` or pointer types are used
+- The last expression in a block is implicitly returned if no explicit `return`
+- `return` is optional in expression-bodied functions (`-> expr`)
+- Void functions implicitly return `0` at the end (via `xor rax, rax` in assembly)
+
 ### 6.2 Function Attributes
+
+Attributes modify function behavior at compile time. They are written as `@name` or `@name(args)` before the `func` keyword.
 
 ```aether
 // Inline hint
@@ -784,6 +858,7 @@ inline func fast_path(): u64 { return 42 }
 ```
 
 **Standard attributes:**
+
 | Attribute | Description |
 |-----------|-------------|
 | `@force_inline` | Force the compiler to inline this function |
@@ -805,6 +880,27 @@ func create_window(title: string, width: u64 = 800, height: u64 = 600) {
 create_window("Hello")                    // uses defaults
 create_window("Wide", 1024, 768)          // explicit
 ```
+
+Default parameters are evaluated at the call site. They must be trailing parameters (all parameters after a default must also have defaults).
+
+### 6.4 Variadic Functions
+
+Variadic parameters accept zero or more arguments of the given type. The variadic parameter must be the last parameter in the function signature.
+
+```aether
+func sum(values: ...u64): u64 {
+    let total = 0
+    for v in values {
+        total += v
+    }
+    return total
+}
+
+let s = sum(1, 2, 3, 4, 5)  // s = 15
+let empty = sum()            // empty call — returns 0
+```
+
+Inside the function, the variadic parameter behaves like an array. Iterating over it with `for v in values` works as expected. Calling with no arguments produces an empty array (length 0), so the loop body never executes.
 
 ### 6.5 Extern Functions (FFI)
 
@@ -833,30 +929,13 @@ func main(): u64 {
 
 > **Note:** Extern functions are unsafe by nature — the compiler cannot verify the types or memory safety of external code. Use `unsafe` blocks when calling extern functions that involve pointer manipulation.
 
-### 6.4 Variadic Functions
-
-Variadic parameters accept zero or more arguments of the given type. The variadic parameter must be the last parameter in the function signature.
-
-```aether
-func sum(values: ...u64): u64 {
-    let total = 0
-    for v in values {
-        total += v
-    }
-    return total
-}
-
-let s = sum(1, 2, 3, 4, 5)  // s = 15
-let empty = sum()            // empty call — returns 0
-```
-
-Inside the function, the variadic parameter behaves like an array. Iterating over it with `for v in values` works as expected. Calling with no arguments produces an empty array (length 0), so the loop body never executes.
-
 ---
 
 ## 7. Control Flow
 
 ### 7.1 If / Elif / Else
+
+The `if` statement evaluates a condition and executes the corresponding block. It can also be used as an expression.
 
 ```aether
 if x > 0 {
@@ -869,6 +948,20 @@ if x > 0 {
 
 // If as expression
 let status = if x > 0 { "positive" } else { "non-positive" }
+```
+
+**Key rules:**
+- `elif` and `else` are optional
+- As an expression, all branches must evaluate to the same type
+- The condition must be a boolean expression
+- Blocks are required — no single-line `if x > 0: print("x")` syntax
+
+**If-let pattern matching:**
+```aether
+if let some(val) = optional_value {
+    // val is bound here
+    print("Got: {val}")
+}
 ```
 
 ### 7.2 While Loops
@@ -884,31 +977,45 @@ while true {
 }
 ```
 
+The `while` loop evaluates the condition before each iteration. If the condition is false initially, the body never executes.
+
 ### 7.3 For Loops
 
+Aether supports three forms of `for` loops:
+
+**Range loops:**
 ```aether
-// Range loop
+// Range loop (half-open: 0..10 means 0 through 9)
 for i in 0..10 {
-    print(i)  // 0 through 9
+    print(i)
 }
 
-// Inclusive range
+// Inclusive range (0..=10 means 0 through 10)
 for i in 0..=10 {
-    print(i)  // 0 through 10
+    print(i)
 }
+```
 
-// Array iteration
+**Array iteration:**
+```aether
 let arr = [1, 2, 3, 4, 5]
 for val in arr {
     print(val)
 }
+```
 
-// With index
-// Test fixture: test_for_index.ae
+**With index:**
+```aether
 for i, val in arr {
     print("arr[{i}] = {val}")
 }
 ```
+
+**Key rules:**
+- Range expressions `a..b` and `a..=b` are lazy — they don't allocate an array
+- Iterating over an array yields elements by value (copy)
+- `for i, val` yields the index (u64) and the element value
+- The loop variable is scoped to the loop body
 
 ### 7.4 Break and Continue
 
@@ -920,7 +1027,13 @@ for i in 0..100 {
 }
 ```
 
+- `break` exits the innermost loop
+- `continue` skips to the next iteration of the innermost loop
+- Labels can target outer loops: `break outer`, `continue outer`
+
 ### 7.5 Match Statements
+
+`match` is both a statement and an expression. It compares a value against a series of patterns and executes the first matching arm.
 
 ```aether
 match value {
@@ -936,6 +1049,18 @@ let description = match value {
 }
 ```
 
+**Pattern types:**
+- Literal patterns: `case 0`, `case "hello"`
+- Range patterns: `case 1..9`, `case 1..=9`
+- Wildcard: `case _` (matches anything, must be last)
+- Enum destructuring: `case Error::InvalidInput(msg)`
+
+**Key rules:**
+- Patterns are evaluated top-to-bottom; first match wins
+- The wildcard `_` must be the last arm
+- As an expression, all arms must evaluate to the same type
+- Match expressions can be used in assignments, returns, etc.
+
 ### 7.6 Defer
 
 ```aether
@@ -947,6 +1072,8 @@ func process_file(path: string) {
     f.write(data)
 }
 ```
+
+`defer` schedules a block to run when the current scope exits — whether by normal return, error throw, `break`, or `continue`. This is the primary mechanism for resource cleanup.
 
 **Defer ordering:** Deferred calls are executed in **last-in-first-out (LIFO)** order — the most recently deferred block runs first:
 
@@ -986,6 +1113,10 @@ for i in 0..3 {
 
 This is the heart of the language and what makes it a true 4GL — **you describe allocation semantics; the compiler generates the exact free/teardown code.**
 
+## 8. Memory Management
+
+This is the heart of the language and what makes it a true 4GL — **you describe allocation semantics; the compiler generates the exact free/teardown code.**
+
 ### 8.1 Stack Allocation (Default)
 
 All local variables are stack-allocated by default. The compiler tracks lifetimes and generates destruction at the end of scope.
@@ -997,6 +1128,12 @@ func process() {
     // compiler inserts destructor calls at scope exit
 }
 ```
+
+**Key rules:**
+- All `let` bindings without `heap`, `region`, or `rc` are stack-allocated
+- The compiler tracks the lifetime of each variable and emits cleanup at scope exit
+- For types with `drop` methods (classes), the destructor is called in LIFO order
+- Stack allocation is zero-cost — just a stack pointer bump
 
 ### 8.2 Escape Analysis
 
@@ -1011,6 +1148,8 @@ func make_point(x: int, y: int): ref Point {
 }
 ```
 
+Escape analysis is conservative — if the compiler cannot prove a reference doesn't escape, it promotes to heap. This is sound but may over-allocate.
+
 ### 8.3 Explicit Heap (`heap` keyword)
 
 ```aether
@@ -1018,11 +1157,18 @@ let big = heap Buffer(1024 * 1024)
 let shared = heap rc SharedState()
 ```
 
+The `heap` keyword forces heap allocation even if escape analysis would stack-allocate. Use it for:
+- Large objects that would overflow the stack
+- Objects that need to outlive the current function
+- When you need explicit control over lifetime
+
 ### 8.4 Ownership and Borrowing
 
-- `owned T` — single-owner, moved on assignment, freed when owner drops
-- `ref T` — borrowed reference, non-owning, must not outlive the lender
-- `rc T` — reference-counted shared ownership, freed when count reaches zero
+Aether's ownership model is inspired by Rust but with different syntax and semantics:
+
+- **`owned T`** — single-owner, moved on assignment, freed when owner drops
+- **`ref T`** — borrowed reference, non-owning, must not outlive the lender
+- **`rc T`** — reference-counted shared ownership with atomic reference counting, freed when count reaches zero
 
 ```aether
 func consume(val: owned Buffer) {   // val will be freed at end
@@ -1032,7 +1178,17 @@ func consume(val: owned Buffer) {   // val will be freed at end
 func observe(val: ref Buffer) {     // borrow, no ownership
     print(val.size())
 }  // nothing freed, borrow ends
+
+func share(val: rc Buffer) {        // shared ownership
+    let clone = val  // increments refcount
+}  // decrements refcount, frees if zero
 ```
+
+**Key rules:**
+- `owned` values are moved on assignment — the original binding becomes invalid
+- `ref` bindings are non-owning — they must not outlive the value they reference
+- `rc` types use atomic reference counting — thread-safe but with overhead
+- The compiler enforces ownership at compile time where possible
 
 ### 8.5 Region-Based Allocation
 
@@ -1045,20 +1201,42 @@ region("kernel") {
 }  // entire region freed at once — O(1) teardown
 ```
 
+Regions are named allocation arenas. All allocations inside a `region { }` block come from that region's arena. When the block exits, the entire arena is freed in one operation — O(1) regardless of how many objects were allocated.
+
+**Use cases:**
+- Kernel memory pools
+- Request-scoped allocations in servers
+- Temporary working sets that can be bulk-freed
+
 ### 8.6 No Null Pointers
 
 The type system has no null. Use `T?` (optional) instead.
 
 ```aether
-let x: int? = none
-x = 42
+let x: u64? = some(42)
+let y: u64? = none
+```
 
-if let val = x {
-    print(val)  // val is int, not int?
+**Why no null:**
+- Null pointers are the "billion dollar mistake" — they require runtime checks
+- `T?` makes absence explicit in the type system
+- The compiler can prove optional handling is complete (exhaustive match)
+- No silent crashes from dereferencing null
+
+**Optional patterns:**
+```aether
+// If-let
+if let val = optional { ... }
+
+// Match
+match opt {
+    some(v) -> ...
+    none -> ...
 }
 
-// Unwrap with default
-let y = x or 0
+// Default with `or`
+let val = opt or default_value
+```
 ```
 
 ### 8.7 Pointers (Opt-In, Unsafe)
@@ -1592,7 +1770,11 @@ const GREETING = "Hello, World!"
 
 ## 13. Contract Programming
 
+Contract programming allows you to specify **preconditions**, **postconditions**, and **invariants** that the compiler checks at runtime (debug builds) or uses as optimization hints (release builds). Contracts are written inline between the function signature and the body.
+
 ### 13.1 Preconditions and Postconditions
+
+**`pre(expr)`** declares a condition that must be true **before** a function executes. **`post(expr)`** declares a condition that must be true **after** a function returns. The `old()` function inside a `post()` condition refers to the value of an expression before the function executed.
 
 ```aether
 func withdraw(account: ref Account, amount: u64)
@@ -1603,7 +1785,16 @@ func withdraw(account: ref Account, amount: u64)
 }
 ```
 
+**Key rules:**
+- `pre()` and `post()` are placed between the function signature and the opening `{`
+- Multiple conditions are allowed — each gets its own `pre()` or `post()` line
+- `old(expr)` is only valid inside `post()` conditions — it captures the value of `expr` at function entry
+- In debug builds, violations trigger `assert()` failures
+- In release builds, conditions are eliminated and used as optimizer hints
+
 ### 13.2 Invariants
+
+**`inv(expr)`** declares a condition that must hold **before and after every method call** on a struct or class instance. Unlike `pre()`/`post()` which are per-function, invariants are per-type — they define the type's internal consistency contract.
 
 ```aether
 class Queue<T> {
@@ -1619,9 +1810,28 @@ class Queue<T> {
 }
 ```
 
+**Key rules:**
+- `inv()` is declared inside a struct/class body, alongside fields and methods
+- The condition is checked at every method entry and exit (in debug builds)
+- Invariants are structural — they describe what makes an instance *valid*
+- The compiler emits a `_check_invariants()` function that calls `assert()` for each condition
+
+**`inv` vs `assert` — comparison:**
+
+| Aspect | `assert(expr)` | `inv(expr)` |
+|--------|---------------|-------------|
+| **Scope** | Inside a function body | Inside a struct/class definition |
+| **When checked** | At that exact line of code | Before/after every method call on the type |
+| **Who guarantees** | The function author | The type itself (all methods collectively) |
+| **Granularity** | Point-in-time, ad-hoc | Structural, cross-method |
+| **Removed in release** | Yes (NDEBUG) | Yes, but could be kept for safety |
+| **Use case** | "This should never happen here" | "This type is always in a valid state" |
+
+**Rule of thumb:** Use `assert()` when you want to check a condition at a specific point in a function. Use `inv()` when you want to define what "valid" means for a type, and have every method automatically verify it.
+
 ### 13.3 Debug vs Release
 
-In debug builds, contracts are checked at runtime. In release builds, they serve as optimizer hints and are eliminated.
+In debug builds, all contracts (`pre`, `post`, `inv`) are checked at runtime via `assert()`. In release builds, they serve as optimizer hints and are eliminated — the compiler can use the information to prove properties about the code without generating runtime checks.
 
 ```aether
 // Debug: checks pre/post at runtime
@@ -1633,6 +1843,10 @@ func fast_path(x: u64): u64
     return 100 / x
 }
 ```
+
+**Build modes:**
+- **Debug** (`-O0` or no optimization flag): All contracts checked at runtime. Violations print a message and abort.
+- **Release** (`-O2`, `-O3`): Contracts are parsed and stored in the AST but no runtime checks are emitted. The optimizer may use contract information for dead code elimination and range analysis.
 
 ---
 

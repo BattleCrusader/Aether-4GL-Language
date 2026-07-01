@@ -1,0 +1,26 @@
+import "std/test"
+
+struct BoundedBuffer {
+    size: u64
+    max: u64
+
+    inv(self.size <= self.max)
+
+    func push(val: u64) {
+        self.size += 1
+    }
+}
+
+@test
+func test_invariant_compiles() {
+    assertTrue(1, "invariant struct compiles")
+}
+
+@test
+func test_bounded_buffer_push() {
+    let buf: BoundedBuffer
+    buf.size = 0
+    buf.max = 10
+    buf.push(42)
+    assertTrue(buf.size == 1, "buffer size is 1 after push")
+}

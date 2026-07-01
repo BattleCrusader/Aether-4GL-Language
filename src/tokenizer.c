@@ -52,6 +52,7 @@ const KeywordEntry KEYWORDS[] = {
     {"unsafe",   TOKEN_KW_UNSAFE},
     {"module",   TOKEN_KW_MODULE},
     {"sys",      TOKEN_KW_SYS},
+    {"inv",      TOKEN_KW_INV},
     {"pre",      TOKEN_KW_PRE},
     {"post",     TOKEN_KW_POST},
     {"drop",     TOKEN_KW_DROP},
@@ -136,6 +137,7 @@ const char *token_type_name(TokenType type) {
         case TOKEN_KW_UNSAFE: return "unsafe";
         case TOKEN_KW_MODULE: return "module";
         case TOKEN_KW_SYS: return "sys";
+        case TOKEN_KW_INV: return "inv";
         case TOKEN_KW_PRE: return "pre";
         case TOKEN_KW_POST: return "post";
         case TOKEN_KW_DROP: return "drop";

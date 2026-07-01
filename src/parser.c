@@ -709,6 +709,15 @@ AstNode *parse_struct_decl(Parser *p) {
 
             bool is_pub = parser_match(p, TOKEN_KW_PUB);
 
+            /* Check for invariant: inv(expr) */
+            if (parser_match(p, TOKEN_KW_INV)) {
+                parser_expect(p, TOKEN_LPAREN, "inv condition");
+                AstNode *cond = parse_expr(p);
+                if (cond) node_list_append(&st->data.struct_decl.invariants, cond);
+                parser_expect(p, TOKEN_RPAREN, "inv condition");
+                continue;
+            }
+
             /* Check if this is a method declaration: func name(...) */
             if (parser_check(p, TOKEN_KW_FUNC)) {
                 parser_advance(p);
