@@ -562,6 +562,8 @@ class Counter {
 
 ### 4.7 Traits
 
+Traits define **shared behavior** — a contract that types can implement. They are Aether's primary mechanism for polymorphism and code organization.
+
 ```aether
 trait Drawable {
     func draw()
@@ -579,7 +581,67 @@ impl Drawable for Circle {
 }
 ```
 
-### 4.8 Optional Types
+**Key characteristics of traits:**
+- **Behavior-only**: Traits define method signatures, never fields or data
+- **Static dispatch by default**: `ref Trait` compiles to monomorphized code — zero overhead
+- **Dynamic dispatch opt-in**: `ref dyn Trait` uses fat pointers (vtable + data pointer) for runtime polymorphism
+- **Generic type params**: Traits can be parameterized (`trait Comparable<T>`) for type-safe generic algorithms
+- **Type constraints**: Traits can constrain generic type params (`func min<T: Comparable>(a: T, b: T): T`)
+- **No data**: Traits describe *what a type can do*, not *what a type is*
+
+**When to use traits:**
+- Defining interfaces that multiple types can implement
+- Writing generic algorithms that work with any type satisfying a contract
+- Organizing code into logical capability groups (Serializable, Comparable, Iterable)
+- Enabling polymorphism with zero-cost static dispatch
+- Constraining generic type parameters
+
+### 4.8 Protocols
+
+Protocols define **hardware-level I/O interfaces** — they describe how to communicate with physical devices, ports, and buses. Unlike traits, protocols carry configuration data (pin assignments, port addresses, baud rates) and their methods contain inline assembly for direct hardware interaction.
+
+```aether
+protocol Serial {
+    port base = 0x3F8
+    speed = 115200
+
+    func putc(c: byte) {
+        asm { mov dx, port; mov al, c; out dx, al }
+    }
+}
+```
+
+**Key characteristics of protocols:**
+- **Data + behavior**: Protocols declare fields (pin numbers, port addresses, speeds) and methods
+- **Hardware-oriented**: Methods contain inline assembly for register-level I/O
+- **Compile-time configuration**: Field values are compile-time constants, enabling the compiler to generate optimized bit-banging sequences
+- **No polymorphism**: Protocols are not implemented by types — they are standalone hardware interface descriptions
+- **Code generation target**: The compiler can generate complete driver code from a protocol declaration
+
+**When to use protocols:**
+- Defining serial bus protocols (I2C, SPI, UART)
+- Configuring hardware pin assignments and port addresses
+- Writing low-level device drivers with inline assembly
+- Describing memory-mapped I/O regions
+- Generating optimized bit-banging code from declarative specs
+
+### 4.9 Trait vs Protocol — Comparison
+
+| Aspect | Trait | Protocol |
+|--------|-------|----------|
+| **Purpose** | Define shared behavior/interfaces | Define hardware I/O interfaces |
+| **Data** | No fields — method signatures only | Fields (pins, ports, speeds, addresses) |
+| **Implementation** | `impl Trait for Type { ... }` | Standalone declaration with inline asm |
+| **Polymorphism** | Static dispatch (default), dynamic (`dyn`) | None — single hardware target |
+| **Generics** | Generic type params supported | Not applicable |
+| **Codegen** | Monomorphization or vtable dispatch | Compiler generates driver code |
+| **Use case** | Application-level polymorphism | Hardware-level device drivers |
+| **Runtime cost** | Zero (static) or one deref (dynamic) | Zero — all code is compile-time generated |
+| **Example** | `trait Drawable { func draw() }` | `protocol I2C { scl pin = 5; sda pin = 6 }` |
+
+**Rule of thumb:** If you're describing *what a type can do*, use a trait. If you're describing *how to talk to hardware*, use a protocol.
+
+### 4.10 Optional Types
 
 ```aether
 let x: u64? = some(42)
