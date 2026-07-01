@@ -53,7 +53,15 @@ static void c_emit_let(CCodegen *cg, AstNode *node) {
 
     if (value_node) {
         fputs(" = ", cg->out);
-        c_emit_expr(cg, value_node);
+        /* Wrap value in (void*) cast for owned/rc types */
+        if (type_node && type_node->type == NODE_TYPE_REF &&
+            (type_node->data.type_node.is_owned || type_node->data.type_node.is_rc)) {
+            fputs("(void*)(", cg->out);
+            c_emit_expr(cg, value_node);
+            fputs(")", cg->out);
+        } else {
+            c_emit_expr(cg, value_node);
+        }
     }
     fputs(";\n", cg->out);
 
@@ -77,12 +85,37 @@ static void c_emit_let(CCodegen *cg, AstNode *node) {
                     if (cn_len > 63) cn_len = 63;
                     memcpy(entry->class_name, tn.data, cn_len);
                     entry->class_name[cn_len] = '\0';
+                    entry->kind = 0;  /* class _drop */
                     entry->next = cg->auto_drop_list;
                     cg->auto_drop_list = entry;
                     break;
                 }
             }
         }
+    }
+    /* Auto-cleanup for owned T: free on scope exit */
+    if (type_node && type_node->type == NODE_TYPE_REF && type_node->data.type_node.is_owned) {
+        struct AutoDropEntry *entry = (struct AutoDropEntry *)arena_alloc(cg->arena, sizeof(struct AutoDropEntry));
+        int vn_len = (int)vname.len;
+        if (vn_len > 63) vn_len = 63;
+        memcpy(entry->var_name, vname.data, vn_len);
+        entry->var_name[vn_len] = '\0';
+        entry->class_name[0] = '\0';
+        entry->kind = 1;  /* owned free */
+        entry->next = cg->auto_drop_list;
+        cg->auto_drop_list = entry;
+    }
+    /* Auto-cleanup for rc T: release on scope exit */
+    if (type_node && type_node->type == NODE_TYPE_REF && type_node->data.type_node.is_rc) {
+        struct AutoDropEntry *entry = (struct AutoDropEntry *)arena_alloc(cg->arena, sizeof(struct AutoDropEntry));
+        int vn_len = (int)vname.len;
+        if (vn_len > 63) vn_len = 63;
+        memcpy(entry->var_name, vname.data, vn_len);
+        entry->var_name[vn_len] = '\0';
+        entry->class_name[0] = '\0';
+        entry->kind = 2;  /* rc release */
+        entry->next = cg->auto_drop_list;
+        cg->auto_drop_list = entry;
     }
 }
 
@@ -363,7 +396,16 @@ void c_emit_block(CCodegen *cg, AstNode *node) {
         /* Emit drop calls */
         for (struct AutoDropEntry *e = cg->auto_drop_list; e; e = e->next) {
             c_indent(cg);
-            fprintf(cg->out, "%s_drop(&%s);\n", e->class_name, e->var_name);
+            if (e->kind == 0) {
+                /* class _drop */
+                fprintf(cg->out, "%s_drop(&%s);\n", e->class_name, e->var_name);
+            } else if (e->kind == 1) {
+                /* owned T: free the pointer */
+                fprintf(cg->out, "__aether_free(%s);\n", e->var_name);
+            } else if (e->kind == 2) {
+                /* rc T: release */
+                fprintf(cg->out, "__aether_rc_release(%s);\n", e->var_name);
+            }
         }
     }
 

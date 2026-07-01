@@ -79,4 +79,17 @@ void c_emit_runtime(CCodegen *cg) {
     fputs("int __aether_error_tag = 0;\n", cg->out);
     fputs("uint64_t __aether_error_value = 0;\n", cg->out);
     fputs("jmp_buf __aether_jmp_buf;\n\n", cg->out);
+
+    /* Emit RC retain/release helpers */
+    fputs("static void __aether_rc_retain(void *ptr) {\n", cg->out);
+    fputs("    if (!ptr) return;\n", cg->out);
+    fputs("    uint64_t *rc = (uint64_t*)ptr;\n", cg->out);
+    fputs("    (*rc)++;\n", cg->out);
+    fputs("}\n\n", cg->out);
+    fputs("static void __aether_rc_release(void *ptr) {\n", cg->out);
+    fputs("    if (!ptr) return;\n", cg->out);
+    fputs("    uint64_t *rc = (uint64_t*)ptr;\n", cg->out);
+    fputs("    if (*rc > 0) (*rc)--;\n", cg->out);
+    fputs("    if (*rc == 0) free(ptr);\n", cg->out);
+    fputs("}\n\n", cg->out);
 }
