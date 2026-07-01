@@ -147,6 +147,7 @@ TEST_FIXTURES = \
 	tests/fixtures/test_monomorph.ae \
 	tests/fixtures/test_dyn.ae \
 	tests/fixtures/test_builtins.ae \
+	tests/fixtures/test_destructor.ae \
 	tests/fixtures/test_sysfunc.ae \
 	tests/fixtures/test_export.ae \
 	tests/fixtures/test_entry.ae \

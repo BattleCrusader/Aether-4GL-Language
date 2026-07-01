@@ -56,6 +56,34 @@ static void c_emit_let(CCodegen *cg, AstNode *node) {
         c_emit_expr(cg, value_node);
     }
     fputs(";\n", cg->out);
+
+    /* Auto-drop tracking for class-typed variables */
+    if (type_node && type_node->type == NODE_TYPE_NAMED) {
+        StringView tn = type_node->data.type_node.name;
+        /* Check if this named type is a class by scanning program declarations */
+        for (int i = 0; i < cg->program->data.list.count; i++) {
+            AstNode *decl = cg->program->data.list.items[i];
+            if (decl->type == NODE_CLASS_DECL && decl->data.struct_decl.name &&
+                decl->data.struct_decl.name->type == NODE_IDENT) {
+                StringView dn = decl->data.struct_decl.name->data.ident.name;
+                if (tn.len == dn.len && memcmp(tn.data, dn.data, tn.len) == 0) {
+                    /* Track this variable for auto-drop */
+                    struct AutoDropEntry *entry = (struct AutoDropEntry *)arena_alloc(cg->arena, sizeof(struct AutoDropEntry));
+                    int vn_len = (int)vname.len;
+                    if (vn_len > 63) vn_len = 63;
+                    memcpy(entry->var_name, vname.data, vn_len);
+                    entry->var_name[vn_len] = '\0';
+                    int cn_len = (int)tn.len;
+                    if (cn_len > 63) cn_len = 63;
+                    memcpy(entry->class_name, tn.data, cn_len);
+                    entry->class_name[cn_len] = '\0';
+                    entry->next = cg->auto_drop_list;
+                    cg->auto_drop_list = entry;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 static void c_emit_if(CCodegen *cg, AstNode *node) {
@@ -311,9 +339,36 @@ static void c_emit_struct_decl(CCodegen *cg, AstNode *node) {
  * ────────────────────────────────────────────── */
 void c_emit_block(CCodegen *cg, AstNode *node) {
     if (!node || node->type != NODE_BLOCK) return;
+    /* Save current auto_drop_list to restore at block exit */
+    struct AutoDropEntry *saved_drops = cg->auto_drop_list;
+    cg->auto_drop_list = NULL;
+
     for (int i = 0; i < node->data.list.count; i++) {
         c_emit_stmt(cg, node->data.list.items[i]);
     }
+
+    /* Emit auto-drop calls for class-typed variables declared in this block (LIFO) */
+    if (cg->auto_drop_list) {
+        /* Reverse the list to get LIFO order (most recently declared first) */
+        struct AutoDropEntry *prev = NULL;
+        struct AutoDropEntry *curr = cg->auto_drop_list;
+        struct AutoDropEntry *next = NULL;
+        while (curr) {
+            next = curr->next;
+            curr->next = prev;
+            prev = curr;
+            curr = next;
+        }
+        cg->auto_drop_list = prev;
+        /* Emit drop calls */
+        for (struct AutoDropEntry *e = cg->auto_drop_list; e; e = e->next) {
+            c_indent(cg);
+            fprintf(cg->out, "%s_drop(&%s);\n", e->class_name, e->var_name);
+        }
+    }
+
+    /* Restore parent block's auto_drop_list */
+    cg->auto_drop_list = saved_drops;
 }
 
 /* ──────────────────────────────────────────────

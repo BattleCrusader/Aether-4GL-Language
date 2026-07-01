@@ -170,6 +170,16 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
                 break;
         }
     }
+    /* Emit default _drop stubs for classes (after type declarations, before function prototypes) */
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        if (decl->type == NODE_CLASS_DECL && decl->data.struct_decl.name &&
+            decl->data.struct_decl.name->type == NODE_IDENT) {
+            StringView cn = decl->data.struct_decl.name->data.ident.name;
+            c_indent(cg);
+            fprintf(cg->out, "static void %.*s_drop(void *self) { (void)self; }\n", (int)cn.len, cn.data);
+        }
+    }
 
     /* Pass 1: Emit function prototypes (forward declarations) */
     for (int i = 0; i < program->data.list.count; i++) {

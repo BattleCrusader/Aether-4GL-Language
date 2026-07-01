@@ -1,0 +1,23 @@
+// test_destructor.ae — auto-destructor insertion for class-typed variables
+import "std/test"
+
+class MyResource {
+    value: int
+}
+
+@test
+func test_auto_drop_compiles(): void {
+    let r: MyResource
+    r.value = 42
+    assertTrue(r.value == 42, "class variable with auto-drop compiles")
+}
+
+@test
+func test_auto_drop_block(): void {
+    if true {
+        let r: MyResource
+        r.value = 10
+        assertTrue(r.value == 10, "class variable in block with auto-drop")
+    }
+    assertTrue(true, "block exit with auto-drop compiles")
+}

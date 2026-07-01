@@ -42,6 +42,13 @@ typedef struct {
     /* Lambda function declarations collected during expression emission */
     AstNodeList lambda_decls;
 
+    /* Auto-drop tracking for class-typed variables */
+    struct AutoDropEntry {
+        char var_name[64];
+        char class_name[64];
+        struct AutoDropEntry *next;
+    } *auto_drop_list;
+
     /* Source location */
     const char *current_source_file;
     int current_line;
