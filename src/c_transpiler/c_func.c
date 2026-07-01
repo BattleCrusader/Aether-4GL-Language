@@ -81,6 +81,10 @@ void c_emit_func_prototype(CCodegen *cg, AstNode *node) {
     if (node->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
     }
+    /* Check if this is an impl block method — prefix with type name */
+    if (node->data.func.is_impl_method && node->data.func.impl_type_name.data) {
+        fprintf(cg->out, "%.*s_", (int)node->data.func.impl_type_name.len, node->data.func.impl_type_name.data);
+    }
     fputs(mangle_func_name(fname, node->data.func.sig_hash), cg->out);
     /* Disambiguate getter/setter for struct methods: append _getter or _setter.
        Only applies when first param is named 'self' (struct method). */

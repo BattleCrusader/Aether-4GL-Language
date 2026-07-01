@@ -154,7 +154,7 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     /* Emit runtime helpers */
     c_emit_runtime(cg);
 
-    /* Pass 0: Emit type declarations (struct, enum, class, type alias) before function prototypes */
+    /* Pass 0: Emit type declarations (struct, enum, class, type alias, trait, impl) before function prototypes */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
         switch (decl->type) {
@@ -162,6 +162,8 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
             case NODE_CLASS_DECL:
             case NODE_ENUM_DECL:
             case NODE_TYPE_ALIAS:
+            case NODE_TRAIT_DECL:
+            case NODE_IMPL_BLOCK:
                 c_emit_stmt(cg, decl);
                 break;
             default:
@@ -178,9 +180,13 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
         /* Also emit prototypes for struct/class methods */
         if (decl->type == NODE_STRUCT_DECL || decl->type == NODE_CLASS_DECL) {
             for (int mi = 0; mi < decl->data.struct_decl.methods.count; mi++) {
-                c_emit_func_prototype(cg, decl->data.struct_decl.methods.items[mi]);
+                AstNode *method = decl->data.struct_decl.methods.items[mi];
+                /* Skip impl block methods — they're emitted inline in the impl block handler */
+                if (method->type == NODE_FUNC_DECL && method->data.func.is_impl_method) continue;
+                c_emit_func_prototype(cg, method);
             }
         }
+        /* Impl block method prototypes are emitted inline in the impl block handler */
     }
     /* Emit prototypes for lambda functions collected during expression emission */
     for (int i = 0; i < cg->lambda_decls.count; i++) {
@@ -213,7 +219,10 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
         /* Also emit struct/class method bodies */
         if (decl->type == NODE_STRUCT_DECL || decl->type == NODE_CLASS_DECL) {
             for (int mi = 0; mi < decl->data.struct_decl.methods.count; mi++) {
-                c_emit_func_decl(cg, decl->data.struct_decl.methods.items[mi]);
+                AstNode *method = decl->data.struct_decl.methods.items[mi];
+                /* Skip impl block methods — they're emitted inline in the impl block handler */
+                if (method->type == NODE_FUNC_DECL && method->data.func.is_impl_method) continue;
+                c_emit_func_decl(cg, method);
             }
         }
     }

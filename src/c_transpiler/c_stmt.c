@@ -449,20 +449,153 @@ void c_emit_stmt(CCodegen *cg, AstNode *node) {
             break;
         }
         case NODE_TRAIT_DECL: {
-            /* Traits are compile-time only — emit as comment */
+            /* Traits: emit vtable struct type with function pointers for each method.
+             * Also emit a dyn_Trait struct: { void* data; VTable_Trait* vtable; } */
             StringView tname = node->data.trait_decl.name->data.ident.name;
             c_indent(cg);
-            fprintf(cg->out, "// trait %.*s { ... }\n", (int)tname.len, tname.data);
+            fprintf(cg->out, "typedef struct {\n");
+            cg->indent++;
+            for (int mi = 0; mi < node->data.trait_decl.methods.count; mi++) {
+                AstNode *method = node->data.trait_decl.methods.items[mi];
+                if (method->type != NODE_FUNC_DECL) continue;
+                StringView mn = method->data.func.name->data.ident.name;
+                c_indent(cg);
+                /* Emit function pointer: ret_type (*name)(void* self, ...) */
+                if (method->data.func.return_type) {
+                    c_emit_type(cg, method->data.func.return_type);
+                } else {
+                    fputs("void", cg->out);
+                }
+                fprintf(cg->out, " (*%.*s)(void* self", (int)mn.len, mn.data);
+                for (int pi = 0; pi < method->data.func.params.count; pi++) {
+                    AstNode *param = method->data.func.params.items[pi];
+                    if (param->data.param.name && param->data.param.name->type == NODE_IDENT) {
+                        StringView pn = param->data.param.name->data.ident.name;
+                        if (pn.len == 4 && memcmp(pn.data, "self", 4) == 0) continue;
+                    }
+                    fputs(", ", cg->out);
+                    if (param->data.param.type) {
+                        c_emit_type(cg, param->data.param.type);
+                    } else {
+                        fputs("uint64_t", cg->out);
+                    }
+                }
+                fputs(");\n", cg->out);
+            }
+            cg->indent--;
+            c_indent(cg);
+            fprintf(cg->out, "} VTable_%.*s;\n", (int)tname.len, tname.data);
+            /* Emit dyn_Trait struct */
+            c_indent(cg);
+            fprintf(cg->out, "typedef struct { void* data; VTable_%.*s* vtable; } Dyn_%.*s;\n",
+                    (int)tname.len, tname.data, (int)tname.len, tname.data);
             break;
         }
         case NODE_IMPL_BLOCK: {
-            /* Impl blocks are compile-time only — emit as comment */
+            /* Impl blocks: emit a static vtable instance with concrete function pointers.
+             * Mark each method as an impl method so name mangling prefixes with type name.
+             * Also emit method bodies immediately after the vtable. */
             StringView tn = node->data.impl_block.trait_name;
             StringView tyn = node->data.impl_block.type_name;
+            /* Mark methods as impl methods for name mangling */
+            for (int mi = 0; mi < node->data.impl_block.methods.count; mi++) {
+                AstNode *method = node->data.impl_block.methods.items[mi];
+                if (method->type == NODE_FUNC_DECL) {
+                    method->data.func.is_impl_method = true;
+                    method->data.func.impl_type_name = tyn;
+                }
+            }
+            /* Emit prototypes for impl methods before the vtable */
+            for (int mi = 0; mi < node->data.impl_block.methods.count; mi++) {
+                AstNode *method = node->data.impl_block.methods.items[mi];
+                if (method->type == NODE_FUNC_DECL) {
+                    StringView mn = method->data.func.name->data.ident.name;
+                    if (method->data.func.return_type) {
+                        c_emit_type(cg, method->data.func.return_type);
+                    } else {
+                        fputs("void", cg->out);
+                    }
+                    fprintf(cg->out, " %.*s_%.*s%s(",
+                            (int)tyn.len, tyn.data,
+                            (int)mn.len, mn.data,
+                            method->data.func.return_type ? "_getter" : "_setter");
+                    for (int pi = 0; pi < method->data.func.params.count; pi++) {
+                        if (pi > 0) fputs(", ", cg->out);
+                        AstNode *param = method->data.func.params.items[pi];
+                        if (param->data.param.type) {
+                            c_emit_type(cg, param->data.param.type);
+                        } else {
+                            fputs("uint64_t", cg->out);
+                        }
+                    }
+                    fputs(");\n", cg->out);
+                }
+            }
             c_indent(cg);
-            fprintf(cg->out, "// impl %.*s for %.*s { ... }\n",
-                    (int)tn.len, tn.data,
-                    (int)tyn.len, tyn.data);
+            fprintf(cg->out, "static VTable_%.*s vtable_%.*s_for_%.*s = {\n",
+                    (int)tn.len, tn.data, (int)tn.len, tn.data, (int)tyn.len, tyn.data);
+            cg->indent++;
+            for (int mi = 0; mi < node->data.impl_block.methods.count; mi++) {
+                AstNode *method = node->data.impl_block.methods.items[mi];
+                if (method->type != NODE_FUNC_DECL) continue;
+                StringView mn = method->data.func.name->data.ident.name;
+                c_indent(cg);
+                fprintf(cg->out, ".%.*s = (void(*)(void*))%.*s_%.*s%s,\n",
+                        (int)mn.len, mn.data,
+                        (int)tyn.len, tyn.data, (int)mn.len, mn.data,
+                        method->data.func.return_type ? "_getter" : "_setter");
+            }
+            cg->indent--;
+            c_indent(cg);
+            fputs("};\n", cg->out);
+            /* Emit method bodies immediately after the vtable */
+            for (int mi = 0; mi < node->data.impl_block.methods.count; mi++) {
+                AstNode *method = node->data.impl_block.methods.items[mi];
+                if (method->type == NODE_FUNC_DECL) {
+                    /* Emit the function body with the mangled name directly */
+                    StringView mn = method->data.func.name->data.ident.name;
+                    /* Return type */
+                    if (method->data.func.return_type) {
+                        c_emit_type(cg, method->data.func.return_type);
+                    } else {
+                        fputs("void", cg->out);
+                    }
+                    fprintf(cg->out, " %.*s_%.*s%s(",
+                            (int)tyn.len, tyn.data,
+                            (int)mn.len, mn.data,
+                            method->data.func.return_type ? "_getter" : "_setter");
+                    /* Parameters */
+                    for (int pi = 0; pi < method->data.func.params.count; pi++) {
+                        if (pi > 0) fputs(", ", cg->out);
+                        AstNode *param = method->data.func.params.items[pi];
+                        if (param->data.param.type) {
+                            c_emit_type(cg, param->data.param.type);
+                        } else {
+                            fputs("uint64_t", cg->out);
+                        }
+                        fputc(' ', cg->out);
+                        if (param->data.param.name && param->data.param.name->type == NODE_IDENT) {
+                            StringView pn = param->data.param.name->data.ident.name;
+                            fprintf(cg->out, "%.*s", (int)pn.len, pn.data);
+                        }
+                    }
+                    fputs(") {\n", cg->out);
+                    cg->indent++;
+                    if (method->data.func.body) {
+                        if (method->data.func.body->type == NODE_BLOCK) {
+                            c_emit_block(cg, method->data.func.body);
+                        } else {
+                            c_indent(cg);
+                            fputs("return (", cg->out);
+                            c_emit_expr(cg, method->data.func.body);
+                            fputs(");\n", cg->out);
+                        }
+                    }
+                    cg->indent--;
+                    c_indent(cg);
+                    fputs("}\n\n", cg->out);
+                }
+            }
             break;
         }
         case NODE_POOL_DECL: {
