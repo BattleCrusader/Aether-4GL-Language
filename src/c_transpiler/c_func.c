@@ -147,6 +147,8 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
         c_indent(cg);
         fputs("}\n\n", cg->out);
     } else {
-        fputs(";\n\n", cg->out);
+        /* No body = function declaration only (extern/FFI) */
+        /* Emit as extern declaration */
+        fputs("; // extern\n\n", cg->out);
     }
 }

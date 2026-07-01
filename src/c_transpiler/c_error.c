@@ -64,6 +64,12 @@ void c_emit_try(CCodegen *cg, AstNode *node) {
     cg->indent--;
     c_indent(cg);
     fputs("}\n", cg->out);
+    /* Finally block — always executes after try/catch */
+    if (node->data.try_node.finally_body) {
+        c_indent(cg);
+        fputs("// finally\n", cg->out);
+        c_emit_block(cg, node->data.try_node.finally_body);
+    }
     cg->indent--;
     c_indent(cg);
     fputs("}\n", cg->out);

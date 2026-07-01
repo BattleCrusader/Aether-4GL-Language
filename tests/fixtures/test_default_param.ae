@@ -1,11 +1,47 @@
-// test_default_param.ae — test default function parameters
-func greet(name: string, greeting: string = "Hello"): string {
-    return greeting + " " + name
+// test_default_param.ae — comprehensive default parameter tests
+// Tests: default values, partial override, full override, multiple defaults, string defaults
+import "std/test"
+
+func createWindow(title: string, width: u64 = 800, height: u64 = 600): u64 {
+    return width
 }
 
-func main(): u64 {
-    let msg = greet("World")
-    print(msg)
-    print("\n")
-    return 0
+func addWithDefault(a: u64, b: u64 = 10): u64 {
+    return a + b
+}
+
+func multiply(a: u64 = 2, b: u64 = 3): u64 {
+    return a * b
+}
+
+@test
+func main(): void {
+    // Default parameters — use all defaults
+    let w1 = createWindow("Hello")
+    assertEquals(800, w1, "default param: all defaults")
+
+    // Default parameters — override first default
+    let w2 = createWindow("Wide", 1024)
+    assertEquals(1024, w2, "default param: override first")
+
+    // Default parameters — override all
+    let w3 = createWindow("Big", 1920, 1080)
+    assertEquals(1920, w3, "default param: override all")
+
+    // Default parameter in middle position
+    let s1 = addWithDefault(5)
+    assertEquals(15, s1, "default param: middle default")
+
+    let s2 = addWithDefault(5, 20)
+    assertEquals(25, s2, "default param: middle override")
+
+    // All parameters have defaults
+    let m1 = multiply()
+    assertEquals(6, m1, "default param: all defaults (no args)")
+
+    let m2 = multiply(5)
+    assertEquals(15, m2, "default param: override first of two")
+
+    let m3 = multiply(5, 7)
+    assertEquals(35, m3, "default param: override both")
 }

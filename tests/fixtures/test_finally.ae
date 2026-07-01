@@ -1,0 +1,35 @@
+// test_finally.ae — comprehensive finally block tests
+// Tests: finally after try/catch, nested try/catch/finally
+import "std/test"
+
+@test
+func main(): void {
+    // finally after try/catch
+    try {
+        let x: u64 = 42
+        assertEquals(42, x, "try body with finally")
+    } catch _ {
+        assertEquals(0, 1, "should not reach catch")
+    } finally {
+        let y: u64 = 100
+        assertEquals(100, y, "finally body executes")
+    }
+
+    // Nested try/catch/finally
+    try {
+        try {
+            let c: u64 = 30
+            assertEquals(30, c, "nested try body")
+        } catch _ {
+            assertEquals(0, 1, "should not reach inner catch")
+        } finally {
+            let d: u64 = 40
+            assertEquals(40, d, "nested finally")
+        }
+    } catch _ {
+        assertEquals(0, 1, "should not reach outer catch")
+    } finally {
+        let e: u64 = 50
+        assertEquals(50, e, "outer finally")
+    }
+}

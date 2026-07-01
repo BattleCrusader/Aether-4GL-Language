@@ -1,0 +1,16 @@
+// test_extern.ae — comprehensive extern function tests
+// Tests: extern declarations compile without bodies
+import "std/test"
+
+// Extern function declarations (body-less — FFI declarations)
+func externalFunc(x: u64): u64
+func voidExtern(): void
+func stringExtern(s: string): u64
+
+@test
+func main(): void {
+    // Extern functions are just declarations — verify they compile
+    // (We don't call them since they have no definition)
+    let x: u64 = 42
+    assertEquals(42, x, "extern function declarations compile")
+}

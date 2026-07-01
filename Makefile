@@ -171,7 +171,10 @@ TEST_FIXTURES = \
 	tests/fixtures/test_type_alias.ae \
 	tests/fixtures/test_type_infer.ae \
 	tests/fixtures/test_type_fn.ae \
-	tests/fixtures/test_type_tuple.ae
+	tests/fixtures/test_type_tuple.ae \
+	tests/fixtures/test_default_param.ae \
+	tests/fixtures/test_extern.ae \
+	tests/fixtures/test_finally.ae
 
 # .aelib library fixtures — must be built before test-host
 AELIB_FIXTURES = \
