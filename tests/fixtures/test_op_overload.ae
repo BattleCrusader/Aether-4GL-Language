@@ -1,4 +1,4 @@
-// test_op_overload.ae — operator overloading with struct types and primitives
+// test_op_overload.ae — operator overloading with explicit params
 import "std/test"
 
 struct Vector {
@@ -6,34 +6,33 @@ struct Vector {
     y: int
 }
 
-// Operator overload methods use op_<symbol> naming
-func op_+(self: Vector, other: Vector): Vector {
+// Operator overloads: explicit left/right params
+func op_+(a: Vector, b: Vector): Vector {
     let result: Vector
-    result.x = self.x + other.x
-    result.y = self.y + other.y
+    result.x = a.x + b.x
+    result.y = a.y + b.y
     return result
 }
 
-func op_-(self: Vector, other: Vector): Vector {
+func op_-(a: Vector, b: Vector): Vector {
     let result: Vector
-    result.x = self.x - other.x
-    result.y = self.y - other.y
+    result.x = a.x - b.x
+    result.y = a.y - b.y
     return result
 }
 
-func op_*(self: Vector, scalar: int): Vector {
+func op_*(a: Vector, scalar: int): Vector {
     let result: Vector
-    result.x = self.x * scalar
-    result.y = self.y * scalar
+    result.x = a.x * scalar
+    result.y = a.y * scalar
     return result
 }
 
-func op_==(self: Vector, other: Vector): bool {
-    return self.x == other.x and self.y == other.y
+func op_==(a: Vector, b: Vector): bool {
+    return a.x == b.x and a.y == b.y
 }
 
 // Primitive operator overload — int / int becomes addition
-// (uses / which none of the Vector overloads use internally)
 func op_/(a: int, b: int): int {
     return a + b
 }

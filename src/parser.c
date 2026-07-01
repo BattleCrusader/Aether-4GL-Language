@@ -566,6 +566,7 @@ AstNode *parse_func_decl(Parser *p) {
             func->data.func.name->data.ident.name.len);
         if (strncmp(fname, "op_", 3) == 0) {
             func->data.func.is_operator = true;
+
             /* Compute signature hash: djb2 over op_<symbol> + param types */
             uint32_t hash = 5381;
             for (size_t si = 0; si < func->data.func.name->data.ident.name.len; si++) {
