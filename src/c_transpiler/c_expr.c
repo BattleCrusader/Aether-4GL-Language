@@ -827,7 +827,7 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
 
     int total_params = 0;
     int varargs_param_idx = -1;
-    if (func_decl) {
+    if (func_decl && func_decl->type == NODE_FUNC_DECL) {
         total_params = func_decl->data.func.params.count;
         for (int i = 0; i < total_params; i++) {
             if (func_decl->data.func.params.items[i]->data.param.is_varargs) {
@@ -1158,11 +1158,12 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
             break;
         }
         case NODE_LAMBDA: {
-            /* Lambda: emit as GCC statement expression ({ ... }) or just the body expression */
-            /* For now, emit the body expression directly */
-            if (node->data.lambda.body) {
-                c_emit_expr(cg, node->data.lambda.body);
-            }
+            /* Lambda: emit the function name (function pointer) for the
+             * pre-collected lambda function. The function itself was already
+             * registered in cg->lambda_decls during the pre-pass.
+             * Cast to generic function pointer to avoid type mismatch. */
+            int lambda_id = (int)(intptr_t)node->data.lambda.captures;
+            fprintf(cg->out, "(int64_t(*)())__lambda_%d", lambda_id);
             break;
         }
         case NODE_SLICE: {

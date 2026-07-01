@@ -1929,6 +1929,8 @@ static AstNode *parse_prefix(Parser *p) {
                 if (!parser_match(p, TOKEN_COMMA)) break;
             }
             parser_expect(p, TOKEN_PIPE, "lambda parameter list");
+            /* Optional arrow before body expression */
+            parser_match(p, TOKEN_ARROW);
             /* Parse body: either a single expression or a block */
             if (parser_match(p, TOKEN_LBRACE)) {
                 lambda->data.lambda.body = parse_block_braced(p);

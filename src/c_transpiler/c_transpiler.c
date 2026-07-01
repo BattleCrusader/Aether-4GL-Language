@@ -50,6 +50,87 @@ int c_compile(CCodegen *cg, const char *c_path, const char *output_path);
 /* ──────────────────────────────────────────────
  * Generate C code for a complete program
  * ────────────────────────────────────────────── */
+
+/* Recursively walk an AST node and collect all lambda expressions.
+ * Each lambda gets a unique ID and is registered in cg->lambda_decls. */
+static void collect_lambdas(CCodegen *cg, AstNode *node) {
+    if (!node) return;
+    switch (node->type) {
+        case NODE_LAMBDA: {
+            int lambda_id = cg->lambda_counter++;
+            AstNode *lambda_func = node_create(cg->arena, NODE_FUNC_DECL, node->loc);
+            char lname[64];
+            int lname_len = snprintf(lname, sizeof(lname), "__lambda_%d", lambda_id);
+            /* Arena-allocate the name so it persists */
+            char *name_copy = (char *)arena_alloc(cg->arena, (size_t)lname_len + 1);
+            memcpy(name_copy, lname, (size_t)lname_len + 1);
+            lambda_func->data.func.name = node_ident(cg->arena, node->loc,
+                (StringView){name_copy, (size_t)lname_len});
+            lambda_func->data.func.params = node->data.lambda.params;
+            lambda_func->data.func.return_type = node->data.lambda.return_type;
+            /* If no return type specified, infer from body: block body = void, expr body = int64_t */
+            if (!lambda_func->data.func.return_type) {
+                if (node->data.lambda.body && node->data.lambda.body->type != NODE_BLOCK) {
+                    lambda_func->data.func.return_type = node_type_prim(cg->arena, node->loc, PRIM_I64);
+                }
+            }
+            lambda_func->data.func.body = node->data.lambda.body;
+            lambda_func->data.func.is_static = true;
+            node_list_append(&cg->lambda_decls, lambda_func);
+            /* Store the lambda ID on the node for later use in expression emission */
+            node->data.lambda.captures = (AstNode*)(intptr_t)lambda_id;
+            /* Recurse into body for nested lambdas */
+            collect_lambdas(cg, node->data.lambda.body);
+            break;
+        }
+        case NODE_BLOCK:
+            for (int i = 0; i < node->data.list.count; i++)
+                collect_lambdas(cg, node->data.list.items[i]);
+            break;
+        case NODE_FUNC_DECL:
+        case NODE_PROPERTY:
+            collect_lambdas(cg, node->data.func.body);
+            break;
+        case NODE_LET:
+            collect_lambdas(cg, node->data.let_decl.value);
+            break;
+        case NODE_RETURN:
+            collect_lambdas(cg, node->data.return_node.value);
+            break;
+        case NODE_IF:
+            collect_lambdas(cg, node->data.if_node.condition);
+            collect_lambdas(cg, node->data.if_node.then_block);
+            collect_lambdas(cg, node->data.if_node.elif_chain);
+            collect_lambdas(cg, node->data.if_node.else_block);
+            break;
+        case NODE_WHILE:
+            collect_lambdas(cg, node->data.while_node.condition);
+            collect_lambdas(cg, node->data.while_node.body);
+            break;
+        case NODE_FOR:
+            collect_lambdas(cg, node->data.for_node.iterable);
+            collect_lambdas(cg, node->data.for_node.body);
+            break;
+        case NODE_BINARY_OP:
+            collect_lambdas(cg, node->data.binary.left);
+            collect_lambdas(cg, node->data.binary.right);
+            break;
+        case NODE_UNARY_OP:
+            collect_lambdas(cg, node->data.unary.operand);
+            break;
+        case NODE_CALL:
+            collect_lambdas(cg, node->data.call.callee);
+            for (int i = 0; i < node->data.call.args.count; i++)
+                collect_lambdas(cg, node->data.call.args.items[i]);
+            break;
+        case NODE_EXPR_STMT:
+            collect_lambdas(cg, node->data.call.callee);
+            break;
+        default:
+            break;
+    }
+}
+
 bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     if (!program || program->type != NODE_PROGRAM) {
         fprintf(stderr, "C: expected NODE_PROGRAM\n");
@@ -58,6 +139,14 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
 
     cg->out = out;
     cg->program = program;
+
+    /* Pass 0: Collect all lambda expressions from the AST (pre-pass before emission) */
+    cg->lambda_decls = (AstNodeList){0};
+    cg->lambda_counter = 0;
+    /* Walk the entire AST to find and register all lambda expressions */
+    for (int i = 0; i < program->data.list.count; i++) {
+        collect_lambdas(cg, program->data.list.items[i]);
+    }
 
     /* Emit target preamble (includes, main wrapper) */
     c_emit_target_preamble(cg);
@@ -93,6 +182,10 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
             }
         }
     }
+    /* Emit prototypes for lambda functions collected during expression emission */
+    for (int i = 0; i < cg->lambda_decls.count; i++) {
+        c_emit_func_prototype(cg, cg->lambda_decls.items[i]);
+    }
 
     /* Pass 2a: Emit global variable declarations (before function bodies) */
     for (int i = 0; i < program->data.list.count; i++) {
@@ -123,6 +216,11 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
                 c_emit_func_decl(cg, decl->data.struct_decl.methods.items[mi]);
             }
         }
+    }
+
+    /* Pass 2c: Emit lambda function bodies collected during expression emission */
+    for (int i = 0; i < cg->lambda_decls.count; i++) {
+        c_emit_func_decl(cg, cg->lambda_decls.items[i]);
     }
 
     /* Check if we need an auto-generated test dispatcher */
