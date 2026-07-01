@@ -168,7 +168,10 @@ TEST_FIXTURES = \
 	tests/fixtures/test_std_test.ae \
 	tests/fixtures/test_variadic.ae \
 	tests/fixtures/test_ternary.ae \
-	tests/fixtures/test_type_alias.ae
+	tests/fixtures/test_type_alias.ae \
+	tests/fixtures/test_type_infer.ae \
+	tests/fixtures/test_type_fn.ae \
+	tests/fixtures/test_type_tuple.ae
 
 # .aelib library fixtures — must be built before test-host
 AELIB_FIXTURES = \
