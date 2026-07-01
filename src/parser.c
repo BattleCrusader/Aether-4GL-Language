@@ -1287,6 +1287,23 @@ static AstNode *parse_type_base(Parser *p);
 static AstNode *parse_type_postfix(Parser *p, AstNode *base);
 
 static AstNode *parse_type_base(Parser *p) {
+    /* func(params): rettype — function pointer type */
+    if (parser_match(p, TOKEN_KW_FUNC)) {
+        AstNode *t = node_create(p->arena, NODE_TYPE_FN, p->previous.loc);
+        if (parser_match(p, TOKEN_LPAREN)) {
+            while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+                AstNode *ptype = parse_type(p);
+                if (ptype) node_list_append(&t->data.type_node.param_types, ptype);
+                if (!parser_match(p, TOKEN_COMMA)) break;
+            }
+            parser_expect(p, TOKEN_RPAREN, "function type parameter list");
+        }
+        if (parser_match(p, TOKEN_COLON)) {
+            t->data.type_node.return_type = parse_type(p);
+        }
+        return t;
+    }
+
     /* Primitive types */
     if (parser_check(p, TOKEN_IDENT)) {
         StringView name = p->current.text;
@@ -1315,6 +1332,18 @@ static AstNode *parse_type_base(Parser *p) {
         if (is_prim) {
             parser_advance(p);
             return node_type_prim(p->arena, p->previous.loc, prim);
+        }
+
+        /* _ (underscore) — inferred type */
+        if (name.len == 1 && name.data[0] == '_') {
+            parser_advance(p);
+            return node_create(p->arena, NODE_TYPE_INFER, p->previous.loc);
+        }
+
+        /* auto — inferred type */
+        if (sv_eq_cstr(name, "auto")) {
+            parser_advance(p);
+            return node_create(p->arena, NODE_TYPE_INFER, p->previous.loc);
         }
 
         /* Named type (struct/enum name) */
@@ -1393,6 +1422,43 @@ static AstNode *parse_type_base(Parser *p) {
     }
 
     /* ptr T — raw pointer (parsed as identifier in parse_type_base) */
+
+    /* func(params): rettype — function pointer type */
+    if (parser_match(p, TOKEN_KW_FUNC)) {
+        AstNode *t = node_create(p->arena, NODE_TYPE_FN, p->previous.loc);
+        if (parser_match(p, TOKEN_LPAREN)) {
+            while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+                AstNode *ptype = parse_type(p);
+                if (ptype) node_list_append(&t->data.type_node.param_types, ptype);
+                if (!parser_match(p, TOKEN_COMMA)) break;
+            }
+            parser_expect(p, TOKEN_RPAREN, "function type parameter list");
+        }
+        if (parser_match(p, TOKEN_COLON)) {
+            t->data.type_node.return_type = parse_type(p);
+        }
+        return t;
+    }
+
+    /* (type1, type2, ...) — tuple type */
+    if (parser_match(p, TOKEN_LPAREN)) {
+        AstNode *first = parse_type(p);
+        if (parser_match(p, TOKEN_COMMA)) {
+            /* It's a tuple: (type1, type2, ...) */
+            AstNode *t = node_create(p->arena, NODE_TYPE_TUPLE, p->previous.loc);
+            node_list_append(&t->data.type_node.tuple_types, first);
+            while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+                AstNode *elem = parse_type(p);
+                if (elem) node_list_append(&t->data.type_node.tuple_types, elem);
+                if (!parser_match(p, TOKEN_COMMA)) break;
+            }
+            parser_expect(p, TOKEN_RPAREN, "tuple type");
+            return t;
+        }
+        /* Single type in parens — just return the type */
+        parser_expect(p, TOKEN_RPAREN, "parenthesized type");
+        return first;
+    }
 
     parser_error(p, p->current, "expected type");
     parser_advance(p); /* skip */

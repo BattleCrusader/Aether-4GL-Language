@@ -1,0 +1,41 @@
+// test_type_infer.ae — comprehensive inferred type tests
+// Tests: _ and auto type inference, with various value types
+import "std/test"
+
+@test
+func main(): void {
+    // Inferred type with underscore
+    let a: _ = 42
+    assertEquals(42, a, "inferred _ with int literal")
+
+    let b: _ = 100
+    assertEquals(100, b, "inferred _ with another int")
+
+    // Inferred type with auto
+    let c: auto = 200
+    assertEquals(200, c, "inferred auto with int literal")
+
+    let d: auto = 300
+    assertEquals(300, d, "inferred auto with another int")
+
+    // Inferred type with arithmetic
+    let e: _ = a + b
+    assertEquals(142, e, "inferred _ with arithmetic")
+
+    // Inferred type with function result
+    let f: auto = a * 2
+    assertEquals(84, f, "inferred auto with multiplication")
+
+    // Mix of _ and auto
+    let g: _ = 10
+    let h: auto = g + 5
+    assertEquals(15, h, "inferred mix: _ and auto")
+
+    // Inferred type with boolean
+    let flag: _ = true
+    assertEquals(1, flag, "inferred _ with bool")
+
+    // Inferred type with comparison result
+    let cmp: auto = a > b
+    assertEquals(0, cmp, "inferred auto with comparison")
+}

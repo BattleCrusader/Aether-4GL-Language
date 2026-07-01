@@ -64,9 +64,11 @@ const char *c_type_name(AstNode *type_node) {
             return "void*";
         }
         case NODE_TYPE_TUPLE:
-            return "tuple";
+            return "uint64_t";  /* tuples stored as packed uint64_t */
         case NODE_TYPE_FN:
             return "void*";  /* function pointer */
+        case NODE_TYPE_INFER:
+            return "uint64_t";  /* inferred type defaults to uint64_t */
         case NODE_TYPE_NAMED: {
             /* Named type — use the name string */
             StringView sv = type_node->data.type_node.name;

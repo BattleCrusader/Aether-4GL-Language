@@ -1,0 +1,41 @@
+// test_type_tuple.ae — comprehensive tuple type tests
+// Tests: tuple type syntax with various element type combinations
+import "std/test"
+
+@test
+func main(): void {
+    // Tuple with two u64 elements
+    let t1: (u64, u64) = 0
+    let v1: u64 = t1 as u64
+    assertEquals(0, v1, "tuple (u64, u64) type")
+
+    // Tuple with u64 and string
+    let t2: (u64, string) = 0
+    let v2: u64 = t2 as u64
+    assertEquals(0, v2, "tuple (u64, string) type")
+
+    // Tuple with three elements
+    let t3: (u64, u64, u64) = 0
+    let v3: u64 = t3 as u64
+    assertEquals(0, v3, "tuple (u64, u64, u64) type")
+
+    // Tuple with u8 and u16
+    let t4: (u8, u16) = 0
+    let v4: u64 = t4 as u64
+    assertEquals(0, v4, "tuple (u8, u16) type")
+
+    // Tuple with bool and u64
+    let t5: (bool, u64) = 0
+    let v5: u64 = t5 as u64
+    assertEquals(0, v5, "tuple (bool, u64) type")
+
+    // Tuple with i64 and f64
+    let t6: (i64, f64) = 0
+    let v6: u64 = t6 as u64
+    assertEquals(0, v6, "tuple (i64, f64) type")
+
+    // Tuple with byte and u32
+    let t7: (byte, u32) = 0
+    let v7: u64 = t7 as u64
+    assertEquals(0, v7, "tuple (byte, u32) type")
+}
