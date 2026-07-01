@@ -1022,6 +1022,12 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
         }
     }
     fputc(')', cg->out);
+
+    /* Error propagation for throws function calls: wrap in ({ ... }) that checks error */
+    if (func_decl && func_decl->type == NODE_FUNC_DECL && func_decl->data.func.is_throws) {
+        /* The call is already emitted as func(args). We need to restructure.
+         * For now, just note this is a throws call — full propagation deferred. */
+    }
 }
 
 static void c_emit_index(CCodegen *cg, AstNode *node) {

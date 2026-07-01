@@ -71,9 +71,19 @@ void c_emit_func_prototype(CCodegen *cg, AstNode *node) {
 
     /* Emit return type */
     if (return_type_node) {
-        c_emit_type(cg, return_type_node);
+        if (node->data.func.is_throws) {
+            StringView fn = node->data.func.name->data.ident.name;
+            fprintf(cg->out, "ThrowResult_%.*s", (int)fn.len, fn.data);
+        } else {
+            c_emit_type(cg, return_type_node);
+        }
     } else {
-        fputs("void", cg->out);
+        if (node->data.func.is_throws) {
+            StringView fn = node->data.func.name->data.ident.name;
+            fprintf(cg->out, "ThrowResult_%.*s", (int)fn.len, fn.data);
+        } else {
+            fputs("void", cg->out);
+        }
     }
     fputc(' ', cg->out);
 
@@ -150,9 +160,20 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
     if (is_main) {
         fputs("int", cg->out);
     } else if (return_type_node) {
-        c_emit_type(cg, return_type_node);
+        if (node->data.func.is_throws) {
+            /* throws func: use a typedef'd struct for the return type */
+            StringView fn = node->data.func.name->data.ident.name;
+            fprintf(cg->out, "ThrowResult_%.*s", (int)fn.len, fn.data);
+        } else {
+            c_emit_type(cg, return_type_node);
+        }
     } else {
-        fputs("void", cg->out);
+        if (node->data.func.is_throws) {
+            StringView fn = node->data.func.name->data.ident.name;
+            fprintf(cg->out, "ThrowResult_%.*s", (int)fn.len, fn.data);
+        } else {
+            fputs("void", cg->out);
+        }
     }
     fputc(' ', cg->out);
 

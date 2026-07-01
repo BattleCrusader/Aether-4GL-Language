@@ -180,6 +180,23 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
             fprintf(cg->out, "static void %.*s_drop(void *self) { (void)self; }\n", (int)cn.len, cn.data);
         }
     }
+    /* Emit typedefs for throws function return types */
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        if (decl->type == NODE_FUNC_DECL && decl->data.func.is_throws) {
+            StringView fn = decl->data.func.name->data.ident.name;
+            AstNode *ret_type = decl->data.func.return_type;
+            c_indent(cg);
+            if (ret_type) {
+                fprintf(cg->out, "typedef struct { ");
+                c_emit_type(cg, ret_type);
+                fputs(" val; int err; } ThrowResult_", cg->out);
+            } else {
+                fprintf(cg->out, "typedef struct { int err; } ThrowResult_", cg->out);
+            }
+            fprintf(cg->out, "%.*s;\n", (int)fn.len, fn.data);
+        }
+    }
 
     /* Pass 1: Emit function prototypes (forward declarations) */
     for (int i = 0; i < program->data.list.count; i++) {
