@@ -65,13 +65,14 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     /* Emit runtime helpers */
     c_emit_runtime(cg);
 
-    /* Pass 0: Emit type declarations (struct, enum, class) before function prototypes */
+    /* Pass 0: Emit type declarations (struct, enum, class, type alias) before function prototypes */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
         switch (decl->type) {
             case NODE_STRUCT_DECL:
             case NODE_CLASS_DECL:
             case NODE_ENUM_DECL:
+            case NODE_TYPE_ALIAS:
                 c_emit_stmt(cg, decl);
                 break;
             default:

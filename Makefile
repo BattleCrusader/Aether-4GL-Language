@@ -166,7 +166,9 @@ TEST_FIXTURES = \
 	tests/fixtures/test_logical_keywords.ae \
 	tests/fixtures/test_aelib_import.ae \
 	tests/fixtures/test_std_test.ae \
-	tests/fixtures/test_variadic.ae
+	tests/fixtures/test_variadic.ae \
+	tests/fixtures/test_ternary.ae \
+	tests/fixtures/test_type_alias.ae
 
 # .aelib library fixtures — must be built before test-host
 AELIB_FIXTURES = \

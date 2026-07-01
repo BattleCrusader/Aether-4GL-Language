@@ -1,0 +1,69 @@
+// test_ternary.ae — comprehensive ternary expression tests
+// Tests: basic ternary, nested ternary, ternary in expressions, ternary with different types
+import "std/test"
+
+@test
+func main(): void {
+    // Basic ternary
+    let a: u64 = 10
+    let b: u64 = 20
+    let result1: u64 = a > b ? a : b
+    assertEquals(20, result1, "basic ternary: a > b ? a : b")
+
+    // Ternary with less-than
+    let result2: u64 = a < b ? a : b
+    assertEquals(10, result2, "basic ternary: a < b ? a : b")
+
+    // Ternary with equality
+    let c: u64 = 10
+    let result3: u64 = a == c ? 100 : 200
+    assertEquals(100, result3, "ternary with equality: a == c ? 100 : 200")
+
+    // Ternary with not-equal
+    let result4: u64 = a != c ? 100 : 200
+    assertEquals(200, result4, "ternary with not-equal: a != c ? 100 : 200")
+
+    // Ternary with boolean condition
+    let flag: bool = true
+    let result5: u64 = flag ? 42 : 0
+    assertEquals(42, result5, "ternary with bool true: flag ? 42 : 0")
+
+    let flag2: bool = false
+    let result6: u64 = flag2 ? 42 : 99
+    assertEquals(99, result6, "ternary with bool false: flag2 ? 42 : 99")
+
+    // Ternary used in arithmetic expression
+    let result7: u64 = (a > b ? a : b) + 5
+    assertEquals(25, result7, "ternary in arithmetic: (a > b ? a : b) + 5")
+
+    // Ternary with u8 values
+    let x: u8 = 5
+    let y: u8 = 15
+    let result8: u8 = x > y ? x : y
+    assertEquals(15, result8, "ternary with u8: x > y ? x : y")
+
+    // Ternary with i64 values
+    let m: i64 = -5
+    let n: i64 = 10
+    let result9: i64 = m > n ? m : n
+    assertEquals(10, result9, "ternary with i64: m > n ? m : n")
+
+    // Nested ternary
+    let p: u64 = 5
+    let q: u64 = 10
+    let r: u64 = 15
+    let result10: u64 = p > q ? p : (q > r ? q : r)
+    assertEquals(15, result10, "nested ternary: p > q ? p : (q > r ? q : r)")
+
+    // Ternary with function call
+    let result11: u64 = a == 10 ? 1 : 0
+    assertEquals(1, result11, "ternary with literal condition: a == 10 ? 1 : 0")
+
+    // Ternary returning different values based on condition
+    let val: u64 = 7
+    let result12: u64 = val % 2 == 0 ? 100 : 200
+    assertEquals(200, result12, "ternary with mod: val % 2 == 0 ? 100 : 200")
+
+    // Ternary as function argument
+    assertEquals(20, a > b ? a : b, "ternary as function arg: a > b ? a : b")
+}

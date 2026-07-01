@@ -426,10 +426,26 @@ static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
             fputs("))", cg->out);
             break;
         case UNARY_DEREF:
-            fputs("(*(", cg->out);
+            fputs("(*((uint64_t*)(", cg->out);
             c_emit_expr(cg, node->data.unary.operand);
-            fputs("))", cg->out);
+            fputs(")))", cg->out);
             break;
+        case UNARY_HEAP:
+        case UNARY_OWNED: {
+            /* heap expr / owned expr — allocate on heap, store value, return pointer */
+            /* Emit as: ({ uint64_t *__p = __aether_alloc(8); *__p = (expr); (uint64_t)__p; }) */
+            int tmp = cg->label_counter++;
+            fputs("({ uint64_t *__hp_", cg->out);
+            fprintf(cg->out, "%d", tmp);
+            fputs(" = (uint64_t*)__aether_alloc(8); *__hp_", cg->out);
+            fprintf(cg->out, "%d", tmp);
+            fputs(" = (", cg->out);
+            c_emit_expr(cg, node->data.unary.operand);
+            fputs("); (uint64_t)__hp_", cg->out);
+            fprintf(cg->out, "%d", tmp);
+            fputs("; })", cg->out);
+            break;
+        }
         default:
             c_emit_expr(cg, node->data.unary.operand);
             break;
@@ -783,6 +799,18 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
             fputs("))", cg->out);
             break;
         }
+        case NODE_TERNARY: {
+            /* Ternary: cond ? then_val : else_val
+             * data.list: items[0]=cond, items[1]=then_val, items[2]=else_val */
+            fputc('(', cg->out);
+            if (node->data.list.count >= 1) c_emit_expr(cg, node->data.list.items[0]);
+            fputs(" ? ", cg->out);
+            if (node->data.list.count >= 2) c_emit_expr(cg, node->data.list.items[1]);
+            fputs(" : ", cg->out);
+            if (node->data.list.count >= 3) c_emit_expr(cg, node->data.list.items[2]);
+            fputc(')', cg->out);
+            break;
+        }
         case NODE_MATCH: {
             /* Match expression: emit as ternary chain.
              * match val { case p1 -> e1; case p2 -> e2; case _ -> e3 }
@@ -836,6 +864,52 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
                 }
                 fprintf(cg->out, "}, %d, %d }", count, es);
             }
+            break;
+        }
+        case NODE_LAMBDA: {
+            /* Lambda: emit as GCC statement expression ({ ... }) or just the body expression */
+            /* For now, emit the body expression directly */
+            if (node->data.lambda.body) {
+                c_emit_expr(cg, node->data.lambda.body);
+            }
+            break;
+        }
+        case NODE_SLICE: {
+            /* Slice expression: a[i..j] — emit the slice struct manually */
+            /* data.slice has target, start, end */
+            fputs("(slice){ .data = ((char*)(", cg->out);
+            c_emit_expr(cg, node->data.slice.target);
+            fputs(".data) + (", cg->out);
+            if (node->data.slice.start) {
+                c_emit_expr(cg, node->data.slice.start);
+            } else {
+                fputs("0", cg->out);
+            }
+            fputs(") * (", cg->out);
+            c_emit_expr(cg, node->data.slice.target);
+            fputs(".elem_size)), .len = (", cg->out);
+            if (node->data.slice.end && node->data.slice.start) {
+                /* len = end - start */
+                fputs("(", cg->out);
+                c_emit_expr(cg, node->data.slice.end);
+                fputs(") - (", cg->out);
+                c_emit_expr(cg, node->data.slice.start);
+                fputs(")", cg->out);
+            } else if (node->data.slice.end) {
+                c_emit_expr(cg, node->data.slice.end);
+            } else if (node->data.slice.start) {
+                fputs("(", cg->out);
+                c_emit_expr(cg, node->data.slice.target);
+                fputs(".len) - (", cg->out);
+                c_emit_expr(cg, node->data.slice.start);
+                fputs(")", cg->out);
+            } else {
+                c_emit_expr(cg, node->data.slice.target);
+                fputs(".len", cg->out);
+            }
+            fputs("), .elem_size = (", cg->out);
+            c_emit_expr(cg, node->data.slice.target);
+            fputs(".elem_size) }", cg->out);
             break;
         }
         default:

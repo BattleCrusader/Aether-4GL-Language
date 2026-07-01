@@ -1401,11 +1401,22 @@ static AstNode *parse_type_base(Parser *p) {
 
 /* Postfix type modifiers — called after a base type is parsed */
 static AstNode *parse_type_postfix(Parser *p, AstNode *base) {
-    /* T? (optional) */
-    if (parser_match(p, TOKEN_QUESTION)) {
-        AstNode *t = node_create(p->arena, NODE_TYPE_OPTIONAL, p->previous.loc);
-        t->data.type_node.elem_type = base;
-        return t;
+    /* T? (optional) — only consume ? if it's NOT followed by an expression-starting token
+       (which would indicate a ternary operator instead) */
+    if (parser_check(p, TOKEN_QUESTION)) {
+        /* Peek ahead to see what follows the ? */
+        Token peek = lexer_peek_next(p->lexer);
+        /* Only consume ? as optional if followed by newline, =, ), ,, ;, }, ], or EOF */
+        if (peek.type == TOKEN_NEWLINE || peek.type == TOKEN_EQ ||
+            peek.type == TOKEN_RPAREN || peek.type == TOKEN_COMMA ||
+            peek.type == TOKEN_SEMICOLON || peek.type == TOKEN_RBRACE ||
+            peek.type == TOKEN_EOF || peek.type == TOKEN_COLON ||
+            peek.type == TOKEN_RBRACKET) {
+            parser_advance(p);
+            AstNode *t = node_create(p->arena, NODE_TYPE_OPTIONAL, p->previous.loc);
+            t->data.type_node.elem_type = base;
+            return t;
+        }
     }
     return base;
 }
@@ -1535,6 +1546,7 @@ static Precedence token_precedence(TokenType type) {
         case TOKEN_DOT_DOT: case TOKEN_DOT_DOT_EQ: return PREC_RANGE;
         case TOKEN_PLUS: case TOKEN_MINUS: return PREC_TERM;
         case TOKEN_STAR: case TOKEN_SLASH: case TOKEN_PERCENT: case TOKEN_STAR_STAR: return PREC_FACTOR;
+        case TOKEN_QUESTION: return PREC_TERNARY;
         default: return PREC_MIN;
     }
 }
@@ -1929,6 +1941,20 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         cast_node->data.binary.left = left;
         cast_node->data.binary.right = type_node;
         return cast_node;
+    }
+
+    /* Ternary: left ? middle : right */
+    if (token.type == TOKEN_QUESTION) {
+        parser_advance(p);
+        AstNode *middle = parse_expr_prec(p, PREC_TERNARY);
+        parser_expect(p, TOKEN_COLON, "ternary ':'");
+        AstNode *right = parse_expr_prec(p, PREC_TERNARY - 1);
+        AstNode *ternary = node_create(p->arena, NODE_TERNARY, loc);
+        /* Store in data.list: items[0]=cond, items[1]=then_val, items[2]=else_val */
+        node_list_append(&ternary->data.list, left);
+        node_list_append(&ternary->data.list, middle);
+        node_list_append(&ternary->data.list, right);
+        return ternary;
     }
 
     /* Binary operators */

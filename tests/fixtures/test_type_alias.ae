@@ -1,7 +1,19 @@
-// test_type_alias.ae — test type alias parsing
-type MyInt = u64
+// test_type_alias.ae — comprehensive type alias tests
+// Tests: basic typedef, alias with struct, alias with primitive
+import "std/test"
 
-func main(): MyInt {
-    let x: MyInt = 42
-    return x
+type MyInt = u64
+type MyByte = u8
+
+@test
+func main(): void {
+    let a: MyInt = 42
+    assertEquals(42, a, "type alias MyInt = u64")
+
+    let b: MyByte = 200
+    assertEquals(200, b, "type alias MyByte = u8")
+
+    // Arithmetic with aliased types
+    let c: MyInt = a + 8
+    assertEquals(50, c, "arithmetic with aliased type")
 }
