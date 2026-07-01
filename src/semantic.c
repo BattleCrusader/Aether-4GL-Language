@@ -922,6 +922,39 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
                     break;
                 }
             }
+            /* Built-in functions: sizeof, alignof, offsetof, typeName, panic */
+            if (node->data.call.callee && node->data.call.callee->type == NODE_IDENT) {
+                const char *cn = arena_strndup(sa->arena,
+                    node->data.call.callee->data.ident.name.data,
+                    node->data.call.callee->data.ident.name.len);
+                if (strcmp(cn, "sizeof") == 0 || strcmp(cn, "alignof") == 0 ||
+                    strcmp(cn, "offsetof") == 0 || strcmp(cn, "typeName") == 0 ||
+                    strcmp(cn, "panic") == 0) {
+                    /* Don't resolve the callee — it's a builtin, not a user function */
+                    /* Visit argument expressions (for panic) but skip type args */
+                    for (int i = 0; i < node->data.call.args.count; i++) {
+                        AstNode *arg = node->data.call.args.items[i];
+                        /* Skip type arguments (identifiers that are type names) */
+                        if (arg->type == NODE_IDENT) {
+                            const char *an = arena_strndup(sa->arena,
+                                arg->data.ident.name.data, arg->data.ident.name.len);
+                            if (strcmp(an, "u8") == 0 || strcmp(an, "u16") == 0 ||
+                                strcmp(an, "u32") == 0 || strcmp(an, "u64") == 0 ||
+                                strcmp(an, "i8") == 0 || strcmp(an, "i16") == 0 ||
+                                strcmp(an, "i32") == 0 || strcmp(an, "i64") == 0 ||
+                                strcmp(an, "f32") == 0 || strcmp(an, "f64") == 0 ||
+                                strcmp(an, "bool") == 0 || strcmp(an, "byte") == 0 ||
+                                strcmp(an, "string") == 0 || strcmp(an, "void") == 0 ||
+                                strcmp(an, "int") == 0 || strcmp(an, "float") == 0 ||
+                                strcmp(an, "double") == 0) {
+                                continue; /* skip type name identifiers */
+                            }
+                        }
+                        semantic_visit_expr(sa, arg);
+                    }
+                    break;
+                }
+            }
             semantic_visit_expr(sa, node->data.call.callee);
             for (int i = 0; i < node->data.call.args.count; i++) {
                 semantic_visit_expr(sa, node->data.call.args.items[i]);
@@ -1052,6 +1085,27 @@ void semantic_analyze(SemanticAnalyzer *sa, AstNode *program) {
     memset(exit_decl, 0, sizeof(AstNode));
     exit_decl->type = NODE_FUNC_DECL;
     scope_declare(sa, "exit", exit_decl);
+
+    /* Register built-in compile-time functions: sizeof, alignof, offsetof, typeName, panic */
+    AstNode *sizeof_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
+    memset(sizeof_decl, 0, sizeof(AstNode)); sizeof_decl->type = NODE_FUNC_DECL;
+    scope_declare(sa, "sizeof", sizeof_decl);
+
+    AstNode *alignof_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
+    memset(alignof_decl, 0, sizeof(AstNode)); alignof_decl->type = NODE_FUNC_DECL;
+    scope_declare(sa, "alignof", alignof_decl);
+
+    AstNode *offsetof_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
+    memset(offsetof_decl, 0, sizeof(AstNode)); offsetof_decl->type = NODE_FUNC_DECL;
+    scope_declare(sa, "offsetof", offsetof_decl);
+
+    AstNode *typename_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
+    memset(typename_decl, 0, sizeof(AstNode)); typename_decl->type = NODE_FUNC_DECL;
+    scope_declare(sa, "typeName", typename_decl);
+
+    AstNode *panic_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
+    memset(panic_decl, 0, sizeof(AstNode)); panic_decl->type = NODE_FUNC_DECL;
+    scope_declare(sa, "panic", panic_decl);
 
     semantic_visit_node(sa, program);
 }

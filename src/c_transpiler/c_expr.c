@@ -711,6 +711,118 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
         if (node->data.call.callee->data.ident.resolved) {
             func_decl = node->data.call.callee->data.ident.resolved;
         }
+
+        /* Built-in functions: sizeof, alignof, offsetof, typeName, panic */
+        if (fname.len == 6 && memcmp(fname.data, "sizeof", 6) == 0 && node->data.call.args.count >= 1) {
+            fputs("sizeof(", cg->out);
+            /* If the argument is an identifier, check if it's a type name */
+            AstNode *arg = node->data.call.args.items[0];
+            if (arg->type == NODE_IDENT) {
+                StringView an = arg->data.ident.name;
+                if (sv_eq_cstr(an, "u8") || sv_eq_cstr(an, "i8") || sv_eq_cstr(an, "byte") || sv_eq_cstr(an, "bool")) {
+                    fputs("uint8_t", cg->out);
+                } else if (sv_eq_cstr(an, "u16") || sv_eq_cstr(an, "i16")) {
+                    fputs("uint16_t", cg->out);
+                } else if (sv_eq_cstr(an, "u32") || sv_eq_cstr(an, "i32") || sv_eq_cstr(an, "f32") || sv_eq_cstr(an, "float")) {
+                    fputs("uint32_t", cg->out);
+                } else if (sv_eq_cstr(an, "u64") || sv_eq_cstr(an, "i64") || sv_eq_cstr(an, "f64") || sv_eq_cstr(an, "int") || sv_eq_cstr(an, "double")) {
+                    fputs("uint64_t", cg->out);
+                } else if (sv_eq_cstr(an, "string")) {
+                    fputs("string", cg->out);
+                } else if (sv_eq_cstr(an, "void")) {
+                    fputs("void", cg->out);
+                } else {
+                    c_emit_type(cg, arg);
+                }
+            } else {
+                c_emit_type(cg, arg);
+            }
+            fputc(')', cg->out);
+            return;
+        }
+        if (fname.len == 7 && memcmp(fname.data, "alignof", 7) == 0 && node->data.call.args.count >= 1) {
+            fputs("_Alignof(", cg->out);
+            AstNode *arg = node->data.call.args.items[0];
+            if (arg->type == NODE_IDENT) {
+                StringView an = arg->data.ident.name;
+                if (sv_eq_cstr(an, "u8") || sv_eq_cstr(an, "i8") || sv_eq_cstr(an, "byte") || sv_eq_cstr(an, "bool")) {
+                    fputs("uint8_t", cg->out);
+                } else if (sv_eq_cstr(an, "u16") || sv_eq_cstr(an, "i16")) {
+                    fputs("uint16_t", cg->out);
+                } else if (sv_eq_cstr(an, "u32") || sv_eq_cstr(an, "i32") || sv_eq_cstr(an, "f32") || sv_eq_cstr(an, "float")) {
+                    fputs("uint32_t", cg->out);
+                } else if (sv_eq_cstr(an, "u64") || sv_eq_cstr(an, "i64") || sv_eq_cstr(an, "f64") || sv_eq_cstr(an, "int") || sv_eq_cstr(an, "double")) {
+                    fputs("uint64_t", cg->out);
+                } else if (sv_eq_cstr(an, "string")) {
+                    fputs("string", cg->out);
+                } else {
+                    c_emit_type(cg, arg);
+                }
+            } else {
+                c_emit_type(cg, arg);
+            }
+            fputc(')', cg->out);
+            return;
+        }
+        if (fname.len == 8 && memcmp(fname.data, "offsetof", 8) == 0 && node->data.call.args.count >= 2) {
+            fputs("offsetof(", cg->out);
+            AstNode *type_arg = node->data.call.args.items[0];
+            if (type_arg->type == NODE_IDENT) {
+                StringView an = type_arg->data.ident.name;
+                fprintf(cg->out, "%.*s", (int)an.len, an.data);
+            } else {
+                c_emit_type(cg, type_arg);
+            }
+            fputs(", ", cg->out);
+            if (node->data.call.args.items[1]->type == NODE_IDENT) {
+                StringView fn = node->data.call.args.items[1]->data.ident.name;
+                fprintf(cg->out, "%.*s", (int)fn.len, fn.data);
+            }
+            fputc(')', cg->out);
+            return;
+        }
+        if (fname.len == 8 && memcmp(fname.data, "typeName", 8) == 0 && node->data.call.args.count >= 1) {
+            /* typeName(T) — emit a compile-time string literal with the type name */
+            AstNode *arg = node->data.call.args.items[0];
+            const char *tn = NULL;
+            if (arg->type == NODE_IDENT) {
+                StringView an = arg->data.ident.name;
+                if (sv_eq_cstr(an, "u8") || sv_eq_cstr(an, "byte")) tn = "u8";
+                else if (sv_eq_cstr(an, "i8")) tn = "i8";
+                else if (sv_eq_cstr(an, "u16")) tn = "u16";
+                else if (sv_eq_cstr(an, "i16")) tn = "i16";
+                else if (sv_eq_cstr(an, "u32")) tn = "u32";
+                else if (sv_eq_cstr(an, "i32")) tn = "i32";
+                else if (sv_eq_cstr(an, "f32")) tn = "f32";
+                else if (sv_eq_cstr(an, "u64")) tn = "u64";
+                else if (sv_eq_cstr(an, "i64")) tn = "i64";
+                else if (sv_eq_cstr(an, "f64")) tn = "f64";
+                else if (sv_eq_cstr(an, "bool")) tn = "bool";
+                else if (sv_eq_cstr(an, "string")) tn = "string";
+                else if (sv_eq_cstr(an, "void")) tn = "void";
+                else if (sv_eq_cstr(an, "int")) tn = "int";
+                else if (sv_eq_cstr(an, "float")) tn = "float";
+                else if (sv_eq_cstr(an, "double")) tn = "double";
+                else tn = c_type_name(arg);
+            } else {
+                tn = c_type_name(arg);
+            }
+            if (!tn) tn = "unknown";
+            fprintf(cg->out, "(string){ %zu, \"%s\" }", strlen(tn), tn);
+            return;
+        }
+        if (fname.len == 5 && memcmp(fname.data, "panic", 5) == 0) {
+            /* panic(msg) — emit fprintf(stderr, msg); exit(1); */
+            fputs("({ fprintf(stderr, \"%s\\n\", ", cg->out);
+            if (node->data.call.args.count >= 1) {
+                c_emit_expr(cg, node->data.call.args.items[0]);
+            } else {
+                fputs("\"panic\"", cg->out);
+            }
+            fputs(".data); exit(1); 0; })", cg->out);
+            return;
+        }
+
         /* Constructor pattern: TypeName(expr) — e.g. string(ch), u8(expr) */
         if (node->data.call.args.count == 1) {
             int is_constructor = 0;
