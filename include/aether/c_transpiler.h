@@ -36,6 +36,12 @@ typedef struct {
     /* Defer counter for LIFO tracking */
     int defer_counter;
 
+    /* Lambda counter for unique function names */
+    int lambda_counter;
+
+    /* Lambda function declarations collected during expression emission */
+    AstNodeList lambda_decls;
+
     /* Source location */
     const char *current_source_file;
     int current_line;

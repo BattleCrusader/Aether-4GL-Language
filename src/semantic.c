@@ -1003,6 +1003,31 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
         case NODE_ASM_BLOCK:
             break;
 
+        case NODE_LAMBDA: {
+            /* Visit lambda body to resolve identifiers and detect captures */
+            scope_enter(sa, node);
+            /* Declare lambda parameters in lambda scope */
+            for (int i = 0; i < node->data.lambda.params.count; i++) {
+                AstNode *param = node->data.lambda.params.items[i];
+                if (param->data.param.name && param->data.param.name->type == NODE_IDENT) {
+                    const char *pname = arena_strndup(sa->arena,
+                        param->data.param.name->data.ident.name.data,
+                        param->data.param.name->data.ident.name.len);
+                    scope_declare(sa, pname, param);
+                }
+            }
+            /* Visit return type if present */
+            if (node->data.lambda.return_type) {
+                semantic_visit_node(sa, node->data.lambda.return_type);
+            }
+            /* Visit body */
+            if (node->data.lambda.body) {
+                semantic_visit_expr(sa, node->data.lambda.body);
+            }
+            scope_exit(sa);
+            break;
+        }
+
         case NODE_ARRAY_LIT:
             /* Visit array literal elements for name resolution */
             for (int i = 0; i < node->data.array_lit.elements.count; i++) {

@@ -218,7 +218,15 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
             fputs("}\n", cg->out);
         }
 
-        c_emit_block(cg, body);
+        if (body->type == NODE_BLOCK) {
+            c_emit_block(cg, body);
+        } else {
+            /* Expression body: wrap in return */
+            c_indent(cg);
+            fputs("return (", cg->out);
+            c_emit_expr(cg, body);
+            fputs(");\n", cg->out);
+        }
         cg->indent--;
         c_indent(cg);
         fputs("}\n\n", cg->out);
