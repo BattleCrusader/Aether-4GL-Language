@@ -174,6 +174,8 @@ typedef struct {
     bool is_inline;         /* true if 'inline' keyword used */
     bool is_force_inline;   /* true if @force_inline attribute set */
     bool is_no_inline;      /* true if @no_inline attribute set */
+    bool is_impl_method;    /* true if this is an impl block method */
+    StringView impl_type_name; /* type name for impl method name mangling */
     int64_t entry_addr;     /* load address from @entry(addr), -1 if not set */
     bool has_layout;        /* true if @layout attribute is set */
     uint64_t layout_start;  /* start address from @layout(start=N) */

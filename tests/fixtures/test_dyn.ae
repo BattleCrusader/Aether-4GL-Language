@@ -15,7 +15,24 @@ impl Drawable for Circle {
     }
 }
 
+struct Square {
+    size: int
+}
+
+impl Drawable for Square {
+    func draw(self) {
+        print("square\n")
+    }
+}
+
 @test
-func main(): void {
-    assertTrue(true, "dynamic dispatch compiled and ran")
+func test_trait_vtable(): void {
+    // Verify vtable structs and instances compile
+    assertTrue(true, "trait and impl compiled")
+}
+
+@test
+func test_multiple_impls(): void {
+    // Verify multiple impl blocks for the same trait compile
+    assertTrue(true, "multiple impls work")
 }
