@@ -354,12 +354,70 @@ void c_emit_stmt(CCodegen *cg, AstNode *node) {
             c_emit_expr_stmt(cg, node);
             break;
         case NODE_ASSIGN: {
-            /* Direct assignment: target = value */
-            c_indent(cg);
-            c_emit_expr(cg, node->data.binary.left);
-            fputs(" = ", cg->out);
-            c_emit_expr(cg, node->data.binary.right);
-            fputs(";\n", cg->out);
+            /* Direct assignment: target = value.
+               Check if this is a property setter: target.prop = value
+               where prop is a property without a return type (setter). */
+            AstNode *left = node->data.binary.left;
+            bool is_prop_setter = false;
+            if (left && left->type == NODE_FIELD_ACCESS) {
+                AstNode *target = left->data.field.target;
+                AstNode *field = left->data.field.field;
+                if (target && target->type == NODE_IDENT && target->data.ident.resolved &&
+                    field && field->type == NODE_IDENT) {
+                    AstNode *decl = target->data.ident.resolved;
+                    AstNode *type_node = NULL;
+                    if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+                    else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+                    if (type_node) {
+                        AstNode *struct_decl = NULL;
+                        if (type_node->type == NODE_TYPE_NAMED) {
+                            for (int si = 0; si < cg->program->data.list.count; si++) {
+                                AstNode *d = cg->program->data.list.items[si];
+                                if (d->type == NODE_STRUCT_DECL || d->type == NODE_CLASS_DECL) {
+                                    AstNode *dn = d->data.struct_decl.name;
+                                    if (dn && dn->type == NODE_IDENT) {
+                                        StringView dn_sv = dn->data.ident.name;
+                                        if (dn_sv.len == type_node->data.type_node.name.len &&
+                                            memcmp(dn_sv.data, type_node->data.type_node.name.data, dn_sv.len) == 0) {
+                                            struct_decl = d;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (struct_decl) {
+                            StringView field_name = field->data.ident.name;
+                            /* Search struct methods for a setter (func without return type) */
+                            for (int mi = 0; mi < struct_decl->data.struct_decl.methods.count; mi++) {
+                                AstNode *method = struct_decl->data.struct_decl.methods.items[mi];
+                                if (method->type == NODE_FUNC_DECL && method->data.func.name &&
+                                    method->data.func.name->type == NODE_IDENT &&
+                                    method->data.func.return_type == NULL) {
+                                    StringView mn = method->data.func.name->data.ident.name;
+                                    if (mn.len == field_name.len && memcmp(mn.data, field_name.data, mn.len) == 0) {
+                                        c_indent(cg);
+                                        fprintf(cg->out, "%.*s(&", (int)mn.len, mn.data);
+                                        c_emit_expr(cg, target);
+                                        fputs(", ", cg->out);
+                                        c_emit_expr(cg, node->data.binary.right);
+                                        fputs(");\n", cg->out);
+                                        is_prop_setter = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (!is_prop_setter) {
+                c_indent(cg);
+                c_emit_expr(cg, left);
+                fputs(" = ", cg->out);
+                c_emit_expr(cg, node->data.binary.right);
+                fputs(";\n", cg->out);
+            }
             break;
         }
         case NODE_BLOCK:

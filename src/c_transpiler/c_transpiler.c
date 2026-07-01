@@ -86,6 +86,12 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
         if (decl->type == NODE_FUNC_DECL) {
             c_emit_func_prototype(cg, decl);
         }
+        /* Also emit prototypes for struct/class methods */
+        if (decl->type == NODE_STRUCT_DECL || decl->type == NODE_CLASS_DECL) {
+            for (int mi = 0; mi < decl->data.struct_decl.methods.count; mi++) {
+                c_emit_func_prototype(cg, decl->data.struct_decl.methods.items[mi]);
+            }
+        }
     }
 
     /* Pass 2a: Emit global variable declarations (before function bodies) */
@@ -110,6 +116,12 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
         AstNode *decl = program->data.list.items[i];
         if (decl->type == NODE_FUNC_DECL) {
             c_emit_func_decl(cg, decl);
+        }
+        /* Also emit struct/class method bodies */
+        if (decl->type == NODE_STRUCT_DECL || decl->type == NODE_CLASS_DECL) {
+            for (int mi = 0; mi < decl->data.struct_decl.methods.count; mi++) {
+                c_emit_func_decl(cg, decl->data.struct_decl.methods.items[mi]);
+            }
         }
     }
 

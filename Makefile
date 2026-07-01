@@ -143,6 +143,7 @@ TEST_FIXTURES = \
 	tests/fixtures/test_contract.ae \
 	tests/fixtures/test_closure.ae \
 	tests/fixtures/test_op_overload.ae \
+	tests/fixtures/test_properties.ae \
 	tests/fixtures/test_monomorph.ae \
 	tests/fixtures/test_dyn.ae \
 	tests/fixtures/test_sysfunc.ae \

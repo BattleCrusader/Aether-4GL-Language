@@ -378,7 +378,17 @@ static int is_var_string_type(CCodegen *cg, StringView vname) {
     return 0;
 }
 
+/* Forward declaration for property setter dispatch */
+static bool c_emit_prop_setter_expr(CCodegen *cg, AstNode *node);
+
 static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
+    /* Property setter dispatch: t.prop = value → propName_setter(&t, value) */
+    if (node->data.binary.op == BIN_ASSIGN) {
+        if (c_emit_prop_setter_expr(cg, node)) {
+            return;
+        }
+    }
+
     /* Operator overloading dispatch: look up op_<symbol> by signature hash.
        Works for all types (primitives, structs, etc.) with proper overloading. */
     {
@@ -574,6 +584,60 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
     }
     c_emit_expr(cg, node->data.binary.right);
     fputc(')', cg->out);
+}
+
+/* Property setter dispatch for BIN_ASSIGN expressions (t.prop = value).
+ * Returns true if a setter was emitted, false to fall through to normal assignment. */
+static bool c_emit_prop_setter_expr(CCodegen *cg, AstNode *node) {
+    if (node->type != NODE_BINARY_OP || node->data.binary.op != BIN_ASSIGN) return false;
+    AstNode *left = node->data.binary.left;
+    if (!left || left->type != NODE_FIELD_ACCESS) return false;
+    AstNode *target = left->data.field.target;
+    AstNode *field = left->data.field.field;
+    if (!target || target->type != NODE_IDENT || !target->data.ident.resolved ||
+        !field || field->type != NODE_IDENT) return false;
+    AstNode *decl = target->data.ident.resolved;
+    AstNode *type_node = NULL;
+    if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+    else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+    if (!type_node) return false;
+    AstNode *struct_decl = NULL;
+    if (type_node->type == NODE_TYPE_NAMED) {
+        for (int si = 0; si < cg->program->data.list.count; si++) {
+            AstNode *d = cg->program->data.list.items[si];
+            if (d->type == NODE_STRUCT_DECL || d->type == NODE_CLASS_DECL) {
+                AstNode *dn = d->data.struct_decl.name;
+                if (dn && dn->type == NODE_IDENT) {
+                    StringView dn_sv = dn->data.ident.name;
+                    if (dn_sv.len == type_node->data.type_node.name.len &&
+                        memcmp(dn_sv.data, type_node->data.type_node.name.data, dn_sv.len) == 0) {
+                        struct_decl = d;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (!struct_decl) return false;
+    StringView field_name = field->data.ident.name;
+    /* Search struct methods for a setter (func without return type matching field name) */
+    for (int mi = 0; mi < struct_decl->data.struct_decl.methods.count; mi++) {
+        AstNode *method = struct_decl->data.struct_decl.methods.items[mi];
+        if (method->type == NODE_FUNC_DECL && method->data.func.name &&
+            method->data.func.name->type == NODE_IDENT &&
+            method->data.func.return_type == NULL) {
+            StringView mn = method->data.func.name->data.ident.name;
+            if (mn.len == field_name.len && memcmp(mn.data, field_name.data, mn.len) == 0) {
+                fprintf(cg->out, "%.*s_setter(&", (int)mn.len, mn.data);
+                c_emit_expr(cg, target);
+                fputs(", ", cg->out);
+                c_emit_expr(cg, node->data.binary.right);
+                fputc(')', cg->out);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
@@ -993,17 +1057,18 @@ static void c_emit_field_access(CCodegen *cg, AstNode *node) {
     /* Check if target is a pointer type — use -> instead of . */
     int is_ptr = 0;
     int is_enum_variant = 0;
+    AstNode *target_decl = NULL;
     if (node->data.field.target && node->data.field.target->type == NODE_IDENT) {
-        AstNode *decl = node->data.field.target->data.ident.resolved;
-        if (decl) {
+        target_decl = node->data.field.target->data.ident.resolved;
+        if (target_decl) {
             AstNode *type_node = NULL;
-            if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
-            else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+            if (target_decl->type == NODE_LET) type_node = target_decl->data.let_decl.type;
+            else if (target_decl->type == NODE_PARAM) type_node = target_decl->data.param.type;
             if (type_node && (type_node->type == NODE_TYPE_REF || type_node->type == NODE_TYPE_PTR)) {
                 is_ptr = 1;
             }
             /* Enum variant access: MyError::NotFound → just emit NotFound */
-            if (decl->type == NODE_ENUM_DECL) {
+            if (target_decl->type == NODE_ENUM_DECL) {
                 is_enum_variant = 1;
             }
         }
@@ -1012,12 +1077,62 @@ static void c_emit_field_access(CCodegen *cg, AstNode *node) {
         /* Just emit the variant name directly — C enums don't use type prefix */
         StringView field_name = node->data.field.field->data.ident.name;
         fprintf(cg->out, "%.*s", (int)field_name.len, field_name.data);
-    } else {
-        c_emit_expr(cg, node->data.field.target);
-        fputs(is_ptr ? "->" : ".", cg->out);
-        StringView field_name = node->data.field.field->data.ident.name;
-        fprintf(cg->out, "%.*s", (int)field_name.len, field_name.data);
+        return;
     }
+
+    /* Property getter dispatch: check if the field name matches a property
+       with a return type (getter) on the target's struct type.
+       Search both struct methods and top-level NODE_PROPERTY declarations. */
+    if (target_decl) {
+        AstNode *type_node = NULL;
+        if (target_decl->type == NODE_LET) type_node = target_decl->data.let_decl.type;
+        else if (target_decl->type == NODE_PARAM) type_node = target_decl->data.param.type;
+        if (type_node) {
+            AstNode *struct_decl = NULL;
+            if (type_node->type == NODE_TYPE_NAMED) {
+                for (int i = 0; i < cg->program->data.list.count; i++) {
+                    AstNode *d = cg->program->data.list.items[i];
+                    if (d->type == NODE_STRUCT_DECL || d->type == NODE_CLASS_DECL) {
+                        AstNode *dn = d->data.struct_decl.name;
+                        if (dn && dn->type == NODE_IDENT) {
+                            StringView dn_sv = dn->data.ident.name;
+                            if (dn_sv.len == type_node->data.type_node.name.len &&
+                                memcmp(dn_sv.data, type_node->data.type_node.name.data, dn_sv.len) == 0) {
+                                struct_decl = d;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else if (type_node->type == NODE_STRUCT_DECL || type_node->type == NODE_CLASS_DECL) {
+                struct_decl = type_node;
+            }
+            if (struct_decl) {
+                StringView field_name = node->data.field.field->data.ident.name;
+                /* Search struct methods for a getter (func with return type matching field name) */
+                for (int mi = 0; mi < struct_decl->data.struct_decl.methods.count; mi++) {
+                    AstNode *method = struct_decl->data.struct_decl.methods.items[mi];
+                    if (method->type == NODE_FUNC_DECL && method->data.func.name &&
+                        method->data.func.name->type == NODE_IDENT &&
+                        method->data.func.return_type != NULL) {
+                        StringView mn = method->data.func.name->data.ident.name;
+                        if (mn.len == field_name.len && memcmp(mn.data, field_name.data, mn.len) == 0) {
+                            /* Found a getter method — emit as function call: methodName_getter(&target) */
+                            fprintf(cg->out, "%.*s_getter(&", (int)mn.len, mn.data);
+                            c_emit_expr(cg, node->data.field.target);
+                            fputc(')', cg->out);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    c_emit_expr(cg, node->data.field.target);
+    fputs(is_ptr ? "->" : ".", cg->out);
+    StringView field_name = node->data.field.field->data.ident.name;
+    fprintf(cg->out, "%.*s", (int)field_name.len, field_name.data);
 }
 
 /* ──────────────────────────────────────────────

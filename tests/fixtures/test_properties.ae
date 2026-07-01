@@ -1,0 +1,48 @@
+// test_properties.ae — property getter/setter dispatch via struct methods
+import "std/test"
+
+struct Box {
+    value: int
+
+    // Getter: func with return type
+    func doubled(): int {
+        return self.value * 2
+    }
+
+    // Setter: func without return type
+    func doubled(new_val: int) {
+        self.value = new_val / 2
+    }
+}
+
+@test
+func test_property_getter(): void {
+    let b: Box
+    b.value = 5
+    let d: int = b.doubled
+    assertTrue(d == 10, "getter: 5 * 2 == 10")
+}
+
+@test
+func test_property_setter(): void {
+    let mut b: Box
+    b.value = 0
+    b.doubled = 10
+    assertTrue(b.value == 5, "setter: 10 / 2 == 5")
+}
+
+@test
+func test_property_roundtrip(): void {
+    let mut b: Box
+    b.value = 7
+    let d: int = b.doubled
+    b.doubled = d
+    assertTrue(b.value == 7, "roundtrip: 7 -> 14 -> 7")
+}
+
+@test
+func main(): void {
+    test_property_getter()
+    test_property_setter()
+    test_property_roundtrip()
+}

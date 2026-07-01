@@ -1149,25 +1149,30 @@ Properties are methods that look like fields. The compiler infers getter/setter 
 - **Getter**: has a return type → `obj.prop` calls the getter
 - **Setter**: has no return type → `obj.prop = value` calls the setter
 
+Properties are defined as regular `func` methods inside struct/class bodies. The `self` parameter is auto-injected by the compiler — you never write it yourself.
+
 ```aether
-class Temperature {
+struct Temperature {
     celsius: f64
 
     // Getter — has return type
-    prop fahrenheit(): f64 {
+    func fahrenheit(): f64 {
         return self.celsius * 9.0 / 5.0 + 32.0
     }
 
     // Setter — no return type
-    prop fahrenheit(value: f64) {
+    func fahrenheit(value: f64) {
         self.celsius = (value - 32.0) * 5.0 / 9.0
     }
 }
 
-let t = Temperature { celsius: 100 }
+let t: Temperature
+t.celsius = 100
 print(t.fahrenheit)  // calls getter → 212.0
 t.fahrenheit = 32    // calls setter → celsius = 0
 ```
+
+> **Note:** `self` is a reserved keyword referencing the enclosing object. It is never passed as a parameter — the compiler injects it automatically. You only need `self` when a local variable or parameter name shadows a field name.
 
 ### 9.7 Operator Overloading
 
@@ -1624,25 +1629,30 @@ Properties are methods that look like fields. The compiler infers getter/setter 
 - **Getter**: has a return type → `obj.prop` calls the getter
 - **Setter**: has no return type → `obj.prop = value` calls the setter
 
+Properties are defined as regular `func` methods inside struct/class bodies. The `self` parameter is auto-injected by the compiler — you never write it yourself.
+
 ```aether
-class Temperature {
+struct Temperature {
     celsius: f64
 
     // Getter — has return type
-    prop fahrenheit(): f64 {
+    func fahrenheit(): f64 {
         return self.celsius * 9.0 / 5.0 + 32.0
     }
 
     // Setter — no return type
-    prop fahrenheit(value: f64) {
+    func fahrenheit(value: f64) {
         self.celsius = (value - 32.0) * 5.0 / 9.0
     }
 }
 
-let t = Temperature { celsius: 100 }
+let t: Temperature
+t.celsius = 100
 print(t.fahrenheit)  // calls getter → 212.0
 t.fahrenheit = 32    // calls setter → celsius = 0
 ```
+
+> **Note:** `self` is a reserved keyword referencing the enclosing object. It is never passed as a parameter — the compiler injects it automatically. You only need `self` when a local variable or parameter name shadows a field name.
 
 ### 15.2 Operator Overloading
 

@@ -711,9 +711,11 @@ AstNode *parse_struct_decl(Parser *p) {
                     /* Auto-inject 'self' as the first parameter for methods.
                      * The user writes: func fahrenheit(): f64 { return self.celsius * ... }
                      * The parser adds: self: ref StructName as the first param. */
+                    AstNode *self_type = node_create(p->arena, NODE_TYPE_REF, name_tok.loc);
+                    self_type->data.type_node.elem_type = node_type_named(p->arena, name_tok.loc, name_tok.text);
                     AstNode *self_param = node_param(p->arena, method->loc,
                         node_ident(p->arena, method->loc, SV("self")),
-                        NULL, false, false);
+                        self_type, false, false);
                     /* Prepend self to the param list */
                     AstNodeList new_params = {0};
                     node_list_append(&new_params, self_param);

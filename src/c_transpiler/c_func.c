@@ -82,6 +82,19 @@ void c_emit_func_prototype(CCodegen *cg, AstNode *node) {
         fputs("__aether_sys_", cg->out);
     }
     fputs(mangle_func_name(fname, node->data.func.sig_hash), cg->out);
+    /* Disambiguate getter/setter for struct methods: append _getter or _setter.
+       Only applies when first param is named 'self' (struct method). */
+    int is_method = (param_count > 0 && node->data.func.params.items[0]->data.param.name &&
+        node->data.func.params.items[0]->data.param.name->type == NODE_IDENT &&
+        node->data.func.params.items[0]->data.param.name->data.ident.name.len == 4 &&
+        memcmp(node->data.func.params.items[0]->data.param.name->data.ident.name.data, "self", 4) == 0);
+    if (is_method) {
+        if (node->data.func.return_type) {
+            fputs("_getter", cg->out);
+        } else {
+            fputs("_setter", cg->out);
+        }
+    }
     fputc('(', cg->out);
 
     /* Emit parameters */
@@ -150,6 +163,18 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
             fputs("__aether_sys_", cg->out);
         }
         fputs(mangle_func_name(fname, node->data.func.sig_hash), cg->out);
+        /* Disambiguate getter/setter for struct methods */
+        bool is_method = (param_count > 0 && node->data.func.params.items[0]->data.param.name &&
+            node->data.func.params.items[0]->data.param.name->type == NODE_IDENT &&
+            node->data.func.params.items[0]->data.param.name->data.ident.name.len == 4 &&
+            memcmp(node->data.func.params.items[0]->data.param.name->data.ident.name.data, "self", 4) == 0);
+        if (is_method) {
+            if (node->data.func.return_type) {
+                fputs("_getter", cg->out);
+            } else {
+                fputs("_setter", cg->out);
+            }
+        }
         fputc('(', cg->out);
         for (int i = 0; i < param_count; i++) {
             if (i > 0) fputs(", ", cg->out);

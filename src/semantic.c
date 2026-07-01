@@ -246,7 +246,7 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             /* First pass: declare all top-level names */
             for (int i = 0; i < node->data.list.count; i++) {
                 AstNode *decl = node->data.list.items[i];
-                if (decl->type == NODE_FUNC_DECL) {
+                if (decl->type == NODE_FUNC_DECL || decl->type == NODE_PROPERTY) {
                     const char *name = arena_strndup(sa->arena,
                         decl->data.func.name->data.ident.name.data,
                         decl->data.func.name->data.ident.name.len);
@@ -293,7 +293,8 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             }
             break;
 
-        case NODE_FUNC_DECL: {
+        case NODE_FUNC_DECL:
+        case NODE_PROPERTY: {
             const char *name = arena_strndup(sa->arena,
                 node->data.func.name->data.ident.name.data,
                 node->data.func.name->data.ident.name.len);
@@ -413,6 +414,12 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                     name_node->data.ident.name.data,
                     name_node->data.ident.name.len);
                 scope_declare(sa, tname, node);
+            }
+            /* Visit struct/class methods */
+            if (node->type == NODE_STRUCT_DECL || node->type == NODE_CLASS_DECL) {
+                for (int mi = 0; mi < node->data.struct_decl.methods.count; mi++) {
+                    semantic_visit_node(sa, node->data.struct_decl.methods.items[mi]);
+                }
             }
             break;
         }
