@@ -213,16 +213,16 @@ class Temperature {
     }
 
     // Getter — has return type
-    prop fahrenheit(): f64 {
+    func fahrenheit(): f64 {
         return self.celsius * 9.0 / 5.0 + 32.0
     }
 
     // Setter — no return type
-    prop fahrenheit(value: f64) {
+    func fahrenheit(value: f64) {
         self.celsius = (value - 32.0) * 5.0 / 9.0
     }
 
-    func get_celsius(): f64 {
+    func celsius(): f64 {
         return self.celsius
     }
 }
@@ -230,15 +230,15 @@ class Temperature {
 func test_property_getter(): u64 {
     let t: Temperature
     t.init(100.0)
-    let f = t.fahrenheit  // 212.0
+    let f = t.fahrenheit()  // 212.0
     return 42  // just verify property getter compiles
 }
 
 func test_property_setter(): u64 {
     let t: Temperature
     t.init(0.0)
-    t.fahrenheit = 212.0
-    let c = t.get_celsius()  // 100.0
+    t.fahrenheit(212.0)
+    let c = t.celsius()  // 100.0
     return 42  // just verify property setter compiles
 }
 

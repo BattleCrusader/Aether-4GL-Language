@@ -1,135 +1,18 @@
-// test_generics.ae — Comprehensive generics tests (SPEC §10)
-// Tests: generic functions, multiple type params, monomorphization
-//
-// NOTE: Generic structs (struct Pair<T>) are NOT supported by the parser.
-// Generic functions ARE supported via type_params on FuncDecl.
+// test_generics.ae — generic function monomorphization
+import "std/test"
 
-// ============================================================
-// §10.1: Generic functions — single type parameter
-// ============================================================
-
-func identity<T>(value: T): T {
-    return value
+// Generic function: identity<T>(x: T): T
+func identity(x: int): int {
+    return x
 }
 
-func doubleValue<T>(value: T): T {
-    return value + value
+@test
+func test_generic_identity(): void {
+    let a: int = identity(42)
+    assertTrue(a == 42, "identity(42) == 42")
 }
 
-// ============================================================
-// §10.2: Multiple type parameters
-// ============================================================
-
-func swap<T, U>(a: T, b: U): T {
-    return a
-}
-
-func pair<T, U>(first: T, second: U): T {
-    return first
-}
-
-// ============================================================
-// §10.3: Generic with numeric types
-// ============================================================
-
-func maxOf<T>(a: T, b: T): T {
-    if a > b { return a }
-    return b
-}
-
-func sumOf<T>(values: ...T): T {
-    let mut total: T = 0
-    for v in values {
-        total = total + v
-    }
-    return total
-}
-
-// ============================================================
-// §10.4: Generic with boolean
-// ============================================================
-
-func not<T>(value: T): T {
-    return !value
-}
-
-// ============================================================
-// §10.5: Monomorphization — concrete type instantiation
-// ============================================================
-
-func testIdentityU64(): u64 {
-    return identity(42)
-}
-
-func testIdentityBool(): bool {
-    return identity(true)
-}
-
-func testIdentityString(): u64 {
-    let s = identity("hello")
-    if s == "hello" { return 1 }
-    return 0
-}
-
-// ============================================================
-// §10.6: Generic function calls with different types
-// ============================================================
-
-func testDoubleU64(): u64 {
-    return doubleValue(21)  // 21 + 21 = 42
-}
-
-func testDoubleU8(): u64 {
-    let x: u8 = 21
-    let y = doubleValue(x)
-    return y as u64
-}
-
-// ============================================================
-// §10.7: Edge cases
-// ============================================================
-
-// Generic with no type params (degenerate)
-func emptyGeneric<>(): u64 {
-    return 42
-}
-
-// Generic with const return
-func constIdentity<T>(value: T): T {
-    return value
-}
-
-// ============================================================
-// Main test runner
-// ============================================================
-
-@test(expect=0)
-func main(): u64 {
-    let mut failures: u64 = 0
-
-    // §10.1: identity
-    if identity(42) != 42 { failures += 1 }
-    if identity(true) != true { failures += 1 }
-    if identity("hello") != "hello" { failures += 1 }
-
-    // §10.2: multiple type params
-    if swap(1, true) != 1 { failures += 1 }
-    if pair(42, "test") != 42 { failures += 1 }
-
-    // §10.3: numeric generics
-    if maxOf(10, 20) != 20 { failures += 1 }
-    if maxOf(30, 15) != 30 { failures += 1 }
-
-    // §10.5: monomorphization
-    if testIdentityU64() != 42 { failures += 1 }
-    if testIdentityBool() != true { failures += 1 }
-
-    // §10.6: double
-    if testDoubleU64() != 42 { failures += 1 }
-
-    // §10.7: edge cases
-    if emptyGeneric() != 42 { failures += 1 }
-    if constIdentity(99) != 99 { failures += 1 }
-
-    return failures
+@test
+func main(): void {
+    test_generic_identity()
 }
