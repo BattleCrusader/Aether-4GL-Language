@@ -8,6 +8,174 @@
  * Expression codegen — emit C expressions
  * ────────────────────────────────────────────── */
 
+/* ──────────────────────────────────────────────
+ * Operator overloading dispatch helpers
+ * ────────────────────────────────────────────── */
+
+/* Map a binary operator to its op_ method name, or NULL if no overload exists */
+static const char *binop_to_op_method(BinOp op) {
+    switch (op) {
+        case BIN_ADD: return "op_add";
+        case BIN_SUB: return "op_sub";
+        case BIN_MUL: return "op_mul";
+        case BIN_DIV: return "op_div";
+        case BIN_MOD: return "op_mod";
+        case BIN_EQ:  return "op_eq";
+        case BIN_NEQ: return "op_neq";
+        case BIN_LT:  return "op_lt";
+        case BIN_GT:  return "op_gt";
+        case BIN_LE:  return "op_le";
+        case BIN_GE:  return "op_ge";
+        case BIN_BIT_AND: return "op_bitand";
+        case BIN_BIT_OR:  return "op_bitor";
+        case BIN_BIT_XOR: return "op_bitxor";
+        case BIN_SHL: return "op_shl";
+        case BIN_SHR: return "op_shr";
+        default: return NULL;
+    }
+}
+
+/* Map a unary operator to its op_ method name, or NULL if no overload exists */
+static const char *unaryop_to_op_method(UnaryOp op) {
+    switch (op) {
+        case UNARY_NEG: return "op_neg";
+        case UNARY_NOT: return "op_not";
+        case UNARY_BIT_NOT: return "op_bitnot";
+        default: return NULL;
+    }
+}
+
+/* Search the program for a struct/class declaration matching a given name */
+static AstNode *find_struct_by_name(AstNode *program, StringView name) {
+    if (!program || program->type != NODE_PROGRAM) return NULL;
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        if (decl->type == NODE_STRUCT_DECL || decl->type == NODE_CLASS_DECL) {
+            AstNode *decl_name = decl->data.struct_decl.name;
+            if (decl_name && decl_name->type == NODE_IDENT) {
+                StringView dn = decl_name->data.ident.name;
+                if (dn.len == name.len && memcmp(dn.data, name.data, dn.len) == 0) {
+                    return decl;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Check if a struct/class has a method with the given name.
+ * Returns the method node if found, NULL otherwise. */
+static AstNode *struct_has_method(AstNode *struct_decl, const char *method_name) {
+    if (!struct_decl) return NULL;
+    for (int i = 0; i < struct_decl->data.struct_decl.methods.count; i++) {
+        AstNode *method = struct_decl->data.struct_decl.methods.items[i];
+        if (method->type == NODE_FUNC_DECL && method->data.func.name &&
+            method->data.func.name->type == NODE_IDENT) {
+            StringView mn = method->data.func.name->data.ident.name;
+            if (mn.len == strlen(method_name) &&
+                memcmp(mn.data, method_name, mn.len) == 0) {
+                return method;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Search the program for a free function with the given name.
+ * Returns the function node if found, NULL otherwise. */
+static AstNode *find_func_by_name(AstNode *program, const char *func_name) {
+    if (!program || program->type != NODE_PROGRAM) return NULL;
+    size_t flen = strlen(func_name);
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        if (decl->type == NODE_FUNC_DECL && decl->data.func.name &&
+            decl->data.func.name->type == NODE_IDENT) {
+            StringView dn = decl->data.func.name->data.ident.name;
+            if (dn.len == flen && memcmp(dn.data, func_name, flen) == 0) {
+                return decl;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Resolve the type of an expression to a struct/class declaration.
+ * Returns the struct/class node if the expression's type is a struct/class,
+ * NULL otherwise. */
+static AstNode *resolve_expr_struct_type(CCodegen *cg, AstNode *expr) {
+    if (!expr) return NULL;
+
+    /* Handle identifiers: look up the resolved declaration's type */
+    if (expr->type == NODE_IDENT) {
+        AstNode *decl = expr->data.ident.resolved;
+        if (!decl) return NULL;
+        AstNode *type_node = NULL;
+        if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+        else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+        if (!type_node) return NULL;
+
+        if (type_node->type == NODE_STRUCT_DECL || type_node->type == NODE_CLASS_DECL) {
+            return type_node;
+        }
+        if (type_node->type == NODE_TYPE_NAMED) {
+            return find_struct_by_name(cg->program, type_node->data.type_node.name);
+        }
+        return NULL;
+    }
+
+    /* Handle field access: look up the field's type */
+    if (expr->type == NODE_FIELD_ACCESS) {
+        AstNode *target = expr->data.field.target;
+        AstNode *field = expr->data.field.field;
+        if (!target || !field || field->type != NODE_IDENT) return NULL;
+
+        AstNode *struct_decl = resolve_expr_struct_type(cg, target);
+        if (!struct_decl) return NULL;
+
+        StringView fname = field->data.ident.name;
+        for (int i = 0; i < struct_decl->data.struct_decl.fields.count; i++) {
+            AstNode *f = struct_decl->data.struct_decl.fields.items[i];
+            if (f->type == NODE_FIELD && f->data.param.name &&
+                f->data.param.name->type == NODE_IDENT) {
+                StringView fn = f->data.param.name->data.ident.name;
+                if (fn.len == fname.len && memcmp(fn.data, fname.data, fn.len) == 0) {
+                    AstNode *ftype = f->data.param.type;
+                    if (ftype && ftype->type == NODE_TYPE_NAMED) {
+                        return find_struct_by_name(cg->program, ftype->data.type_node.name);
+                    }
+                    if (ftype && (ftype->type == NODE_STRUCT_DECL || ftype->type == NODE_CLASS_DECL)) {
+                        return ftype;
+                    }
+                    return NULL;
+                }
+            }
+        }
+        return NULL;
+    }
+
+    return NULL;
+}
+
+/* Emit an operator overload call: op_method(self, right) */
+static void c_emit_op_overload_call(CCodegen *cg, AstNode *left, AstNode *right,
+                                     const char *method_name) {
+    fputs(method_name, cg->out);
+    fputc('(', cg->out);
+    c_emit_expr(cg, left);
+    fputs(", ", cg->out);
+    c_emit_expr(cg, right);
+    fputc(')', cg->out);
+}
+
+/* Emit a unary operator overload call: op_method(operand) */
+static void c_emit_unary_op_overload_call(CCodegen *cg, AstNode *operand,
+                                           const char *method_name) {
+    fputs(method_name, cg->out);
+    fputc('(', cg->out);
+    c_emit_expr(cg, operand);
+    fputc(')', cg->out);
+}
+
 static void c_emit_literal_int(CCodegen *cg, AstNode *node) {
     uint64_t val = node->data.literal.int_val;
     if (node->data.literal.is_negative) {
@@ -210,6 +378,20 @@ static int is_var_string_type(CCodegen *cg, StringView vname) {
 }
 
 static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
+    /* Operator overloading dispatch: if the left operand is a struct/class type
+       and a matching op_* free function exists, call it instead of using the C operator. */
+    {
+        const char *op_method = binop_to_op_method(node->data.binary.op);
+        if (op_method) {
+            AstNode *left = node->data.binary.left;
+            AstNode *struct_decl = resolve_expr_struct_type(cg, left);
+            if (struct_decl && find_func_by_name(cg->program, op_method)) {
+                c_emit_op_overload_call(cg, left, node->data.binary.right, op_method);
+                return;
+            }
+        }
+    }
+
     /* BIN_ADD is overloaded: numeric add vs string concat vs slice concat. */
     if (node->data.binary.op == BIN_ADD) {
         AstNode *left = node->data.binary.left;
@@ -365,6 +547,20 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
 }
 
 static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
+    /* Operator overloading dispatch: if the operand is a struct/class type
+       and a matching op_* free function exists, call it instead of using the C operator. */
+    {
+        const char *op_method = unaryop_to_op_method(node->data.unary.op);
+        if (op_method) {
+            AstNode *operand = node->data.unary.operand;
+            AstNode *struct_decl = resolve_expr_struct_type(cg, operand);
+            if (struct_decl && find_func_by_name(cg->program, op_method)) {
+                c_emit_unary_op_overload_call(cg, operand, op_method);
+                return;
+            }
+        }
+    }
+
     switch (node->data.unary.op) {
         case UNARY_NEG:
             fputs("(-(", cg->out);

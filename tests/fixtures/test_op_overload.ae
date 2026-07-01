@@ -1,4 +1,4 @@
-// test_op_overload.ae — operator overloading
+// test_op_overload.ae — operator overloading with struct types
 import "std/test"
 
 struct Vector {
@@ -6,11 +6,105 @@ struct Vector {
     y: int
 }
 
-func op_add(a: int, b: int): int {
-    return a + b
+// Operator overload methods as free functions with self parameter
+func op_add(self: Vector, other: Vector): Vector {
+    let result: Vector
+    result.x = self.x + other.x
+    result.y = self.y + other.y
+    return result
+}
+
+func op_sub(self: Vector, other: Vector): Vector {
+    let result: Vector
+    result.x = self.x - other.x
+    result.y = self.y - other.y
+    return result
+}
+
+func op_mul(self: Vector, scalar: int): Vector {
+    let result: Vector
+    result.x = self.x * scalar
+    result.y = self.y * scalar
+    return result
+}
+
+func op_eq(self: Vector, other: Vector): bool {
+    return self.x == other.x and self.y == other.y
+}
+
+func op_neg(self: Vector): Vector {
+    let result: Vector
+    result.x = -self.x
+    result.y = -self.y
+    return result
+}
+
+@test
+func test_op_add(): void {
+    let a: Vector
+    a.x = 1
+    a.y = 2
+    let b: Vector
+    b.x = 3
+    b.y = 4
+    let c: Vector = a + b
+    assertTrue(c.x == 4, "op_add: c.x == 4")
+    assertTrue(c.y == 6, "op_add: c.y == 6")
+}
+
+@test
+func test_op_sub(): void {
+    let a: Vector
+    a.x = 5
+    a.y = 7
+    let b: Vector
+    b.x = 2
+    b.y = 3
+    let c: Vector = a - b
+    assertTrue(c.x == 3, "op_sub: c.x == 3")
+    assertTrue(c.y == 4, "op_sub: c.y == 4")
+}
+
+@test
+func test_op_mul(): void {
+    let a: Vector
+    a.x = 2
+    a.y = 3
+    let c: Vector = a * 3
+    assertTrue(c.x == 6, "op_mul: c.x == 6")
+    assertTrue(c.y == 9, "op_mul: c.y == 9")
+}
+
+@test
+func test_op_eq(): void {
+    let a: Vector
+    a.x = 1
+    a.y = 2
+    let b: Vector
+    b.x = 1
+    b.y = 2
+    let c: Vector
+    c.x = 1
+    c.y = 3
+    assertTrue(a == b, "op_eq: a == b")
+    assertTrue(not (a == c), "op_eq: a != c")
+}
+
+@test
+func test_op_neg(): void {
+    let a: Vector
+    a.x = 3
+    a.y = -4
+    let c: Vector = -a
+    assertTrue(c.x == -3, "op_neg: c.x == -3")
+    assertTrue(c.y == 4, "op_neg: c.y == 4")
 }
 
 @test
 func main(): void {
-    assertTrue(op_add(2, 3) == 5, "op_add(2, 3) == 5")
+    test_op_add()
+    test_op_sub()
+    test_op_mul()
+    test_op_eq()
+    test_op_neg()
 }
