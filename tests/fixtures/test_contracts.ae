@@ -4,7 +4,7 @@ struct BoundedBuffer {
     size: u64
     max: u64
 
-    inv(self.size <= self.max)
+    contract(self.size <= self.max)
 
     func push(val: u64) {
         self.size += 1
@@ -12,8 +12,8 @@ struct BoundedBuffer {
 }
 
 @test
-func test_invariant_compiles() {
-    assertTrue(1, "invariant struct compiles")
+func test_contract_compiles() {
+    assertTrue(1, "contract struct compiles")
 }
 
 @test

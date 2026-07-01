@@ -1770,7 +1770,7 @@ const GREETING = "Hello, World!"
 
 ## 13. Contract Programming
 
-Contract programming allows you to specify **preconditions**, **postconditions**, and **invariants** that the compiler checks at runtime (debug builds) or uses as optimization hints (release builds). Contracts are written inline between the function signature and the body.
+Contract programming allows you to specify **preconditions**, **postconditions**, and **struct/class contracts** that the compiler checks at runtime (debug builds) or uses as optimization hints (release builds). Contracts are written inline between the function signature and the body.
 
 ### 13.1 Preconditions and Postconditions
 
@@ -1792,9 +1792,9 @@ func withdraw(account: ref Account, amount: u64)
 - In debug builds, violations trigger `assert()` failures
 - In release builds, conditions are eliminated and used as optimizer hints
 
-### 13.2 Invariants
+### 13.2 Struct/Class Contracts
 
-**`inv(expr)`** declares a condition that must hold **before and after every method call** on a struct or class instance. Unlike `pre()`/`post()` which are per-function, invariants are per-type — they define the type's internal consistency contract.
+**`contract(expr)`** declares a condition that must hold **before and after every method call** on a struct or class instance. Unlike `pre()`/`post()` which are per-function, contracts are per-type — they define the type's internal consistency contract.
 
 ```aether
 class Queue<T> {
@@ -1802,7 +1802,7 @@ class Queue<T> {
     head: u64
     tail: u64
 
-    inv(self.size <= self.data.len)
+    contract(self.size <= self.data.len)
 
     func size(): u64 {
         return (self.tail - self.head) % self.data.len
@@ -1811,15 +1811,15 @@ class Queue<T> {
 ```
 
 **Key rules:**
-- `inv()` is declared inside a struct/class body, alongside fields and methods
+- `contract()` is declared inside a struct/class body, alongside fields and methods
 - The condition is checked at every method entry and exit (in debug builds)
-- Invariants are structural — they describe what makes an instance *valid*
-- The compiler emits a `_check_invariants()` function that calls `assert()` for each condition
+- Contracts are structural — they describe what makes an instance *valid*
+- The compiler emits a `_check_contracts()` function that calls `assert()` for each condition
 
-**`inv` vs `assert` — comparison:**
+**`contract` vs `assert` — comparison:**
 
-| Aspect | `assert(expr)` | `inv(expr)` |
-|--------|---------------|-------------|
+| Aspect | `assert(expr)` | `contract(expr)` |
+|--------|---------------|------------------|
 | **Scope** | Inside a function body | Inside a struct/class definition |
 | **When checked** | At that exact line of code | Before/after every method call on the type |
 | **Who guarantees** | The function author | The type itself (all methods collectively) |
@@ -1827,7 +1827,7 @@ class Queue<T> {
 | **Removed in release** | Yes (NDEBUG) | Yes, but could be kept for safety |
 | **Use case** | "This should never happen here" | "This type is always in a valid state" |
 
-**Rule of thumb:** Use `assert()` when you want to check a condition at a specific point in a function. Use `inv()` when you want to define what "valid" means for a type, and have every method automatically verify it.
+**Rule of thumb:** Use `assert()` when you want to check a condition at a specific point in a function. Use `contract()` when you want to define what "valid" means for a type, and have every method automatically verify it.
 
 ### 13.3 Debug vs Release
 
