@@ -44,6 +44,12 @@ const char *c_type_name(AstNode *type_node) {
             return "void*";  /* generic pointer */
         case NODE_TYPE_REF: {
             /* ref T → T* (pointer to the base type) */
+            /* owned T → T* (unique ownership pointer) */
+            /* rc T → void* (reference-counted pointer, retain/release manage it) */
+            if (type_node->data.type_node.is_rc) {
+                return "void*";
+            }
+            /* ref T or owned T → T* */
             if (type_node->data.type_node.elem_type) {
                 static char buf[256];
                 const char *base = c_type_name(type_node->data.type_node.elem_type);

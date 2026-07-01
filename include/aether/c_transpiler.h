@@ -46,6 +46,7 @@ typedef struct {
     struct AutoDropEntry {
         char var_name[64];
         char class_name[64];
+        int kind;               /* 0=class_drop, 1=owned_free, 2=rc_release */
         struct AutoDropEntry *next;
     } *auto_drop_list;
 

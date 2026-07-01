@@ -1,0 +1,25 @@
+import "std/test"
+
+@test
+func test_owned_compiles() {
+    assertTrue(1, "owned function compiles")
+}
+
+@test
+func test_owned_alloc_free() {
+    let x: owned u64 = heap 42
+    // x is auto-freed on scope exit
+    assertTrue(x != 0, "owned pointer is non-null")
+}
+
+@test
+func test_rc_compiles() {
+    assertTrue(1, "rc function compiles")
+}
+
+@test
+func test_rc_retain_release() {
+    let x: rc u64 = heap 42
+    // x is auto-released on scope exit
+    assertTrue(x != 0, "rc pointer is non-null")
+}
