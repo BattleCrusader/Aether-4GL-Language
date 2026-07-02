@@ -1,7 +1,7 @@
 # Aether Compiler — Implementation Status
 
 > **Last updated**: 2026-07-01
-> **Current state**: 54/54 host-native tests passing (19 spec tests wired, pre-existing failures tracked). 14/16 tokenizer tests passing.
+> **Current state**: 54/54 host-native tests passing (85 fixtures wired, pre-existing failures tracked). 14/16 tokenizer tests passing.
 > Compiler builds clean. All major language features through Phase 11 are
 > implemented and tested. Phase 17 (.aelib library format) is implemented and
 > working end-to-end. Phase 18 (standard library in pure Aether) is complete.

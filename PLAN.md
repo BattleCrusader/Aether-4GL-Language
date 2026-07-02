@@ -1,8 +1,8 @@
 # Aether Compiler — Development Plan
 
-> **Current branch:** `feature/P34.00-wire-spec-tests`
+> **Current branch:** `feature/P35.00-wire-remaining-fixtures`
 > **Last updated:** 2026-07-01
-> **Status:** All 34 phases complete. C transpiler is the default backend. 54/54 host-native tests pass. 37 spec test fixtures wired.
+> **Status:** All 35 phases complete. C transpiler is the default backend. 54/54 host-native tests pass. All 85 test fixtures wired into Makefile.
 
 ---
 
@@ -16,6 +16,7 @@
 | 17 | `.aelib` library format | ✅ Complete |
 | 18 | Standard library in pure Aether | ✅ Complete |
 | 20–34 | C transpiler backend — all parsed features transpiled, tested, documented | ✅ Complete |
+| 35 | Wire all remaining 48 fixtures into Makefile TEST_FIXTURES | ✅ Complete |
 
 ---
 
@@ -77,4 +78,4 @@ src/c_transpiler/
 - **Ownership**: `owned T` → `T*` with auto-free, `rc T` → `void*` with retain/release
 - **Throws**: return type struct with `ThrowResult_FuncName` typedef
 - **Generics**: monomorphization with `T: Constraint` syntax
-- **All 37 spec test fixtures** wired into Makefile (Phase 34.00)
+- **All 85 test fixtures** wired into Makefile (Phase 35.00)
