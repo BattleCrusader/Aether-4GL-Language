@@ -285,12 +285,29 @@ static void c_emit_for(CCodegen *cg, AstNode *node) {
 
 static void c_emit_return(CCodegen *cg, AstNode *node) {
     c_indent(cg);
-    fputs("return", cg->out);
-    if (node->data.return_node.value) {
-        fputc(' ', cg->out);
-        c_emit_expr(cg, node->data.return_node.value);
+    if (cg->current_throws_func) {
+        /* In a throws function, return the value wrapped in the error struct */
+        StringView fn = cg->current_throws_func->data.func.name->data.ident.name;
+        AstNode *ret_type = cg->current_throws_func->data.func.return_type;
+        fprintf(cg->out, "ThrowResult_%.*s __ret = {0};\n", (int)fn.len, fn.data);
+        c_indent(cg);
+        if (node->data.return_node.value) {
+            fputs("__ret.val = (", cg->out);
+            c_emit_type(cg, ret_type);
+            fputs(")(", cg->out);
+            c_emit_expr(cg, node->data.return_node.value);
+            fputs(");\n", cg->out);
+        }
+        c_indent(cg);
+        fputs("return __ret;\n", cg->out);
+    } else {
+        fputs("return", cg->out);
+        if (node->data.return_node.value) {
+            fputc(' ', cg->out);
+            c_emit_expr(cg, node->data.return_node.value);
+        }
+        fputs(";\n", cg->out);
     }
-    fputs(";\n", cg->out);
 }
 
 static void c_emit_break(CCodegen *cg, AstNode *node) {

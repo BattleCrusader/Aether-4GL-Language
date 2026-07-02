@@ -23,16 +23,28 @@
 void c_emit_throw(CCodegen *cg, AstNode *node) {
     c_indent(cg);
     fputs("// throw\n", cg->out);
-    c_indent(cg);
-    fputs("__aether_error_tag = 1;\n", cg->out);
-    if (node->data.throw_node.value) {
+    if (cg->current_throws_func) {
+        /* Inside a throws function: return error struct with err=1 */
+        StringView fn = cg->current_throws_func->data.func.name->data.ident.name;
         c_indent(cg);
-        fputs("__aether_error_value = ", cg->out);
-        c_emit_expr(cg, node->data.throw_node.value);
-        fputs(";\n", cg->out);
+        fprintf(cg->out, "ThrowResult_%.*s __err = {0};\n", (int)fn.len, fn.data);
+        c_indent(cg);
+        fprintf(cg->out, "__err.err = 1;\n", (int)fn.len, fn.data);
+        c_indent(cg);
+        fputs("return __err;\n", cg->out);
+    } else {
+        /* Outside a throws function: use longjmp for try/catch */
+        c_indent(cg);
+        fputs("__aether_error_tag = 1;\n", cg->out);
+        if (node->data.throw_node.value) {
+            c_indent(cg);
+            fputs("__aether_error_value = ", cg->out);
+            c_emit_expr(cg, node->data.throw_node.value);
+            fputs(";\n", cg->out);
+        }
+        c_indent(cg);
+        fputs("longjmp(__aether_jmp_buf, 1);\n", cg->out);
     }
-    c_indent(cg);
-    fputs("longjmp(__aether_jmp_buf, 1);\n", cg->out);
 }
 
 /* ──────────────────────────────────────────────

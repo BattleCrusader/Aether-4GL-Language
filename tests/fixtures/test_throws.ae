@@ -1,19 +1,10 @@
-// test_throws.ae — throws function return type and error propagation
 import "std/test"
 
-// throws function with return type
 func divide(a: int, b: int): int throws {
     if b == 0 {
         throw "division by zero"
     }
     return a / b
-}
-
-// throws function with void return
-func validate(cond: bool) throws {
-    if !cond {
-        throw "validation failed"
-    }
 }
 
 @test

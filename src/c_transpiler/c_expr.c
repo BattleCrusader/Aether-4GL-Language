@@ -910,6 +910,13 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
         return;
     }
 
+    /* For throws function calls, wrap in compound expression for error propagation */
+    int is_throws_call = (func_decl && func_decl->type == NODE_FUNC_DECL && func_decl->data.func.is_throws);
+    if (is_throws_call) {
+        StringView fn = func_decl->data.func.name->data.ident.name;
+        fprintf(cg->out, "({ ThrowResult_%.*s __r = ", (int)fn.len, fn.data);
+    }
+
     /* Prefix sys function names to avoid C library conflicts */
     if (func_decl && func_decl->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
@@ -1023,10 +1030,14 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
     }
     fputc(')', cg->out);
 
-    /* Error propagation for throws function calls: wrap in ({ ... }) that checks error */
-    if (func_decl && func_decl->type == NODE_FUNC_DECL && func_decl->data.func.is_throws) {
-        /* The call is already emitted as func(args). We need to restructure.
-         * For now, just note this is a throws call — full propagation deferred. */
+    /* Error propagation for throws function calls: close compound expression with error check */
+    if (is_throws_call) {
+        int has_return = (func_decl->data.func.return_type != NULL);
+        if (has_return) {
+            fputs("; if (__r.err) { longjmp(__aether_jmp_buf, 1); } __r.val; })", cg->out);
+        } else {
+            fputs("; if (__r.err) { longjmp(__aether_jmp_buf, 1); } })", cg->out);
+        }
     }
 }
 

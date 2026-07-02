@@ -50,6 +50,9 @@ typedef struct {
         struct AutoDropEntry *next;
     } *auto_drop_list;
 
+    /* Current throws function context for return-struct wrapping */
+    AstNode *current_throws_func;  /* NULL if not inside a throws function */
+
     /* Source location */
     const char *current_source_file;
     int current_line;

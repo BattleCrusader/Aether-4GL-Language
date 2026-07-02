@@ -224,6 +224,11 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
         fputs(" {\n", cg->out);
         cg->indent++;
 
+        /* Track throws function context for return/throw wrapping */
+        if (node->data.func.is_throws) {
+            cg->current_throws_func = node;
+        }
+
         /* If main has a string param, create it from argv[1] */
         if (main_has_string_param) {
             c_indent(cg);
@@ -252,6 +257,12 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
             c_emit_expr(cg, body);
             fputs(");\n", cg->out);
         }
+
+        /* Clear throws function context */
+        if (node->data.func.is_throws) {
+            cg->current_throws_func = NULL;
+        }
+
         cg->indent--;
         c_indent(cg);
         fputs("}\n\n", cg->out);
