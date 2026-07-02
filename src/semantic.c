@@ -234,6 +234,12 @@ static AstNode *monomorphize_node(Arena *arena, AstNode *node,
             copy->data.asm_block.inputs = node->data.asm_block.inputs;
             copy->data.asm_block.clobbers = node->data.asm_block.clobbers;
             break;
+        case NODE_SPAWN:
+            copy->data.spawn_node.call = monomorphize_node(arena, node->data.spawn_node.call, type_params, concrete_types);
+            break;
+        case NODE_YIELD:
+            /* No payload to monomorphize */
+            break;
         default:
             break;
     }
@@ -855,6 +861,19 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             }
             break;
         }
+
+        case NODE_SPAWN: {
+            /* Visit the call expression for name resolution */
+            if (node->data.spawn_node.call) {
+                semantic_visit_node(sa, node->data.spawn_node.call);
+            }
+            break;
+        }
+
+        case NODE_YIELD:
+            /* No children to visit */
+            break;
+
         default:
             break;
     }

@@ -94,6 +94,8 @@ typedef enum {
     NODE_RUN_BLOCK,
     NODE_PROPERTY,
     NODE_TYPE_PARAM,    /* generic type parameter with optional constraint */
+    NODE_SPAWN,         /* spawn function_call */
+    NODE_YIELD,         /* yield */
 } NodeType;
 
 /* ================================================================
@@ -385,6 +387,13 @@ typedef struct {
     AstNode *body;          /* deferred block or statement */
 } DeferNode;
 
+/* Spawn statement: spawn func(args...) — stores the CALL node directly */
+typedef struct {
+    AstNode *call;          /* NODE_CALL wrapping callee + args */
+} SpawnNode;
+
+/* Yield statement: bare yield — no payload */
+
 /* Region allocation block */
 typedef struct {
     StringView name;        /* region name */
@@ -490,6 +499,7 @@ struct AstNode {
         EnumVariant enum_variant;
         AsmBlock asm_block;
         DeferNode defer_node;
+        SpawnNode spawn_node;
         RegionNode region_node;
         TraitDecl trait_decl;
         ImplBlock impl_block;
@@ -544,6 +554,8 @@ AstNode *node_asm_block(Arena *a, Location loc, AstNode *text);
 AstNode *node_struct_decl(Arena *a, Location loc, AstNode *name, bool is_pub);
 AstNode *node_enum_decl(Arena *a, Location loc, AstNode *name, bool is_pub);
 AstNode *node_defer(Arena *a, Location loc, AstNode *body);
+AstNode *node_spawn(Arena *a, Location loc, AstNode *call);
+AstNode *node_yield(Arena *a, Location loc);
 AstNode *node_region(Arena *a, Location loc, StringView name, AstNode *body);
 AstNode *node_expr_stmt(Arena *a, Location loc, AstNode *expr);
 AstNode *node_try(Arena *a, Location loc, AstNode *body);

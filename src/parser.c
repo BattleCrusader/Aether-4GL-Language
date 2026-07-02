@@ -111,6 +111,7 @@ static const TokenType STMT_START[] = {
     TOKEN_KW_PUB, TOKEN_KW_STATIC,
     TOKEN_KW_UNSAFE, TOKEN_KW_TRY, TOKEN_KW_THROW,
     TOKEN_KW_TYPE,
+    TOKEN_KW_SPAWN, TOKEN_KW_YIELD,
     TOKEN_AT,
     TOKEN_RBRACE, /* closing brace can follow statements */
 };
@@ -999,6 +1000,44 @@ AstNode *parse_statement(Parser *p) {
             body = parse_statement(p);
         }
         return node_defer(p->arena, p->previous.loc, body);
+    }
+
+    /* spawn expr(args...) — spawn a function call as a new thread/fiber */
+    if (parser_match(p, TOKEN_KW_SPAWN)) {
+        /* Parse the function call: callee(args) */
+        if (!parser_check(p, TOKEN_IDENT) && !parser_check(p, TOKEN_KW_SELF)) {
+            parser_error(p, p->current, "expected function name for spawn");
+            return NULL;
+        }
+        AstNode *callee;
+        Location loc = p->current.loc;
+        if (parser_check(p, TOKEN_KW_SELF)) {
+            callee = node_ident(p->arena, p->current.loc, SV("self"));
+            parser_advance(p);
+        } else {
+            callee = node_ident(p->arena, p->current.loc, p->current.text);
+            parser_advance(p);
+        }
+        /* Expect (args...) */
+        if (!parser_match(p, TOKEN_LPAREN)) {
+            parser_error(p, p->current, "expected '(' for spawn function call");
+            return NULL;
+        }
+        AstNode *call = node_call(p->arena, loc, callee);
+        while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+            while (parser_match(p, TOKEN_NEWLINE));
+            if (parser_check(p, TOKEN_RPAREN)) break;
+            AstNode *arg = parse_expr(p);
+            if (arg) node_list_append(&call->data.call.args, arg);
+            if (!parser_match(p, TOKEN_COMMA)) break;
+        }
+        parser_expect(p, TOKEN_RPAREN, "spawn call arguments");
+        return node_spawn(p->arena, p->previous.loc, call);
+    }
+
+    /* yield — yield control in a fiber context */
+    if (parser_match(p, TOKEN_KW_YIELD)) {
+        return node_yield(p->arena, p->previous.loc);
     }
 
     /* region("name") { body } */

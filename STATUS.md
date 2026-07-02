@@ -6,7 +6,7 @@
 > implemented and tested. Phase 17 (.aelib library format) is implemented and
 > working end-to-end. Phase 18 (standard library in pure Aether) is complete.
 > Phase 19 (LLVM backend migration) is designed but not yet implemented.
-> Phases 20-37: C transpiler default backend, all parsed features transpiled.
+> Phases 20-39: C transpiler default backend, all parsed features transpiled.
 
 ---
 

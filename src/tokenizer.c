@@ -75,6 +75,8 @@ const KeywordEntry KEYWORDS[] = {
     {"at",       TOKEN_KW_AT},
     {"iflet",    TOKEN_KW_IF_LET},
     {"as",       TOKEN_KW_AS},
+    {"spawn",    TOKEN_KW_SPAWN},
+    {"yield",    TOKEN_KW_YIELD},
 };
 
 const int KEYWORD_COUNT = sizeof(KEYWORDS) / sizeof(KEYWORDS[0]);
@@ -159,6 +161,8 @@ const char *token_type_name(TokenType type) {
         case TOKEN_KW_INLINE: return "inline";
         case TOKEN_KW_AT: return "at";
         case TOKEN_KW_IF_LET: return "iflet";
+        case TOKEN_KW_SPAWN: return "spawn";
+        case TOKEN_KW_YIELD: return "yield";
         case TOKEN_PLUS: return "+";
         case TOKEN_MINUS: return "-";
         case TOKEN_STAR: return "*";

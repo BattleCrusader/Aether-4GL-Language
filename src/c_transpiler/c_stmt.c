@@ -332,6 +332,34 @@ static void c_emit_continue(CCodegen *cg, AstNode *node) {
     }
 }
 
+/* ──────────────────────────────────────────────
+ * Spawn and yield
+ * ────────────────────────────────────────────── */
+
+static void c_emit_spawn(CCodegen *cg, AstNode *node) {
+    /* spawn func(args...) → On host: just call func(args) synchronously */
+    AstNode *call = node->data.spawn_node.call;
+    if (!call || !call->data.call.callee) {
+        c_indent(cg);
+        fputs("// spawn (invalid)\n", cg->out);
+        return;
+    }
+    c_indent(cg);
+    c_emit_expr(cg, call->data.call.callee);
+    fputs("(", cg->out);
+    for (int i = 0; i < call->data.call.args.count; i++) {
+        if (i > 0) fputs(", ", cg->out);
+        c_emit_expr(cg, call->data.call.args.items[i]);
+    }
+    fputs(");\n", cg->out);
+}
+
+static void c_emit_yield(CCodegen *cg, AstNode *node) {
+    (void)node;
+    c_indent(cg);
+    fputs("__aether_yield();\n", cg->out);
+}
+
 static void c_emit_defer(CCodegen *cg, AstNode *node) {
     c_indent(cg);
     fputs("// defer\n", cg->out);
@@ -772,6 +800,12 @@ void c_emit_stmt(CCodegen *cg, AstNode *node) {
                Emit as a function declaration (same as NODE_FUNC_DECL).
                The property's getter/setter is stored as a func_decl in data.func. */
             c_emit_func_decl(cg, node);
+            break;
+        case NODE_SPAWN:
+            c_emit_spawn(cg, node);
+            break;
+        case NODE_YIELD:
+            c_emit_yield(cg, node);
             break;
         default:
             fprintf(stderr, "C: unhandled statement node type %d\n", node->type);

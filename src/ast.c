@@ -277,6 +277,16 @@ AstNode *node_region(Arena *a, Location loc, StringView name, AstNode *body) {
     return node;
 }
 
+AstNode *node_spawn(Arena *a, Location loc, AstNode *call) {
+    AstNode *node = node_create(a, NODE_SPAWN, loc);
+    if (node) node->data.spawn_node.call = call;
+    return node;
+}
+
+AstNode *node_yield(Arena *a, Location loc) {
+    return node_create(a, NODE_YIELD, loc);
+}
+
 AstNode *node_expr_stmt(Arena *a, Location loc, AstNode *expr) {
     AstNode *node = node_create(a, NODE_EXPR_STMT, loc);
     if (node) node->data.call.callee = expr;
@@ -397,6 +407,8 @@ const char *node_type_name(NodeType type) {
         case NODE_REGION: return "REGION";
         case NODE_RUN_BLOCK: return "RUN_BLOCK";
         case NODE_PROPERTY: return "PROPERTY";
+        case NODE_SPAWN: return "SPAWN";
+        case NODE_YIELD: return "YIELD";
         case NODE_TRY: return "TRY";
         case NODE_THROW: return "THROW";
         case NODE_CATCH_ARM: return "CATCH_ARM";

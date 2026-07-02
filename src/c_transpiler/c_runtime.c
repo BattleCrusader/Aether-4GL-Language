@@ -92,4 +92,9 @@ void c_emit_runtime(CCodegen *cg) {
     fputs("    if (*rc > 0) (*rc)--;\n", cg->out);
     fputs("    if (*rc == 0) free(ptr);\n", cg->out);
     fputs("}\n\n", cg->out);
+
+    /* Emit concurrency stubs — spawn and yield */
+    fputs("#ifndef __aether_yield\n", cg->out);
+    fputs("static void __aether_yield() { /* yield control in fiber context */ }\n", cg->out);
+    fputs("#endif\n\n", cg->out);
 }

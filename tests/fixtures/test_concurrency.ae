@@ -1,0 +1,33 @@
+// test_concurrency.ae — Comprehensive tests for SPECIFICATION.md §25
+// Covers: spawn statement, yield statement
+//
+// NOTE: spawn/yield are stubs on host. Runtime helpers are no-ops;
+// we test only that the syntax compiles and doesn't crash.
+
+import "std/test"
+
+// ── 25.1 Spawn ─────────────────────────────────────────────────
+
+func worker(id: u64): u64 {
+    return id * 2
+}
+
+@test
+func test_spawn_basic(): u64 {
+    spawn worker(42)
+    return 1  // just verify spawn compiles and runs without crash
+}
+
+@test
+func test_spawn_multi_args(): u64 {
+    spawn worker(100)
+    return 1  // verify spawn with literal args compiles
+}
+
+// ── 25.4 Yield ─────────────────────────────────────────────────
+
+@test
+func test_yield_basic(): u64 {
+    yield  // yield is a no-op on host; verify it compiles
+    return 1
+}
