@@ -1,8 +1,8 @@
 # Aether Compiler — Development Plan
 
-> **Current branch:** `feature/P36.00-throws-call-propagation`
+> **Current branch:** `feature/P37.00-debug-release-contracts`
 > **Last updated:** 2026-07-01
-> **Status:** All 36 phases complete. C transpiler is the default backend. 54/54 host-native tests pass. All 85 test fixtures wired into Makefile.
+> **Status:** All 37 phases complete. C transpiler is the default backend. 54/54 host-native tests pass. All 85 test fixtures wired into Makefile.
 
 ---
 
@@ -18,6 +18,7 @@
 | 20–34 | C transpiler backend — all parsed features transpiled, tested, documented | ✅ Complete |
 | 35 | Wire all remaining 48 fixtures into Makefile TEST_FIXTURES | ✅ Complete |
 | 36 | Throws error propagation — return-struct pattern, call-site check | ✅ Complete |
+| 37 | Debug vs release contract elimination — pre/post/contract skipped at -O2+ | ✅ Complete |
 
 ---
 

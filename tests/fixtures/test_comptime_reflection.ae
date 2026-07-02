@@ -1,0 +1,17 @@
+import "std/test"
+
+// Test that #run with emit() compiles and injects code at compile time
+#run {
+    emit("func getVal(): int -> 42")
+}
+
+@test
+func test_emit_compiles(): void {
+    assertTrue(1, "#run with emit() compiles")
+}
+
+@test
+func test_emit_generated(): void {
+    let r = getVal()
+    assertTrue(r == 42, "emit() generated function getVal() == 42")
+}

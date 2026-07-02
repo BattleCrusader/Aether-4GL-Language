@@ -13,7 +13,7 @@
 - **Test**: `make test` (unit) + `make test-host` (native .ae fixtures)
 - **Install**: `sudo make install` or `make install-local`
 - **Source**: `/Volumes/Backup/Development/Project_Aether/compiler/`
-- **Branch**: `feature/P36.00-throws-call-propagation` (active development)
+- **Branch**: `feature/P37.00-debug-release-contracts` (active development)
 
 ---
 
