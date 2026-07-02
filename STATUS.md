@@ -371,4 +371,4 @@
 7. **Phase 16**: Protocol generation & hardware configuration
 8. **Phase 20**: Self-hosting — compiler compiles itself
 
-> **Note**: `PLAN.md` does not exist in this repo. Use `STATUS.md` and `AGENTS.md` for project state.
+> **Note**: `PLAN.md` is the primary development plan document. See `PLAN.md` for the full priority queue and architecture overview.
