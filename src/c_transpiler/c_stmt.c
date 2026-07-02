@@ -383,8 +383,8 @@ static void c_emit_struct_decl(CCodegen *cg, AstNode *node) {
     c_indent(cg);
     fprintf(cg->out, "} %.*s;\n\n", (int)sname.len, sname.data);
 
-    /* Emit contract check function for debug builds */
-    if (node->data.struct_decl.contracts.count > 0) {
+    /* Emit contract check function for debug builds (skipped in release, opt_level >= 2) */
+    if (node->data.struct_decl.contracts.count > 0 && cg->opt_level < 2) {
         c_indent(cg);
         fprintf(cg->out, "static void %.*s_check_contracts(%.*s self) {\n",
                 (int)sname.len, sname.data, (int)sname.len, sname.data);

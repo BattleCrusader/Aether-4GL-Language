@@ -13,13 +13,18 @@
  *
  * For the C transpiler, these become simple
  * if-checks that print and abort on failure.
+ * In release builds (opt_level >= 2), contracts
+ * are eliminated — no runtime checks emitted.
  * ────────────────────────────────────────────── */
 
 /* ──────────────────────────────────────────────
  * Emit a precondition check
  *   @pre(condition) → if (!(condition)) { fprintf(stderr, "..."); exit(1); }
+ *   Skipped in release builds (opt_level >= 2).
  * ────────────────────────────────────────────── */
 void c_emit_precondition(CCodegen *cg, AstNode *condition, const char *func_name) {
+    /* Skip in release builds — contracts serve as optimizer hints only */
+    if (cg->opt_level >= 2) return;
     c_indent(cg);
     fputs("if (!(", cg->out);
     c_emit_expr(cg, condition);
@@ -37,8 +42,11 @@ void c_emit_precondition(CCodegen *cg, AstNode *condition, const char *func_name
 /* ──────────────────────────────────────────────
  * Emit a postcondition check
  *   @post(condition) → same at function exit
+ *   Skipped in release builds (opt_level >= 2).
  * ────────────────────────────────────────────── */
 void c_emit_postcondition(CCodegen *cg, AstNode *condition, const char *func_name) {
+    /* Skip in release builds — contracts serve as optimizer hints only */
+    if (cg->opt_level >= 2) return;
     c_indent(cg);
     fputs("if (!(", cg->out);
     c_emit_expr(cg, condition);
