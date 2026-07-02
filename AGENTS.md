@@ -13,7 +13,7 @@
 - **Test**: `make test` (unit) + `make test-host` (native .ae fixtures)
 - **Install**: `sudo make install` or `make install-local`
 - **Source**: `/Volumes/Backup/Development/Project_Aether/compiler/`
-- **Branch**: `feature/P18.00-stdlib-implementation` (active development)
+- **Branch**: `feature/P34.00-wire-spec-tests` (active development)
 
 ---
 

@@ -1,11 +1,12 @@
 # Aether Compiler — Implementation Status
 
-> **Last updated**: 2026-06-29
-> **Current state**: 47/47 host-native tests passing. 15/16 tokenizer tests passing.
+> **Last updated**: 2026-07-01
+> **Current state**: 54/54 host-native tests passing (19 spec tests wired, pre-existing failures tracked). 14/16 tokenizer tests passing.
 > Compiler builds clean. All major language features through Phase 11 are
 > implemented and tested. Phase 17 (.aelib library format) is implemented and
 > working end-to-end. Phase 18 (standard library in pure Aether) is complete.
 > Phase 19 (LLVM backend migration) is designed but not yet implemented.
+> Phases 20-34: C transpiler default backend, all parsed features transpiled.
 
 ---
 
@@ -362,10 +363,12 @@
 ## Priority Queue (Next to Build)
 
 1. **Phase 19**: LLVM backend migration — replace NASM codegen with LLVM IR
-2. **Fix test_match**: Match statement compilation failure
+2. **Fix spec test failures**: 18/37 test_spec_*.ae fixtures fail — parser/semantic gaps
 3. **Phase 9 remaining**: Escape analysis, devirtualization, loop unrolling, actionable errors
 4. **Phase 13**: Concurrency & fibers (spawn, channels, mutex, scheduler)
 5. **Phase 14**: Advanced OS language features (bootchain, interrupt handlers, metadata)
 6. **Phase 15**: Goal-oriented I/O & query fusion
 7. **Phase 16**: Protocol generation & hardware configuration
 8. **Phase 20**: Self-hosting — compiler compiles itself
+
+> **Note**: `PLAN.md` is the primary development plan document. See `PLAN.md` for the full priority queue and architecture overview.
