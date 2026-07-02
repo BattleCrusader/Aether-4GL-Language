@@ -1,12 +1,19 @@
 // test_match_advanced.ae — Advanced match patterns
+// Tests: single literal, comma-separated patterns, range patterns, wildcard
+//
+// match value {
+//     case 0 -> print("zero")
+//     case 1,2,3 -> print("1,2,3")
+//     case 4..9 -> print("4 to 9")
+//     case _ -> print("anything else")
+// }
+
 import "std/test"
 
 func classify(value: u64): u64 {
     return match value {
         case 0 -> 0
-        case 1 -> 1
-        case 2 -> 1
-        case 3 -> 1
+        case 1,2,3 -> 1
         case 4..9 -> 2
         case _ -> 3
     }

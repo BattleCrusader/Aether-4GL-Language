@@ -1,0 +1,161 @@
+// test_md_lexer_full.ae — test the full lexer with match
+import "std/io"
+
+enum TokenType {
+    TEXT
+    HASH
+    STAR
+    UNDERSCORE
+    BACKTICK
+    LBRACKET
+    RBRACKET
+    LPAREN
+    RPAREN
+    BANG
+    DASH
+    GT
+    NEWLINE
+    EOF
+}
+
+struct Token {
+    kind: TokenType
+    text: string
+    line: u64
+    col: u64
+}
+
+struct Lexer {
+    input: string
+    pos: u64
+    line: u64
+    col: u64
+    tokens: [Token]
+}
+
+func lexerCreate(input: string): Lexer {
+    let mut l: Lexer
+    l.input = input
+    l.pos = 0
+    l.line = 1
+    l.col = 1
+    l.tokens = []
+    return l
+}
+
+func lexerPeek(l: ref Lexer): byte {
+    if l.pos >= #l.input { return 0 }
+    return l.input[l.pos]
+}
+
+func lexerAdvance(l: ref Lexer) {
+    if l.pos < #l.input {
+        if l.input[l.pos] == 10 {
+            l.line = l.line + 1
+            l.col = 1
+        } else {
+            l.col = l.col + 1
+        }
+        l.pos = l.pos + 1
+    }
+}
+
+func lexerSkipWhitespace(l: ref Lexer) {
+    while true {
+        let c: byte = lexerPeek(l)
+        if c == 32 or c == 9 { lexerAdvance(l) } else { break }
+    }
+}
+
+func lexerIsSpecial(c: byte): bool {
+    return match c {
+        case 0, 10, 35, 42, 95, 96, 91, 93, 40, 41, 33, 45, 62, 32, 9 -> true
+        case _ -> false
+    }
+}
+
+func lexerEmitToken(l: ref Lexer, kind: TokenType, text: string, line: u64, col: u64) {
+    let mut t: Token
+    t.kind = kind
+    t.text = text
+    t.line = line
+    t.col = col
+    l.tokens = l.tokens + [t]
+}
+
+func lexerTokenize(l: ref Lexer): [Token] {
+    l.tokens = []
+    while l.pos < #l.input {
+        let c: byte = lexerPeek(l)
+        let startLine: u64 = l.line
+        let startCol: u64 = l.col
+
+        if c == 0 { break }
+
+        if c == 10 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::NEWLINE, "\n", startLine, startCol)
+            continue
+        }
+
+        if c == 35 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::HASH, "#", startLine, startCol)
+            continue
+        }
+
+        if c == 42 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::STAR, "*", startLine, startCol)
+            continue
+        }
+
+        if c == 95 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::UNDERSCORE, "_", startLine, startCol)
+            continue
+        }
+
+        if c == 96 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::BACKTICK, "`", startLine, startCol)
+            continue
+        }
+
+        if c == 91 { lexerAdvance(l); lexerEmitToken(l, TokenType::LBRACKET, "[", startLine, startCol); continue }
+        if c == 93 { lexerAdvance(l); lexerEmitToken(l, TokenType::RBRACKET, "]", startLine, startCol); continue }
+        if c == 40 { lexerAdvance(l); lexerEmitToken(l, TokenType::LPAREN, "(", startLine, startCol); continue }
+        if c == 41 { lexerAdvance(l); lexerEmitToken(l, TokenType::RPAREN, ")", startLine, startCol); continue }
+
+        if c == 33 { lexerAdvance(l); lexerEmitToken(l, TokenType::BANG, "!", startLine, startCol); continue }
+
+        if c == 45 { lexerAdvance(l); lexerEmitToken(l, TokenType::DASH, "-", startLine, startCol); continue }
+
+        if c == 62 { lexerAdvance(l); lexerEmitToken(l, TokenType::GT, ">", startLine, startCol); continue }
+
+        if c == 32 or c == 9 { lexerSkipWhitespace(l); continue }
+
+        let mut text: string = ""
+        while true {
+            let ch: byte = lexerPeek(l)
+            if lexerIsSpecial(ch) { break }
+            text = text + ch
+            lexerAdvance(l)
+        }
+        if #text > 0 {
+            lexerEmitToken(l, TokenType::TEXT, text, startLine, startCol)
+        }
+    }
+    lexerEmitToken(l, TokenType::EOF, "", l.line, l.col)
+    return l.tokens
+}
+
+func main(): u64 {
+    let input: string = "# Hello\n\nThis is **bold** text.\n"
+    let mut lexer: Lexer = lexerCreate(input)
+    let tokens: [Token] = lexerTokenize(ref lexer)
+    print("tokens: ")
+    printDecimal(#tokens)
+    print("\n")
+    return 0
+}

@@ -816,6 +816,9 @@ AstNode *parse_enum_decl(Parser *p) {
  * Statement parsing
  * ================================================================ */
 
+/* Forward declaration */
+static AstNode *parse_match_arm(Parser *p);
+
 AstNode *parse_statement(Parser *p) {
     if (p->panic_mode) { parser_sync(p); if (parser_check(p, TOKEN_EOF)) return NULL; }
 
@@ -883,6 +886,8 @@ AstNode *parse_statement(Parser *p) {
         /* elif chain */
         AstNode *elif_chain = NULL;
         AstNode *current_elif = NULL;
+        /* Skip newlines between } and elif/else */
+        while (parser_match(p, TOKEN_NEWLINE));
         while (parser_match(p, TOKEN_KW_ELIF)) {
             AstNode *elif_cond = parse_expr(p);
             AstNode *elif_block = NULL;
@@ -898,10 +903,14 @@ AstNode *parse_statement(Parser *p) {
                 current_elif->data.if_node.elif_chain = elif_node;
                 current_elif = elif_node;
             }
+            /* Skip newlines before next elif/else */
+            while (parser_match(p, TOKEN_NEWLINE));
         }
 
         /* else block */
         AstNode *else_block = NULL;
+        /* Skip newlines before else */
+        while (parser_match(p, TOKEN_NEWLINE));
         if (parser_match(p, TOKEN_KW_ELSE)) {
             if (parser_check(p, TOKEN_LBRACE)) {
                 parser_advance(p);
@@ -1066,34 +1075,11 @@ AstNode *parse_statement(Parser *p) {
         AstNode *match_node = node_match(p->arena, p->previous.loc, value);
 
         if (parser_match(p, TOKEN_LBRACE)) {
-            while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
-                if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-                    parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
-                
-                /* Skip optional 'case' keyword */
-                parser_match(p, TOKEN_KW_CASE);
-                AstNode *pattern = parse_pattern(p);
-                AstNode *body = NULL;
-                AstNodeList extra_patterns = {0};
-                /* Parse comma-separated additional patterns: case 1,2,3 -> */
-                /* parse_pattern returns NULL for comma/arrow/newline/brace.
-                   If it returned a real pattern, check for comma and parse more. */
-                if (pattern) {
-                    while (parser_match(p, TOKEN_COMMA)) {
-                        /* parser_match consumed the comma. Ensure has_current is set
-                           before calling parse_pattern, which checks current token. */
-                        if (!p->has_current) parser_advance(p);
-                        AstNode *extra = parse_pattern(p);
-                        if (extra) node_list_append(&extra_patterns, extra);
-                        else break;
-                    }
-                }
-                if (parser_match(p, TOKEN_ARROW)) {
-                    /* `=>` token? Use ARROW (->) */
-                    body = parse_expr(p);
-                }
-                AstNode *arm = node_match_arm(p->arena, pattern ? pattern->loc : p->previous.loc, pattern, body);
-                arm->data.match_arm.patterns = extra_patterns;
+            while (true) {
+                if (!p->has_current) parser_advance(p);
+                if (p->current.type == TOKEN_RBRACE || p->current.type == TOKEN_EOF) break;
+                if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON)) continue;
+                AstNode *arm = parse_match_arm(p);
                 node_list_append(&match_node->data.match_node.arms, arm);
             }
             parser_expect(p, TOKEN_RBRACE, "match body");
@@ -1101,6 +1087,8 @@ AstNode *parse_statement(Parser *p) {
 
         return match_node;
     }
+
+    /* asm block */
 
     /* asm block */
     if (parser_match(p, TOKEN_KW_ASM)) {
@@ -1324,6 +1312,40 @@ AstNode *parse_block_braced(Parser *p) {
 /* ================================================================
  * Pattern matching
  * ================================================================ */
+
+/* Parse a single match arm: [case] pattern [, pattern]* -> body
+ * Returns a NODE_MATCH_ARM with pattern set and patterns list populated. */
+static AstNode *parse_match_arm(Parser *p) {
+    /* Skip optional 'case' keyword */
+    parser_match(p, TOKEN_KW_CASE);
+    /* Skip newlines after case */
+    while (parser_match(p, TOKEN_NEWLINE));
+
+    AstNode *pattern = NULL;
+    AstNodeList extra_patterns = {0};
+
+    /* If current token is ->, this is a bare arrow (no pattern) — wildcard */
+    if (p->has_current && p->current.type != TOKEN_ARROW) {
+        pattern = parse_pattern(p);
+        /* Handle comma-separated patterns */
+        while (p->has_current && parser_match(p, TOKEN_COMMA)) {
+            /* Skip newlines after comma */
+            while (parser_match(p, TOKEN_NEWLINE));
+            AstNode *extra = parse_pattern(p);
+            if (extra) {
+                node_list_append(&extra_patterns, extra);
+            }
+        }
+    }
+
+    parser_expect(p, TOKEN_ARROW, "match arm arrow (->)");
+    AstNode *body = parse_expr(p);
+
+    AstNode *arm = node_match_arm(p->arena,
+        pattern ? pattern->loc : p->previous.loc, pattern, body);
+    arm->data.match_arm.patterns = extra_patterns;
+    return arm;
+}
 
 AstNode *parse_pattern(Parser *p) {
     /* Simple patterns for now: literals, identifiers, wildcards */
@@ -1774,18 +1796,31 @@ static AstNode *parse_prefix(Parser *p) {
             AstNode *result = NULL;
             bool found_interp = false;
             while (cur < p_end) {
-                if (*cur == '{') {
+                if (*cur == '{' && (cur == content || *(cur - 1) != '\\')) {
                     found_interp = true;
                     /* Emit literal text before this { */
                     size_t lit_len = (size_t)(cur - p_start);
                     if (lit_len > 0) {
+                        /* Unescape \{ and \} in literal text */
+                        char *unesc = (char *)arena_alloc(p->arena, lit_len + 1);
+                        size_t u = 0;
+                        for (size_t s = 0; s < lit_len; s++) {
+                            if (p_start[s] == '\\' && s + 1 < lit_len &&
+                                (p_start[s + 1] == '{' || p_start[s + 1] == '}')) {
+                                unesc[u++] = p_start[s + 1];
+                                s++;
+                            } else {
+                                unesc[u++] = p_start[s];
+                            }
+                        }
+                        unesc[u] = '\0';
                         /* Wrap in quotes for codegen's process_string_literal */
-                        char *quoted = (char *)arena_alloc(p->arena, lit_len + 3);
+                        char *quoted = (char *)arena_alloc(p->arena, u + 3);
                         quoted[0] = '"';
-                        memcpy(quoted + 1, p_start, lit_len);
-                        quoted[lit_len + 1] = '"';
-                        quoted[lit_len + 2] = '\0';
-                        StringView lit_sv = sv_from_parts(quoted, lit_len + 2);
+                        memcpy(quoted + 1, unesc, u);
+                        quoted[u + 1] = '"';
+                        quoted[u + 2] = '\0';
+                        StringView lit_sv = sv_from_parts(quoted, u + 2);
                         AstNode *lit_node = node_string_literal(p->arena, loc, lit_sv);
                         if (result) {
                             result = node_binary(p->arena, loc, BIN_CONCAT, result, lit_node);
@@ -1798,9 +1833,13 @@ static AstNode *parse_prefix(Parser *p) {
                     const char *expr_start = cur;
                     int depth = 1;
                     while (cur < p_end && depth > 0) {
-                        if (*cur == '{') depth++;
-                        else if (*cur == '}') depth--;
-                        if (depth > 0) cur++;
+                        if (*cur == '\\' && cur + 1 < p_end && (*(cur + 1) == '{' || *(cur + 1) == '}')) {
+                            cur += 2; /* skip escaped brace */
+                        } else {
+                            if (*cur == '{') depth++;
+                            else if (*cur == '}') depth--;
+                            if (depth > 0) cur++;
+                        }
                     }
                     if (depth == 0) {
                         /* Parse expression between { and } */
@@ -1860,13 +1899,26 @@ static AstNode *parse_prefix(Parser *p) {
                 /* Emit trailing literal text */
                 size_t lit_len = (size_t)(p_end - p_start);
                 if (lit_len > 0) {
+                    /* Unescape \{ and \} in literal text */
+                    char *unesc = (char *)arena_alloc(p->arena, lit_len + 1);
+                    size_t u = 0;
+                    for (size_t s = 0; s < lit_len; s++) {
+                        if (p_start[s] == '\\' && s + 1 < lit_len &&
+                            (p_start[s + 1] == '{' || p_start[s + 1] == '}')) {
+                            unesc[u++] = p_start[s + 1];
+                            s++;
+                        } else {
+                            unesc[u++] = p_start[s];
+                        }
+                    }
+                    unesc[u] = '\0';
                     /* Wrap in quotes for codegen's process_string_literal */
-                    char *quoted = (char *)arena_alloc(p->arena, lit_len + 3);
+                    char *quoted = (char *)arena_alloc(p->arena, u + 3);
                     quoted[0] = '"';
-                    memcpy(quoted + 1, p_start, lit_len);
-                    quoted[lit_len + 1] = '"';
-                    quoted[lit_len + 2] = '\0';
-                    StringView lit_sv = sv_from_parts(quoted, lit_len + 2);
+                    memcpy(quoted + 1, unesc, u);
+                    quoted[u + 1] = '"';
+                    quoted[u + 2] = '\0';
+                    StringView lit_sv = sv_from_parts(quoted, u + 2);
                     AstNode *lit_node = node_string_literal(p->arena, loc, lit_sv);
                     if (result) {
                         result = node_binary(p->arena, loc, BIN_CONCAT, result, lit_node);
@@ -1910,18 +1962,8 @@ static AstNode *parse_prefix(Parser *p) {
 
             if (parser_match(p, TOKEN_LBRACE)) {
                 while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
-                    if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-                        parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
-
-                    /* Skip optional 'case' keyword */
-                    parser_match(p, TOKEN_KW_CASE);
-                    AstNode *pattern = parse_pattern(p);
-                    AstNode *body = NULL;
-                    if (parser_match(p, TOKEN_ARROW)) {
-                        /* `=>` token? Use ARROW (->) */
-                        body = parse_expr(p);
-                    }
-                    AstNode *arm = node_match_arm(p->arena, pattern->loc, pattern, body);
+                    if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON)) continue;
+                    AstNode *arm = parse_match_arm(p);
                     node_list_append(&match_node->data.match_node.arms, arm);
                 }
                 parser_expect(p, TOKEN_RBRACE, "match body");
@@ -2234,7 +2276,14 @@ AstNode *parse_expr_prec(Parser *p, Precedence min_prec) {
     }
 
     /* Parse infix operators while they have sufficient precedence */
+    bool had_infix = false;
     while (true) {
+        /* Skip newlines only after we've already parsed an infix operator
+         * (allows multi-line expressions like `a and b` across lines).
+         * Before any infix, a newline terminates the expression. */
+        if (had_infix) {
+            while (parser_match(p, TOKEN_NEWLINE));
+        }
         if (parser_check(p, TOKEN_EOF) || parser_check(p, TOKEN_NEWLINE) ||
             parser_check(p, TOKEN_RPAREN) || parser_check(p, TOKEN_RBRACKET) ||
             parser_check(p, TOKEN_RBRACE) || parser_check(p, TOKEN_COMMA) ||
@@ -2249,6 +2298,7 @@ AstNode *parse_expr_prec(Parser *p, Precedence min_prec) {
 
         left = parse_infix(p, left, prec);
         if (!left) break;
+        had_infix = true;
     }
 
     return left;

@@ -2050,6 +2050,7 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             for (int i = 0; i < node->data.match_node.arms.count; i++) {
                 AstNode *arm = node->data.match_node.arms.items[i];
                 int next_label = cg_new_label(cg);
+                int body_label = cg_new_label(cg);
 
                 /* Reload matched value */
                 cg_inst1(cg, "mov", "rax, [rsp]");
@@ -2065,7 +2066,7 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     char tmp[64];
                     snprintf(tmp, sizeof(tmp), "cmp rax, %s", val_buf);
                     cg_inst(cg, tmp);
-                    cg_write_fmt(cg, "    jne L_%x\n", next_label);
+                    cg_write_fmt(cg, "    je L_%x\n", body_label);
                 } else if (pat->type == NODE_BINARY_OP &&
                            (pat->data.binary.op == BIN_RANGE || pat->data.binary.op == BIN_RANGE_INCLUSIVE)) {
                     /* Range pattern: case 1..9 or case 1..=9 */
@@ -2087,14 +2088,31 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     } else {
                         cg_write_fmt(cg, "    jge L_%x\n", next_label);  /* if rax >= end, skip */
                     }
+                    cg_write_fmt(cg, "    jmp L_%x\n", body_label);
+                }
+                /* Check additional comma-separated patterns */
+                for (int j = 0; j < arm->data.match_arm.patterns.count; j++) {
+                    AstNode *extra = arm->data.match_arm.patterns.items[j];
+                    if (!extra) continue;
+                    if (extra->type == NODE_LITERAL_INT) {
+                        char val_buf[32];
+                        snprintf(val_buf, sizeof(val_buf), "%llu", (unsigned long long)extra->data.literal.int_val);
+                        char tmp[64];
+                        snprintf(tmp, sizeof(tmp), "cmp rax, %s", val_buf);
+                        cg_inst(cg, tmp);
+                        cg_write_fmt(cg, "    je L_%x\n", body_label);
+                    }
                 }
 
                 if (!is_wildcard) {
-                    /* Emit arm body */
-                    if (arm->data.match_arm.body)
-                        cg_expr(cg, arm->data.match_arm.body, slots);
-                    cg_write_fmt(cg, "    jmp L_%x\n", end_label);
+                    cg_write_fmt(cg, "    jmp L_%x\n", next_label);
                 }
+
+                /* Arm body label */
+                cg_write_fmt(cg, "L_%x:\n", body_label);
+                if (arm->data.match_arm.body)
+                    cg_expr(cg, arm->data.match_arm.body, slots);
+                cg_write_fmt(cg, "    jmp L_%x\n", end_label);
 
                 cg_write_fmt(cg, "L_%x:\n", next_label);
                 if (i == node->data.match_node.arms.count - 1) {
@@ -2401,6 +2419,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             for (int i = 0; i < node->data.match_node.arms.count; i++) {
                 AstNode *arm = node->data.match_node.arms.items[i];
                 int next_label = cg_new_label(cg);
+                int body_label = cg_new_label(cg);
 
                 /* Reload matched value */
                 cg_inst1(cg, "mov", "rax, [rsp]");
@@ -2416,15 +2435,31 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     char tmp[64];
                     snprintf(tmp, sizeof(tmp), "cmp rax, %s", val_buf);
                     cg_inst(cg, tmp);
-                    cg_write_fmt(cg, "    jne L_%x\n", next_label);
+                    cg_write_fmt(cg, "    je L_%x\n", body_label);
+                }
+                /* Check additional comma-separated patterns */
+                for (int j = 0; j < arm->data.match_arm.patterns.count; j++) {
+                    AstNode *extra = arm->data.match_arm.patterns.items[j];
+                    if (!extra) continue;
+                    if (extra->type == NODE_LITERAL_INT) {
+                        char val_buf[32];
+                        snprintf(val_buf, sizeof(val_buf), "%llu", (unsigned long long)extra->data.literal.int_val);
+                        char tmp[64];
+                        snprintf(tmp, sizeof(tmp), "cmp rax, %s", val_buf);
+                        cg_inst(cg, tmp);
+                        cg_write_fmt(cg, "    je L_%x\n", body_label);
+                    }
                 }
 
                 if (!is_wildcard) {
-                    /* Emit arm body */
-                    if (arm->data.match_arm.body)
-                        cg_expr(cg, arm->data.match_arm.body, slots);
-                    cg_write_fmt(cg, "    jmp L_%x\n", end_label);
+                    cg_write_fmt(cg, "    jmp L_%x\n", next_label);
                 }
+
+                /* Arm body label */
+                cg_write_fmt(cg, "L_%x:\n", body_label);
+                if (arm->data.match_arm.body)
+                    cg_expr(cg, arm->data.match_arm.body, slots);
+                cg_write_fmt(cg, "    jmp L_%x\n", end_label);
 
                 cg_write_fmt(cg, "L_%x:\n", next_label);
                 if (i == node->data.match_node.arms.count - 1) {

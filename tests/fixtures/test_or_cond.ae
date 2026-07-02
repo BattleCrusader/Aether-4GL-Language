@@ -1,0 +1,10 @@
+// test_or_cond.ae — test 'or' in if condition
+import "std/io"
+
+func main(): u64 {
+    let c: byte = 32
+    if c == 32 or c == 9 {
+        print("whitespace")
+    }
+    return 0
+}

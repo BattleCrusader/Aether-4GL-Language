@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 /* ──────────────────────────────────────────────
  * Runtime helpers — emit C runtime functions
@@ -45,11 +46,21 @@ void c_emit_runtime(CCodegen *cg) {
     fputs("    return (string){ len, result };\n", cg->out);
     fputs("}\n\n", cg->out);
 
-    /* Emit print — only for host targets; stdlib provides its own for TARGET_LIB */
-    if (cg->target != TARGET_LIB) {
+    /* Emit print — only for host targets when stdlib isn't providing it.
+     * The std/io.ae library always defines its own print(), so this is
+     * only a fallback for targets that don't import std/io. */
+    if (cg->target != TARGET_LIB && cg->target != TARGET_HOST) {
         fputs("static void print(string s) {\n", cg->out);
         fputs("    fwrite(s.data, 1, s.len, stdout);\n", cg->out);
         fputs("}\n\n", cg->out);
+    }
+
+    /* Emit syscall wrappers for std/io.ae — these are extern'd by the
+     * C codegen for sys functions. On host, they map to libc. */
+    if (cg->target == TARGET_HOST) {
+        fputs("void __aether_sys_puts(string s) { fwrite(s.data, 1, s.len, stdout); fputc('\\n', stdout); }\n", cg->out);
+        fputs("void __aether_sys_putserr(string s) { fwrite(s.data, 1, s.len, stderr); fputc('\\n', stderr); }\n", cg->out);
+        fputs("uint64_t __aether_sys_read(uint64_t fd, uint64_t buf, uint64_t count) { return (uint64_t)read((int)fd, (void*)buf, (size_t)count); }\n\n", cg->out);
     }
 
     /* Emit __aether_alloc / __aether_free */

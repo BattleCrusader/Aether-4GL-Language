@@ -1279,6 +1279,7 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
                     /* Emit additional comma-separated patterns as || */
                     for (int j = 0; j < arm->data.match_arm.patterns.count; j++) {
                         AstNode *extra = arm->data.match_arm.patterns.items[j];
+                        if (!extra) continue;
                         fputs(" || (", cg->out);
                         c_emit_expr(cg, val);
                         fputs(") == (", cg->out);

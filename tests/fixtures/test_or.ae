@@ -1,0 +1,8 @@
+// test_or.ae — test 'or' keyword
+func main(): u64 {
+    let c: byte = 32
+    if c == 32 or c == 9 {
+        return 1
+    }
+    return 0
+}

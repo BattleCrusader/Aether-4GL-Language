@@ -30,7 +30,7 @@ enum TokenType {
     DASH
     GT
     NEWLINE
-    EOF
+    TOK_EOF
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -63,12 +63,12 @@ func lexerCreate(input: string): Lexer {
 }
 
 func lexerPeek(l: ref Lexer): byte {
-    if l.pos >= stringLength(l.input) { return 0 }
+    if l.pos >= #l.input { return 0 }
     return l.input[l.pos]
 }
 
 func lexerAdvance(l: ref Lexer) {
-    if l.pos < stringLength(l.input) {
+    if l.pos < #l.input {
         if l.input[l.pos] == 10 {
             l.line = l.line + 1
             l.col = 1
@@ -82,28 +82,15 @@ func lexerAdvance(l: ref Lexer) {
 func lexerSkipWhitespace(l: ref Lexer) {
     while true {
         let c: byte = lexerPeek(l)
-        if c == 32 || c == 9 { lexerAdvance(l) }
-        else { break }
+        if c == 32 or c == 9 { lexerAdvance(l) } else { break }
     }
 }
 
 func lexerIsSpecial(c: byte): bool {
-    if c == 0 { return true }
-    if c == 10 { return true }
-    if c == 35 { return true }
-    if c == 42 { return true }
-    if c == 95 { return true }
-    if c == 96 { return true }
-    if c == 91 { return true }
-    if c == 93 { return true }
-    if c == 40 { return true }
-    if c == 41 { return true }
-    if c == 33 { return true }
-    if c == 45 { return true }
-    if c == 62 { return true }
-    if c == 32 { return true }
-    if c == 9 { return true }
-    return false
+    return match c {
+        case 0, 10, 35, 42, 95, 96, 91, 93, 40, 41, 33, 45, 62, 32, 9 -> true
+        case _ -> false
+    }
 }
 
 func lexerEmitToken(l: ref Lexer, kind: TokenType, text: string, line: u64, col: u64) {
@@ -117,7 +104,7 @@ func lexerEmitToken(l: ref Lexer, kind: TokenType, text: string, line: u64, col:
 
 func lexerTokenize(l: ref Lexer): [Token] {
     l.tokens = []
-    while l.pos < stringLength(l.input) {
+    while l.pos < #l.input {
         let c: byte = lexerPeek(l)
         let startLine: u64 = l.line
         let startCol: u64 = l.col
@@ -185,11 +172,11 @@ func lexerTokenize(l: ref Lexer): [Token] {
             text = text + ch
             lexerAdvance(l)
         }
-        if stringLength(text) > 0 {
+        if #text > 0 {
             lexerEmitToken(l, TokenType::TEXT, text, startLine, startCol)
         }
     }
-    lexerEmitToken(l, TokenType::EOF, "", l.line, l.col)
+    lexerEmitToken(l, TokenType::TOK_EOF, "", l.line, l.col)
     return l.tokens
 }
 
@@ -244,7 +231,7 @@ func parserCreate(tokens: [Token]): Parser {
 func parserPeek(p: ref Parser): Token {
     if p.pos >= #p.tokens {
         let mut eof: Token
-        eof.kind = TokenType::EOF
+        eof.kind = TokenType::TOK_EOF
         return eof
     }
     return p.tokens[p.pos]
@@ -269,7 +256,7 @@ func parserParse(p: ref Parser): HtmlNode {
 
     while p.pos < #p.tokens {
         let t: Token = parserPeek(p)
-        if t.kind == TokenType::EOF { break }
+        if t.kind == TokenType::TOK_EOF { break }
 
         // Skip standalone newlines
         if t.kind == TokenType::NEWLINE {
@@ -310,7 +297,7 @@ func parserParse(p: ref Parser): HtmlNode {
             }
             // Read the rest of the line
             let mut headingText: string = ""
-            while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::EOF {
+            while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::TOK_EOF {
                 headingText = headingText + parserPeek(p).text
                 parserAdvance(p)
             }
@@ -329,7 +316,7 @@ func parserParse(p: ref Parser): HtmlNode {
         if t.kind == TokenType::GT {
             parserAdvance(p)
             let mut quoteText: string = ""
-            while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::EOF {
+            while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::TOK_EOF {
                 quoteText = quoteText + parserPeek(p).text
                 parserAdvance(p)
             }
@@ -345,7 +332,7 @@ func parserParse(p: ref Parser): HtmlNode {
         if t.kind == TokenType::DASH {
             parserAdvance(p)
             let mut itemText: string = ""
-            while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::EOF {
+            while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::TOK_EOF {
                 itemText = itemText + parserPeek(p).text
                 parserAdvance(p)
             }
@@ -359,9 +346,9 @@ func parserParse(p: ref Parser): HtmlNode {
 
         // Paragraph (text until blank line or heading/blockquote)
         let mut paraText: string = ""
-        while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::EOF
-              and parserPeek(p).kind != TokenType::HASH and parserPeek(p).kind != TokenType::GT
-              and parserPeek(p).kind != TokenType::DASH {
+        while parserPeek(p).kind != TokenType::NEWLINE && parserPeek(p).kind != TokenType::TOK_EOF
+              && parserPeek(p).kind != TokenType::HASH && parserPeek(p).kind != TokenType::GT
+              && parserPeek(p).kind != TokenType::DASH {
             paraText = paraText + parserPeek(p).text
             parserAdvance(p)
         }
@@ -496,11 +483,11 @@ func renderHtml(root: HtmlNode): string {
     html = html + "<meta charset=\"UTF-8\">\n"
     html = html + "<title>Markdown Output</title>\n"
     html = html + "<style>\n"
-    html = html + "body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }\n"
-    html = html + "code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }\n"
-    html = html + "pre { background: #f4f4f4; padding: 16px; border-radius: 5px; overflow-x: auto; }\n"
-    html = html + "blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; }\n"
-    html = html + "hr { border: none; border-top: 2px solid #ddd; }\n"
+    html = html + "body \{ font-family: -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; \}\n"
+    html = html + "code \{ background: #f4f4f4; padding: 2px 6px; border-radius: 3px; \}\n"
+    html = html + "pre \{ background: #f4f4f4; padding: 16px; border-radius: 5px; overflow-x: auto; \}\n"
+    html = html + "blockquote \{ border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; \}\n"
+    html = html + "hr \{ border: none; border-top: 2px solid #ddd; \}\n"
     html = html + "</style>\n</head>\n<body>\n"
 
     let mut i: u64 = 0

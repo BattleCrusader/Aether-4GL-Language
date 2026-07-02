@@ -1,0 +1,8 @@
+// test_and.ae — test 'and' keyword
+func main(): u64 {
+    let c: byte = 32
+    while c == 32 and c == 9 {
+        c = 0
+    }
+    return 0
+}

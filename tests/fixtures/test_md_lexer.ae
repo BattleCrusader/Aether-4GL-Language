@@ -1,0 +1,17 @@
+// test_md_lexer.ae — test lexerIsSpecial with match
+import "std/io"
+
+func lexerIsSpecial(c: byte): bool {
+    return match c {
+        case 0, 10, 35, 42, 95, 96, 91, 93, 40, 41, 33, 45, 62, 32, 9 -> true
+        case _ -> false
+    }
+}
+
+func main(): u64 {
+    let c: byte = 32
+    if lexerIsSpecial(c) {
+        print("special")
+    }
+    return 0
+}
