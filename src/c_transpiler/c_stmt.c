@@ -366,17 +366,17 @@ static void c_emit_struct_decl(CCodegen *cg, AstNode *node) {
     c_indent(cg);
     fprintf(cg->out, "} %.*s;\n\n", (int)sname.len, sname.data);
 
-    /* Emit invariant check function for debug builds */
-    if (node->data.struct_decl.invariants.count > 0) {
+    /* Emit contract check function for debug builds */
+    if (node->data.struct_decl.contracts.count > 0) {
         c_indent(cg);
-        fprintf(cg->out, "static void %.*s_check_invariants(%.*s self) {\n",
+        fprintf(cg->out, "static void %.*s_check_contracts(%.*s self) {\n",
                 (int)sname.len, sname.data, (int)sname.len, sname.data);
         cg->indent++;
-        for (int i = 0; i < node->data.struct_decl.invariants.count; i++) {
+        for (int i = 0; i < node->data.struct_decl.contracts.count; i++) {
             c_indent(cg);
             fputs("assert((", cg->out);
-            c_emit_expr(cg, node->data.struct_decl.invariants.items[i]);
-            fputs(") && \"invariant failed\");\n", cg->out);
+            c_emit_expr(cg, node->data.struct_decl.contracts.items[i]);
+            fputs(") && \"contract failed\");\n", cg->out);
         }
         cg->indent--;
         c_indent(cg);
