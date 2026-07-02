@@ -1,8 +1,8 @@
 # Aether Compiler — Development Plan
 
-> **Current branch:** `feature/P35.00-wire-remaining-fixtures`
+> **Current branch:** `feature/P36.00-throws-call-propagation`
 > **Last updated:** 2026-07-01
-> **Status:** All 35 phases complete. C transpiler is the default backend. 54/54 host-native tests pass. All 85 test fixtures wired into Makefile.
+> **Status:** All 36 phases complete. C transpiler is the default backend. 54/54 host-native tests pass. All 85 test fixtures wired into Makefile.
 
 ---
 
@@ -17,6 +17,7 @@
 | 18 | Standard library in pure Aether | ✅ Complete |
 | 20–34 | C transpiler backend — all parsed features transpiled, tested, documented | ✅ Complete |
 | 35 | Wire all remaining 48 fixtures into Makefile TEST_FIXTURES | ✅ Complete |
+| 36 | Throws error propagation — return-struct pattern, call-site check | ✅ Complete |
 
 ---
 
@@ -76,6 +77,6 @@ src/c_transpiler/
 - **`pub` → `public`** keyword (Phase 32.00)
 - **`inv` → `contract`** keyword for struct/class contracts (Phase 33.00)
 - **Ownership**: `owned T` → `T*` with auto-free, `rc T` → `void*` with retain/release
-- **Throws**: return type struct with `ThrowResult_FuncName` typedef
+- **Throws**: return-struct pattern with call-site compound expression check (Phase 36.00)
 - **Generics**: monomorphization with `T: Constraint` syntax
 - **All 85 test fixtures** wired into Makefile (Phase 35.00)
