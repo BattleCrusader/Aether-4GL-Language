@@ -181,7 +181,44 @@ TEST_FIXTURES = \
 	tests/fixtures/test_type_tuple.ae \
 	tests/fixtures/test_default_param.ae \
 	tests/fixtures/test_extern.ae \
-	tests/fixtures/test_finally.ae
+	tests/fixtures/test_finally.ae \
+	tests/fixtures/test_spec_03_comments.ae \
+	tests/fixtures/test_spec_03_identifiers.ae \
+	tests/fixtures/test_spec_03_indentation.ae \
+	tests/fixtures/test_spec_03_keywords.ae \
+	tests/fixtures/test_spec_03_literals_bool_none.ae \
+	tests/fixtures/test_spec_03_literals_floats.ae \
+	tests/fixtures/test_spec_03_literals_integers.ae \
+	tests/fixtures/test_spec_03_literals_interpolation.ae \
+	tests/fixtures/test_spec_03_literals_strings.ae \
+	tests/fixtures/test_spec_03_operators_arithmetic.ae \
+	tests/fixtures/test_spec_03_operators_bitwise.ae \
+	tests/fixtures/test_spec_03_operators_comparison.ae \
+	tests/fixtures/test_spec_03_operators_compound.ae \
+	tests/fixtures/test_spec_03_operators_incdec.ae \
+	tests/fixtures/test_spec_03_operators_logical.ae \
+	tests/fixtures/test_spec_03_operators_precedence.ae \
+	tests/fixtures/test_spec_03_operators_range.ae \
+	tests/fixtures/test_spec_03_string_indexing_concat.ae \
+	tests/fixtures/test_spec_04_classes.ae \
+	tests/fixtures/test_spec_04_compound_types.ae \
+	tests/fixtures/test_spec_04_enums.ae \
+	tests/fixtures/test_spec_04_optionals.ae \
+	tests/fixtures/test_spec_04_overflow.ae \
+	tests/fixtures/test_spec_04_primitives.ae \
+	tests/fixtures/test_spec_04_structs.ae \
+	tests/fixtures/test_spec_04_traits.ae \
+	tests/fixtures/test_spec_04_type_aliases.ae \
+	tests/fixtures/test_spec_04_type_casting.ae \
+	tests/fixtures/test_spec_18_os_integration.ae \
+	tests/fixtures/test_spec_19_multi_target.ae \
+	tests/fixtures/test_spec_20_universal_binaries.ae \
+	tests/fixtures/test_spec_21_stdlib.ae \
+	tests/fixtures/test_spec_22_build_system.ae \
+	tests/fixtures/test_spec_23_compiler_targets.ae \
+	tests/fixtures/test_spec_24_future_features.ae \
+	tests/fixtures/test_spec_25_concurrency_fibers.ae \
+	tests/fixtures/test_spec_26_module_system.ae
 
 # .aelib library fixtures — must be built before test-host
 AELIB_FIXTURES = \
