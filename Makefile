@@ -161,6 +161,7 @@ TEST_FIXTURES = \
 	tests/fixtures/test_throws.ae \
 	tests/fixtures/test_generic_constraint.ae \
 	tests/fixtures/test_contracts.ae \
+	tests/fixtures/test_comptime_reflection.ae \
 	tests/fixtures/test_interp_numbers.ae \
 	tests/fixtures/test_interp_numeric.ae \
 	tests/fixtures/test_interp_num_concat.ae \

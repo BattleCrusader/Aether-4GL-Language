@@ -1,4 +1,6 @@
 #include "aether/semantic.h"
+#include "aether/parser.h"
+#include "aether/arena.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -846,13 +848,13 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             }
             break;
 
-        case NODE_RUN_BLOCK:
+        case NODE_RUN_BLOCK: {
             /* Visit #run body statements for name resolution */
             for (int i = 0; i < node->data.list.count; i++) {
                 semantic_visit_node(sa, node->data.list.items[i]);
             }
             break;
-
+        }
         default:
             break;
     }
@@ -1114,6 +1116,73 @@ void semantic_analyze(SemanticAnalyzer *sa, AstNode *program) {
     AstNode *panic_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
     memset(panic_decl, 0, sizeof(AstNode)); panic_decl->type = NODE_FUNC_DECL;
     scope_declare(sa, "panic", panic_decl);
+
+    /* Register compile-time built-in: emit("code") — injects generated code */
+    AstNode *emit_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
+    memset(emit_decl, 0, sizeof(AstNode)); emit_decl->type = NODE_FUNC_DECL;
+    scope_declare(sa, "emit", emit_decl);
+
+    /* Register compile-time built-in: target_arch() — returns architecture name */
+    AstNode *target_arch_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
+    memset(target_arch_decl, 0, sizeof(AstNode)); target_arch_decl->type = NODE_FUNC_DECL;
+    scope_declare(sa, "target_arch", target_arch_decl);
+
+    /* Pre-pass: process all #run blocks (emit() injects declarations before body pass) */
+    for (int i = 0; i < program->data.list.count; i++) {
+        if (program->data.list.items[i]->type == NODE_RUN_BLOCK) {
+            AstNode *node = program->data.list.items[i];
+            for (int j = 0; j < node->data.list.count; j++) {
+                semantic_visit_node(sa, node->data.list.items[j]);
+            }
+            /* Execute emit() calls in this #run block */
+            for (int j = 0; j < node->data.list.count; j++) {
+                AstNode *stmt = node->data.list.items[j];
+                AstNode *expr = NULL;
+                if (stmt->type == NODE_EXPR_STMT) expr = stmt->data.call.callee;
+                else if (stmt->type == NODE_CALL) expr = stmt;
+                if (!expr || expr->type != NODE_CALL) continue;
+                if (!expr->data.call.callee || expr->data.call.callee->type != NODE_IDENT) continue;
+                const char *fname = arena_strndup(sa->arena,
+                    expr->data.call.callee->data.ident.name.data,
+                    expr->data.call.callee->data.ident.name.len);
+                if (strcmp(fname, "emit") != 0 || expr->data.call.args.count < 1) continue;
+                AstNode *arg = expr->data.call.args.items[0];
+                if (arg->type != NODE_LITERAL_STRING) continue;
+                StringView code = arg->data.literal.string_val;
+                if (code.len >= 2 && code.data[0] == '"' && code.data[code.len-1] == '"') {
+                    code.data++;
+                    code.len -= 2;
+                }
+                if (code.len == 0 || !code.data) continue;
+                char *code_copy = (char *)arena_alloc(sa->arena, code.len + 1);
+                memcpy(code_copy, code.data, code.len);
+                code_copy[code.len] = '\0';
+                Arena *temp_arena = arena_create();
+                Parser *p = parser_create_with_arena(code_copy, code.len, "<emit>", temp_arena);
+                if (p) {
+                    AstNode *generated = parser_parse(p);
+                    if (generated && generated->type == NODE_PROGRAM) {
+                        for (int gi = 0; gi < generated->data.list.count; gi++) {
+                            AstNode *gen_decl = generated->data.list.items[gi];
+                            AstNode *copy = node_create(sa->arena, gen_decl->type, gen_decl->loc);
+                            if (gen_decl->type == NODE_FUNC_DECL) {
+                                copy->data.func = gen_decl->data.func;
+                                copy->data.func.name = node_ident(sa->arena,
+                                    gen_decl->data.func.name->loc,
+                                    gen_decl->data.func.name->data.ident.name);
+                                const char *gfname = arena_strndup(sa->arena,
+                                    copy->data.func.name->data.ident.name.data,
+                                    copy->data.func.name->data.ident.name.len);
+                                scope_declare(sa, gfname, copy);
+                            }
+                            node_list_append(&sa->program->data.list, copy);
+                        }
+                    }
+                    arena_destroy(temp_arena);
+                }
+            }
+        }
+    }
 
     semantic_visit_node(sa, program);
 }
