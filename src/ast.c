@@ -232,6 +232,7 @@ AstNode *node_match_arm(Arena *a, Location loc, AstNode *pattern, AstNode *body)
     if (node) {
         node->data.match_arm.pattern = pattern;
         node->data.match_arm.body = body;
+        node->data.match_arm.patterns = (AstNodeList){0};
     }
     return node;
 }

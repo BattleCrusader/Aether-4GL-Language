@@ -249,7 +249,8 @@ typedef struct {
 
 /* Match arm */
 typedef struct {
-    AstNode *pattern;       /* pattern expression */
+    AstNode *pattern;       /* first pattern expression (or NULL for wildcard _) */
+    AstNodeList patterns;   /* additional comma-separated patterns */
     AstNodeList guards;     /* guard conditions (empty if none) */
     AstNode *body;          /* result expression */
 } MatchArm;

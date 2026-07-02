@@ -1252,16 +1252,40 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
             int arms = node->data.match_node.arms.count;
             for (int i = 0; i < arms; i++) {
                 AstNode *arm = node->data.match_node.arms.items[i];
-                int is_default = (arm->data.match_arm.pattern &&
-                    arm->data.match_arm.pattern->type == NODE_IDENT &&
-                    arm->data.match_arm.pattern->data.ident.name.len == 1 &&
-                    arm->data.match_arm.pattern->data.ident.name.data[0] == '_');
+                AstNode *pat = arm->data.match_arm.pattern;
+                int is_default = (pat && pat->type == NODE_IDENT &&
+                    pat->data.ident.name.len == 1 &&
+                    pat->data.ident.name.data[0] == '_');
                 if (!is_default) {
                     fputs("(", cg->out);
-                    c_emit_expr(cg, val);
-                    fputs(") == (", cg->out);
-                    c_emit_expr(cg, arm->data.match_arm.pattern);
-                    fputs(") ? (", cg->out);
+                    /* Range pattern: emit as >= && <= */
+                    if (pat && pat->type == NODE_BINARY_OP &&
+                        (pat->data.binary.op == BIN_RANGE ||
+                         pat->data.binary.op == BIN_RANGE_INCLUSIVE)) {
+                        c_emit_expr(cg, val);
+                        fputs(") >= (", cg->out);
+                        c_emit_expr(cg, pat->data.binary.left);
+                        fputs(") && (", cg->out);
+                        c_emit_expr(cg, val);
+                        fputs(") <= (", cg->out);
+                        c_emit_expr(cg, pat->data.binary.right);
+                        fputs(")", cg->out);
+                    } else {
+                        c_emit_expr(cg, val);
+                        fputs(") == (", cg->out);
+                        c_emit_expr(cg, pat);
+                        fputs(")", cg->out);
+                    }
+                    /* Emit additional comma-separated patterns as || */
+                    for (int j = 0; j < arm->data.match_arm.patterns.count; j++) {
+                        AstNode *extra = arm->data.match_arm.patterns.items[j];
+                        fputs(" || (", cg->out);
+                        c_emit_expr(cg, val);
+                        fputs(") == (", cg->out);
+                        c_emit_expr(cg, extra);
+                        fputs(")", cg->out);
+                    }
+                    fputs(" ? (", cg->out);
                     if (arm->data.match_arm.body) c_emit_expr(cg, arm->data.match_arm.body);
                     fputs(")", cg->out);
                     if (i < arms - 1) fputs(" : ", cg->out);

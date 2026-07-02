@@ -542,14 +542,43 @@ void c_emit_stmt(CCodegen *cg, AstNode *node) {
             fputs(";\n", cg->out);
             for (int i = 0; i < node->data.match_node.arms.count; i++) {
                 AstNode *arm = node->data.match_node.arms.items[i];
+                AstNode *pat = arm->data.match_arm.pattern;
                 c_indent(cg);
                 if (i == 0) {
-                    fputs("if (__match_val == ", cg->out);
+                    fputs("if (", cg->out);
                 } else {
-                    fputs("else if (__match_val == ", cg->out);
+                    fputs("else if (", cg->out);
                 }
-                if (arm->data.match_arm.pattern) {
-                    c_emit_expr(cg, arm->data.match_arm.pattern);
+                /* Wildcard _ pattern: always true */
+                if (pat && pat->type == NODE_IDENT &&
+                    sv_eq_cstr(pat->data.ident.name, "_")) {
+                    fputs("1", cg->out);
+                } else {
+                    /* Emit the first pattern */
+                    int emitted = 0;
+                    if (pat) {
+                        /* Range pattern: BIN_RANGE or BIN_RANGE_INCLUSIVE */
+                        if (pat->type == NODE_BINARY_OP &&
+                            (pat->data.binary.op == BIN_RANGE ||
+                             pat->data.binary.op == BIN_RANGE_INCLUSIVE)) {
+                            fputs("__match_val >= ", cg->out);
+                            c_emit_expr(cg, pat->data.binary.left);
+                            fputs(" && __match_val <= ", cg->out);
+                            c_emit_expr(cg, pat->data.binary.right);
+                            emitted = 1;
+                        } else {
+                            fputs("__match_val == ", cg->out);
+                            c_emit_expr(cg, pat);
+                            emitted = 1;
+                        }
+                    }
+                    /* Emit additional comma-separated patterns as || */
+                    for (int j = 0; j < arm->data.match_arm.patterns.count; j++) {
+                        AstNode *extra = arm->data.match_arm.patterns.items[j];
+                        fputs(" || __match_val == ", cg->out);
+                        c_emit_expr(cg, extra);
+                    }
+                    if (!emitted) fputs("1", cg->out);
                 }
                 fputs(") {\n", cg->out);
                 cg->indent++;

@@ -1,0 +1,51 @@
+// test_match_advanced.ae — Advanced match patterns
+import "std/test"
+
+func classify(value: u64): u64 {
+    return match value {
+        case 0 -> 0
+        case 1 -> 1
+        case 2 -> 1
+        case 3 -> 1
+        case 4..9 -> 2
+        case _ -> 3
+    }
+}
+
+@test
+func test_match_single(): u64 {
+    let result = classify(0)
+    assertEquals(0, result, "single pattern 0 should match 0")
+    return 0
+}
+
+@test
+func test_match_comma(): u64 {
+    let r1 = classify(1)
+    let r2 = classify(2)
+    let r3 = classify(3)
+    assertEquals(1, r1, "comma pattern 1 should match 1")
+    assertEquals(1, r2, "comma pattern 2 should match 2")
+    assertEquals(1, r3, "comma pattern 3 should match 3")
+    return 0
+}
+
+@test
+func test_match_range(): u64 {
+    let r4 = classify(4)
+    let r6 = classify(6)
+    let r9 = classify(9)
+    assertEquals(2, r4, "range 4 should match 4..9")
+    assertEquals(2, r6, "range 6 should match 4..9")
+    assertEquals(2, r9, "range 9 should match 4..9")
+    return 0
+}
+
+@test
+func test_match_wildcard(): u64 {
+    let r10 = classify(10)
+    let r99 = classify(99)
+    assertEquals(3, r10, "wildcard should match 10")
+    assertEquals(3, r99, "wildcard should match 99")
+    return 0
+}

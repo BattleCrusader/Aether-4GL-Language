@@ -1,0 +1,560 @@
+// markdown_to_html.ae — A Markdown-to-HTML converter
+//
+// Demonstrates: enums, structs, error handling (try/catch/throw),
+// string manipulation, arrays, built-in functions (sizeof, typeName),
+// string interpolation, and the standard library (io, str, math, test).
+//
+// Usage: aether run examples/markdown_to_html.ae
+//        (reads from stdin, writes HTML to stdout)
+
+import "std/io"
+import "std/str"
+import "std/math"
+import "std/test"
+
+// ═══════════════════════════════════════════════════════════════
+// §1 — Token types for the Markdown lexer
+// ═══════════════════════════════════════════════════════════════
+
+enum TokenType {
+    TEXT
+    HASH
+    STAR
+    UNDERSCORE
+    BACKTICK
+    LBRACKET
+    RBRACKET
+    LPAREN
+    RPAREN
+    BANG
+    DASH
+    GT
+    NEWLINE
+    EOF
+}
+
+// ═══════════════════════════════════════════════════════════════
+// §2 — Token and Lexer
+// ═══════════════════════════════════════════════════════════════
+
+struct Token {
+    kind: TokenType
+    text: string
+    line: u64
+    col: u64
+}
+
+struct Lexer {
+    input: string
+    pos: u64
+    line: u64
+    col: u64
+    tokens: [Token]
+}
+
+func lexerCreate(input: string): Lexer {
+    let mut l: Lexer
+    l.input = input
+    l.pos = 0
+    l.line = 1
+    l.col = 1
+    l.tokens = []
+    return l
+}
+
+func lexerPeek(l: ref Lexer): byte {
+    if l.pos >= stringLength(l.input) { return 0 }
+    return l.input[l.pos]
+}
+
+func lexerAdvance(l: ref Lexer) {
+    if l.pos < stringLength(l.input) {
+        if l.input[l.pos] == 10 {
+            l.line = l.line + 1
+            l.col = 1
+        } else {
+            l.col = l.col + 1
+        }
+        l.pos = l.pos + 1
+    }
+}
+
+func lexerSkipWhitespace(l: ref Lexer) {
+    while true {
+        let c: byte = lexerPeek(l)
+        if c == 32 || c == 9 { lexerAdvance(l) }
+        else { break }
+    }
+}
+
+func lexerIsSpecial(c: byte): bool {
+    if c == 0 { return true }
+    if c == 10 { return true }
+    if c == 35 { return true }
+    if c == 42 { return true }
+    if c == 95 { return true }
+    if c == 96 { return true }
+    if c == 91 { return true }
+    if c == 93 { return true }
+    if c == 40 { return true }
+    if c == 41 { return true }
+    if c == 33 { return true }
+    if c == 45 { return true }
+    if c == 62 { return true }
+    if c == 32 { return true }
+    if c == 9 { return true }
+    return false
+}
+
+func lexerEmitToken(l: ref Lexer, kind: TokenType, text: string, line: u64, col: u64) {
+    let mut t: Token
+    t.kind = kind
+    t.text = text
+    t.line = line
+    t.col = col
+    l.tokens = l.tokens + [t]
+}
+
+func lexerTokenize(l: ref Lexer): [Token] {
+    l.tokens = []
+    while l.pos < stringLength(l.input) {
+        let c: byte = lexerPeek(l)
+        let startLine: u64 = l.line
+        let startCol: u64 = l.col
+
+        if c == 0 { break }
+
+        // Newline
+        if c == 10 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::NEWLINE, "\n", startLine, startCol)
+            continue
+        }
+
+        // Hash (heading)
+        if c == 35 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::HASH, "#", startLine, startCol)
+            continue
+        }
+
+        // Star
+        if c == 42 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::STAR, "*", startLine, startCol)
+            continue
+        }
+
+        // Underscore
+        if c == 95 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::UNDERSCORE, "_", startLine, startCol)
+            continue
+        }
+
+        // Backtick
+        if c == 96 {
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::BACKTICK, "`", startLine, startCol)
+            continue
+        }
+
+        // Brackets
+        if c == 91 { lexerAdvance(l); lexerEmitToken(l, TokenType::LBRACKET, "[", startLine, startCol); continue }
+        if c == 93 { lexerAdvance(l); lexerEmitToken(l, TokenType::RBRACKET, "]", startLine, startCol); continue }
+        if c == 40 { lexerAdvance(l); lexerEmitToken(l, TokenType::LPAREN, "(", startLine, startCol); continue }
+        if c == 41 { lexerAdvance(l); lexerEmitToken(l, TokenType::RPAREN, ")", startLine, startCol); continue }
+
+        // Bang
+        if c == 33 { lexerAdvance(l); lexerEmitToken(l, TokenType::BANG, "!", startLine, startCol); continue }
+
+        // Dash
+        if c == 45 { lexerAdvance(l); lexerEmitToken(l, TokenType::DASH, "-", startLine, startCol); continue }
+
+        // Greater-than (blockquote)
+        if c == 62 { lexerAdvance(l); lexerEmitToken(l, TokenType::GT, ">", startLine, startCol); continue }
+
+        // Space or tab — skip
+        if c == 32 or c == 9 { lexerSkipWhitespace(l); continue }
+
+        // Regular text — read until a special character
+        let mut text: string = ""
+        while true {
+            let ch: byte = lexerPeek(l)
+            if lexerIsSpecial(ch) { break }
+            text = text + ch
+            lexerAdvance(l)
+        }
+        if stringLength(text) > 0 {
+            lexerEmitToken(l, TokenType::TEXT, text, startLine, startCol)
+        }
+    }
+    lexerEmitToken(l, TokenType::EOF, "", l.line, l.col)
+    return l.tokens
+}
+
+// ═══════════════════════════════════════════════════════════════
+// §3 — HTML Node types (AST for the output)
+// ═══════════════════════════════════════════════════════════════
+
+enum HtmlNodeType {
+    ROOT
+    HEADING1
+    HEADING2
+    HEADING3
+    PARAGRAPH
+    BOLD_TEXT
+    ITALIC_TEXT
+    CODE_TEXT
+    LINK_NODE
+    IMAGE_NODE
+    LIST_ITEM_NODE
+    UNORDERED_LIST
+    BLOCKQUOTE_NODE
+    CODE_BLOCK_NODE
+    HORIZONTAL_RULE
+    RAW_TEXT
+}
+
+struct HtmlNode {
+    kind: HtmlNodeType
+    text: string
+    url: string
+    children: [HtmlNode]
+}
+
+// ═══════════════════════════════════════════════════════════════
+// §4 — Parser: tokens → HTML AST
+// ═══════════════════════════════════════════════════════════════
+
+struct Parser {
+    tokens: [Token]
+    pos: u64
+    nodes: [HtmlNode]
+}
+
+func parserCreate(tokens: [Token]): Parser {
+    let mut p: Parser
+    p.tokens = tokens
+    p.pos = 0
+    p.nodes = []
+    return p
+}
+
+func parserPeek(p: ref Parser): Token {
+    if p.pos >= #p.tokens {
+        let mut eof: Token
+        eof.kind = TokenType::EOF
+        return eof
+    }
+    return p.tokens[p.pos]
+}
+
+func parserAdvance(p: ref Parser) {
+    if p.pos < #p.tokens {
+        p.pos = p.pos + 1
+    }
+}
+
+func parserExpect(p: ref Parser, kind: TokenType): bool {
+    let t: Token = parserPeek(p)
+    if t.kind == kind { parserAdvance(p); return true }
+    return false
+}
+
+func parserParse(p: ref Parser): HtmlNode {
+    let mut root: HtmlNode
+    root.kind = HtmlNodeType::ROOT
+    root.children = []
+
+    while p.pos < #p.tokens {
+        let t: Token = parserPeek(p)
+        if t.kind == TokenType::EOF { break }
+
+        // Skip standalone newlines
+        if t.kind == TokenType::NEWLINE {
+            parserAdvance(p)
+            continue
+        }
+
+        // Horizontal rule: ---
+        if t.kind == TokenType::DASH {
+            let mut dashCount: u64 = 1
+            parserAdvance(p)
+            while parserPeek(p).kind == TokenType::DASH {
+                dashCount = dashCount + 1
+                parserAdvance(p)
+            }
+            if dashCount >= 3 {
+                let mut hr: HtmlNode
+                hr.kind = HtmlNodeType::HORIZONTAL_RULE
+                root.children = root.children + [hr]
+                parserExpect(p, TokenType::NEWLINE)
+                continue
+            }
+            // Not a HR — treat as text
+            let mut text: HtmlNode
+            text.kind = HtmlNodeType::RAW_TEXT
+            text.text = "-"
+            root.children = root.children + [text]
+            continue
+        }
+
+        // Heading: # text
+        if t.kind == TokenType::HASH {
+            let mut level: u64 = 1
+            parserAdvance(p)
+            while parserPeek(p).kind == TokenType::HASH {
+                level = level + 1
+                parserAdvance(p)
+            }
+            // Read the rest of the line
+            let mut headingText: string = ""
+            while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::EOF {
+                headingText = headingText + parserPeek(p).text
+                parserAdvance(p)
+            }
+            parserExpect(p, TokenType::NEWLINE)
+
+            let mut heading: HtmlNode
+            if level == 1 { heading.kind = HtmlNodeType::HEADING1 }
+            elif level == 2 { heading.kind = HtmlNodeType::HEADING2 }
+            else { heading.kind = HtmlNodeType::HEADING3 }
+            heading.text = headingText
+            root.children = root.children + [heading]
+            continue
+        }
+
+        // Blockquote: > text
+        if t.kind == TokenType::GT {
+            parserAdvance(p)
+            let mut quoteText: string = ""
+            while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::EOF {
+                quoteText = quoteText + parserPeek(p).text
+                parserAdvance(p)
+            }
+            parserExpect(p, TokenType::NEWLINE)
+            let mut bq: HtmlNode
+            bq.kind = HtmlNodeType::BLOCKQUOTE_NODE
+            bq.text = quoteText
+            root.children = root.children + [bq]
+            continue
+        }
+
+        // List item: - text
+        if t.kind == TokenType::DASH {
+            parserAdvance(p)
+            let mut itemText: string = ""
+            while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::EOF {
+                itemText = itemText + parserPeek(p).text
+                parserAdvance(p)
+            }
+            parserExpect(p, TokenType::NEWLINE)
+            let mut li: HtmlNode
+            li.kind = HtmlNodeType::LIST_ITEM_NODE
+            li.text = itemText
+            root.children = root.children + [li]
+            continue
+        }
+
+        // Paragraph (text until blank line or heading/blockquote)
+        let mut paraText: string = ""
+        while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::EOF
+              and parserPeek(p).kind != TokenType::HASH and parserPeek(p).kind != TokenType::GT
+              and parserPeek(p).kind != TokenType::DASH {
+            paraText = paraText + parserPeek(p).text
+            parserAdvance(p)
+        }
+        // Consume the newline
+        parserExpect(p, TokenType::NEWLINE)
+        // Check for blank line (another newline = paragraph end)
+        if parserPeek(p).kind == TokenType::NEWLINE {
+            parserAdvance(p)
+        }
+
+        if stringLength(paraText) > 0 {
+            let mut para: HtmlNode
+            para.kind = HtmlNodeType::PARAGRAPH
+            para.text = paraText
+            root.children = root.children + [para]
+        }
+    }
+
+    return root
+}
+
+// ═══════════════════════════════════════════════════════════════
+// §5 — HTML Renderer
+// ═══════════════════════════════════════════════════════════════
+
+func escapeHtml(text: string): string {
+    let mut result: string = ""
+    let mut i: u64 = 0
+    while true {
+        let c: byte = text[i]
+        if c == 0 { return result }
+        if c == 38 { result = result + "&amp;" }
+        elif c == 60 { result = result + "&lt;" }
+        elif c == 62 { result = result + "&gt;" }
+        elif c == 34 { result = result + "&quot;" }
+        elif c == 39 { result = result + "&#39;" }
+        else { result = result + c }
+        i = i + 1
+    }
+    return result
+}
+
+func renderInlineMarkdown(text: string): string {
+    // Simple inline parsing: **bold**, *italic*, `code`, [text](url)
+    let mut result: string = ""
+    let mut i: u64 = 0
+    let len: u64 = stringLength(text)
+
+    while i < len {
+        let c: byte = text[i]
+
+        // Bold: **text**
+        if c == 42 and i + 1 < len and text[i + 1] == 42 {
+            let mut boldText: string = ""
+            i = i + 2
+            while i < len {
+                if text[i] == 42 and i + 1 < len and text[i + 1] == 42 {
+                    result = result + "<strong>" + escapeHtml(boldText) + "</strong>"
+                    i = i + 2
+                    break
+                }
+                boldText = boldText + text[i]
+                i = i + 1
+            }
+            continue
+        }
+
+        // Italic: *text*
+        if c == 42 {
+            let mut italicText: string = ""
+            i = i + 1
+            while i < len {
+                if text[i] == 42 {
+                    result = result + "<em>" + escapeHtml(italicText) + "</em>"
+                    i = i + 1
+                    break
+                }
+                italicText = italicText + text[i]
+                i = i + 1
+            }
+            continue
+        }
+
+        // Inline code: `code`
+        if c == 96 {
+            let mut codeText: string = ""
+            i = i + 1
+            while i < len {
+                if text[i] == 96 {
+                    result = result + "<code>" + escapeHtml(codeText) + "</code>"
+                    i = i + 1
+                    break
+                }
+                codeText = codeText + text[i]
+                i = i + 1
+            }
+            continue
+        }
+
+        // Link: [text](url)
+        if c == 91 {
+            let mut linkText: string = ""
+            i = i + 1
+            while i < len and text[i] != 93 {
+                linkText = linkText + text[i]
+                i = i + 1
+            }
+            if i < len { i = i + 1 }
+            if i < len and text[i] == 40 {
+                let mut url: string = ""
+                i = i + 1
+                while i < len and text[i] != 41 {
+                    url = url + text[i]
+                    i = i + 1
+                }
+                if i < len { i = i + 1 }
+                result = result + "<a href=\"" + escapeHtml(url) + "\">" + escapeHtml(linkText) + "</a>"
+                continue
+            }
+            result = result + "[" + linkText
+            continue
+        }
+
+        result = result + c
+        i = i + 1
+    }
+    return result
+}
+
+func renderHtml(root: HtmlNode): string {
+    let mut html: string = "<!DOCTYPE html>\n<html>\n<head>\n"
+    html = html + "<meta charset=\"UTF-8\">\n"
+    html = html + "<title>Markdown Output</title>\n"
+    html = html + "<style>\n"
+    html = html + "body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }\n"
+    html = html + "code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }\n"
+    html = html + "pre { background: #f4f4f4; padding: 16px; border-radius: 5px; overflow-x: auto; }\n"
+    html = html + "blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; }\n"
+    html = html + "hr { border: none; border-top: 2px solid #ddd; }\n"
+    html = html + "</style>\n</head>\n<body>\n"
+
+    let mut i: u64 = 0
+    while i < #root.children {
+        let node: HtmlNode = root.children[i]
+        if node.kind == HtmlNodeType::HEADING1 {
+            html = html + "<h1>" + escapeHtml(node.text) + "</h1>\n"
+        } elif node.kind == HtmlNodeType::HEADING2 {
+            html = html + "<h2>" + escapeHtml(node.text) + "</h2>\n"
+        } elif node.kind == HtmlNodeType::HEADING3 {
+            html = html + "<h3>" + escapeHtml(node.text) + "</h3>\n"
+        } elif node.kind == HtmlNodeType::PARAGRAPH {
+            html = html + "<p>" + renderInlineMarkdown(node.text) + "</p>\n"
+        } elif node.kind == HtmlNodeType::BLOCKQUOTE_NODE {
+            html = html + "<blockquote><p>" + escapeHtml(node.text) + "</p></blockquote>\n"
+        } elif node.kind == HtmlNodeType::LIST_ITEM_NODE {
+            html = html + "<ul>\n<li>" + renderInlineMarkdown(node.text) + "</li>\n</ul>\n"
+        } elif node.kind == HtmlNodeType::HORIZONTAL_RULE {
+            html = html + "<hr>\n"
+        } elif node.kind == HtmlNodeType::RAW_TEXT {
+            html = html + escapeHtml(node.text)
+        }
+        i = i + 1
+    }
+
+    html = html + "</body>\n</html>\n"
+    return html
+}
+
+// ═══════════════════════════════════════════════════════════════
+// §6 — Main: read stdin, convert, write stdout
+// ═══════════════════════════════════════════════════════════════
+
+func main(): u64 {
+    // Read input from stdin
+    let input: string = readLine()
+    let mut fullInput: string = input
+    while true {
+        let line: string = readLine()
+        if stringLength(line) == 0 { break }
+        fullInput = fullInput + "\n" + line
+    }
+
+    // Tokenize
+    let mut lexer: Lexer = lexerCreate(fullInput)
+    let tokens: [Token] = lexerTokenize(ref lexer)
+
+    // Parse
+    let mut parser: Parser = parserCreate(tokens)
+    let ast: HtmlNode = parserParse(ref parser)
+
+    // Render
+    let html: string = renderHtml(ast)
+    print(html)
+
+    return 0
+}

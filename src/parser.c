@@ -1074,11 +1074,26 @@ AstNode *parse_statement(Parser *p) {
                 parser_match(p, TOKEN_KW_CASE);
                 AstNode *pattern = parse_pattern(p);
                 AstNode *body = NULL;
+                AstNodeList extra_patterns = {0};
+                /* Parse comma-separated additional patterns: case 1,2,3 -> */
+                /* parse_pattern returns NULL for comma/arrow/newline/brace.
+                   If it returned a real pattern, check for comma and parse more. */
+                if (pattern) {
+                    while (parser_match(p, TOKEN_COMMA)) {
+                        /* parser_match consumed the comma. Ensure has_current is set
+                           before calling parse_pattern, which checks current token. */
+                        if (!p->has_current) parser_advance(p);
+                        AstNode *extra = parse_pattern(p);
+                        if (extra) node_list_append(&extra_patterns, extra);
+                        else break;
+                    }
+                }
                 if (parser_match(p, TOKEN_ARROW)) {
                     /* `=>` token? Use ARROW (->) */
                     body = parse_expr(p);
                 }
-                AstNode *arm = node_match_arm(p->arena, pattern->loc, pattern, body);
+                AstNode *arm = node_match_arm(p->arena, pattern ? pattern->loc : p->previous.loc, pattern, body);
+                arm->data.match_arm.patterns = extra_patterns;
                 node_list_append(&match_node->data.match_node.arms, arm);
             }
             parser_expect(p, TOKEN_RBRACE, "match body");
@@ -1324,7 +1339,6 @@ AstNode *parse_pattern(Parser *p) {
             if (!inclusive) parser_match(p, TOKEN_DOT_DOT); /* consume .. */
             if (parser_check(p, TOKEN_INT_LITERAL)) {
                 Token end_t = p->current; parser_advance(p);
-                /* Build a range binary op: left=start, right=end, op=BIN_RANGE or BIN_RANGE_INCLUSIVE */
                 AstNode *start = node_int_literal(p->arena, t.loc, t.val.int_value);
                 AstNode *end = node_int_literal(p->arena, end_t.loc, end_t.val.int_value);
                 return node_binary(p->arena, t.loc, inclusive ? BIN_RANGE_INCLUSIVE : BIN_RANGE, start, end);
@@ -1350,7 +1364,22 @@ AstNode *parse_pattern(Parser *p) {
         return node_ident(p->arena, t.loc, t.text);
     }
 
-    parser_error(p, p->current, "expected pattern");
+    /* Don't error on tokens that end a pattern — let the caller handle these */
+    /* Only check if we have a current token; don't advance to find out */
+    if (p->has_current) {
+        TokenType ct = p->current.type;
+        if (ct == TOKEN_COMMA || ct == TOKEN_ARROW || ct == TOKEN_NEWLINE || ct == TOKEN_RBRACE) {
+            return NULL;
+        }
+    } else {
+        /* No current token — also end of pattern */
+        return NULL;
+    }
+
+    /* Only error if we actually have a current token to report */
+    if (p->has_current) {
+        parser_error(p, p->current, "expected pattern");
+    }
     return NULL;
 }
 

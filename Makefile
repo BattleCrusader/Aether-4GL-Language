@@ -164,6 +164,7 @@ TEST_FIXTURES = \
 	tests/fixtures/test_comptime_reflection.ae \
 	tests/fixtures/test_concurrency.ae \
 	tests/fixtures/test_error_context.ae \
+	tests/fixtures/test_match_advanced.ae \
 	tests/fixtures/test_interp_numbers.ae \
 	tests/fixtures/test_interp_numeric.ae \
 	tests/fixtures/test_interp_num_concat.ae \

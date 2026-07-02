@@ -207,8 +207,14 @@ static AstNode *monomorphize_node(Arena *arena, AstNode *node,
             }
             break;
         case NODE_MATCH_ARM:
-            copy->data.match_arm.pattern = monomorphize_expr(arena, node->data.match_arm.pattern, type_params, concrete_types);
+            copy->data.match_arm.pattern = node->data.match_arm.pattern
+                ? monomorphize_expr(arena, node->data.match_arm.pattern, type_params, concrete_types)
+                : NULL;
             copy->data.match_arm.body = monomorphize_node(arena, node->data.match_arm.body, type_params, concrete_types);
+            for (int i = 0; i < node->data.match_arm.patterns.count; i++) {
+                node_list_append(&copy->data.match_arm.patterns,
+                    monomorphize_expr(arena, node->data.match_arm.patterns.items[i], type_params, concrete_types));
+            }
             break;
         case NODE_TRY:
             copy->data.try_node.body = monomorphize_node(arena, node->data.try_node.body, type_params, concrete_types);
