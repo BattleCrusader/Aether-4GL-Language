@@ -1,12 +1,12 @@
 # Aether Compiler — Implementation Status
 
-> **Last updated**: 2026-07-01
+> **Last updated**: 2026-07-04
 > **Current state**: 54/54 host-native tests passing (85 fixtures wired, pre-existing failures tracked). 14/16 tokenizer tests passing.
 > Compiler builds clean. All major language features through Phase 11 are
 > implemented and tested. Phase 17 (.aelib library format) is implemented and
 > working end-to-end. Phase 18 (standard library in pure Aether) is complete.
-> Phase 19 (LLVM backend migration) is designed but not yet implemented.
-> Phases 20-40: C transpiler default backend, all parsed features transpiled.
+> Phase 19 (LLVM backend migration) is **cancelled** — the C transpiler is the
+> default backend. Phases 20-40: C transpiler default backend, all parsed features transpiled.
 
 ---
 
@@ -271,33 +271,39 @@
 - [x] P18.12 — Codegen fixes for TARGET_LIB
 - [x] P18.13 — Build output hygiene
 
-## Phase 19 — LLVM Backend Migration 🔴 NOT STARTED
+## Phase 19 — LLVM Backend Migration ⚪ CANCELLED
 
-- [ ] P19.01 — Install LLVM, verify `llvm-config` works
-- [ ] P19.02 — Create `src/llvm/llvm_init.c` — LLVM context/module/builder
-- [ ] P19.03 — Create `src/llvm/llvm_types.c` — type mapping
-- [ ] P19.04 — Create `src/llvm/llvm_expr.c` — expression codegen
-- [ ] P19.05 — Create `src/llvm/llvm_stmt.c` — statement codegen
-- [ ] P19.06 — Create `src/llvm/llvm_func.c` — function codegen
-- [ ] P19.07 — Create `src/llvm/llvm_string.c` — string operations
-- [ ] P19.08 — Create `src/llvm/llvm_asm.c` — inline assembly
-- [ ] P19.09 — Create `src/llvm/llvm_error.c` — error handling
-- [ ] P19.10 — Create `src/llvm/llvm_contract.c` — contract codegen
-- [ ] P19.11 — Create `src/llvm/llvm_runtime.c` — runtime helpers
-- [ ] P19.12 — Create `src/llvm/llvm_target.c` — target setup & emission
-- [ ] P19.13 — Create `src/llvm/llvm_debug.c` — debug info
-- [ ] P19.14 — Wire up dispatcher in `aether.c`
-- [ ] P19.15 — All test fixtures pass through LLVM backend
-- [ ] P19.16 — Remove old `codegen.c` and `asm_*.c` files
-- [ ] P19.17 — Remove NASM dependency from build system
-- [ ] P19.18 — Phase 19 Verification & Cleanup
+The LLVM backend was removed in favor of the C transpiler as the default backend.
+The NASM codegen (`src/codegen/`) is retained for `--target asm-*` targets only.
+
+- [x] P19.01 — C transpiler is the default backend (no flag needed)
+- [x] P19.02 — All 50+ AST node types handled by C transpiler
+- [x] P19.03 — LLVM files removed (src/llvm/, include/aether/llvm.h, LLVM_BACKEND.md)
+- [ ] ~~P19.01 — Install LLVM, verify `llvm-config` works~~ (CANCELLED)
+- [ ] ~~P19.02 — Create `src/llvm/llvm_init.c` — LLVM context/module/builder~~ (CANCELLED)
+- [ ] ~~P19.03 — Create `src/llvm/llvm_types.c` — type mapping~~ (CANCELLED)
+- [ ] ~~P19.04 — Create `src/llvm/llvm_expr.c` — expression codegen~~ (CANCELLED)
+- [ ] ~~P19.05 — Create `src/llvm/llvm_stmt.c` — statement codegen~~ (CANCELLED)
+- [ ] ~~P19.06 — Create `src/llvm/llvm_func.c` — function codegen~~ (CANCELLED)
+- [ ] ~~P19.07 — Create `src/llvm/llvm_string.c` — string operations~~ (CANCELLED)
+- [ ] ~~P19.08 — Create `src/llvm/llvm_asm.c` — inline assembly~~ (CANCELLED)
+- [ ] ~~P19.09 — Create `src/llvm/llvm_error.c` — error handling~~ (CANCELLED)
+- [ ] ~~P19.10 — Create `src/llvm/llvm_contract.c` — contract codegen~~ (CANCELLED)
+- [ ] ~~P19.11 — Create `src/llvm/llvm_runtime.c` — runtime helpers~~ (CANCELLED)
+- [ ] ~~P19.12 — Create `src/llvm/llvm_target.c` — target setup & emission~~ (CANCELLED)
+- [ ] ~~P19.13 — Create `src/llvm/llvm_debug.c` — debug info~~ (CANCELLED)
+- [ ] ~~P19.14 — Wire up dispatcher in `aether.c`~~ (CANCELLED)
+- [ ] ~~P19.15 — All test fixtures pass through LLVM backend~~ (CANCELLED)
+- [ ] ~~P19.16 — Remove old `codegen.c` and `asm_*.c` files~~ (CANCELLED)
+- [ ] ~~P19.17 — Remove NASM dependency from build system~~ (CANCELLED)
+- [ ] ~~P19.18 — Phase 19 Verification & Cleanup~~ (CANCELLED)
 
 ## Phase 20 — Self-Hosting 🔴 NOT STARTED
 
 - [ ] P20.01 — Compiler can compile its own tokenizer/lexer
 - [ ] P20.02 — Compiler can compile its own parser
 - [ ] P20.03 — Compiler can compile its own AST/semantic analysis
-- [ ] P20.04 — Compiler can compile its own LLVM codegen modules
+- [ ] P20.04 — Compiler can compile its own C transpiler modules
 - [ ] P20.05 — Compiler can compile its own target emission
 - [ ] P20.06 — Full bootstrap: Aether compiler runs on Aether OS
 - [ ] P20.07 — Compiler can compile itself with no C bootstrap
@@ -350,7 +356,8 @@
 | src/ast.c | 590 | 65+ AST node types, node constructors |
 | src/semantic.c | 700 | Symbol resolution, type checking |
 | src/optimizer.c | 960 | Constant folding, DCE, inline (stub) |
-| src/llvm/ (13 files) | ~2350 | LLVM IR backend (planned) |
+|| src/codegen/ (15 files) | ~200KB | NASM codegen (asm targets only) |
+|| src/c_transpiler/ (11 files) | ~150KB | C transpiler (default backend) |
 | src/arena.c | 100 | Arena allocator |
 | src/str.c | 100 | String view utilities |
 | src/vector.c | 100 | Dynamic array |
@@ -362,11 +369,10 @@
 
 ## Priority Queue (Next to Build)
 
-1. **Phase 19**: LLVM backend migration — replace NASM codegen with LLVM IR
+1. **Phase 9 remaining**: Escape analysis, devirtualization, loop unrolling, actionable errors
 2. **Fix spec test failures**: 18/37 test_spec_*.ae fixtures fail — parser/semantic gaps
-3. **Phase 9 remaining**: Escape analysis, devirtualization, loop unrolling, actionable errors
-4. **Phase 13**: Concurrency & fibers (spawn, channels, mutex, scheduler)
-5. **Phase 14**: Advanced OS language features (bootchain, interrupt handlers, metadata)
+3. **Phase 13**: Concurrency & fibers (spawn, channels, mutex, scheduler)
+4. **Phase 14**: Advanced OS language features (bootchain, interrupt handlers, metadata)
 6. **Phase 15**: Goal-oriented I/O & query fusion
 7. **Phase 16**: Protocol generation & hardware configuration
 8. **Phase 20**: Self-hosting — compiler compiles itself

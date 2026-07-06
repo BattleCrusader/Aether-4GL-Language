@@ -43,8 +43,32 @@ CORE_SRCS = \
 	src/lexer.c \
 	src/ast.c \
 	src/parser.c \
+	src/parser/parser_core.c \
+	src/parser/parser_decl.c \
+	src/parser/parser_func.c \
+	src/parser/parser_type_decl.c \
+	src/parser/parser_stmt.c \
+	src/parser/parser_block.c \
+	src/parser/parser_match.c \
+	src/parser/parser_type.c \
+	src/parser/parser_attr.c \
+	src/parser/parser_expr.c \
 	src/semantic.c \
 	src/codegen.c \
+	src/codegen/codegen_target.c \
+	src/codegen/codegen_aelib.c \
+	src/codegen/codegen_enum_layout.c \
+	src/codegen/codegen_type_helpers.c \
+	src/codegen/codegen_init.c \
+	src/codegen/codegen_output.c \
+	src/codegen/codegen_frame.c \
+	src/codegen/codegen_expr.c \
+	src/codegen/codegen_stmt.c \
+	src/codegen/codegen_func.c \
+	src/codegen/codegen_mem_map.c \
+	src/codegen/codegen_top.c \
+	src/codegen/codegen_defer.c \
+	src/codegen/codegen_assemble.c \
 	src/asm_ir.c \
 	src/asm_parser.c \
 	src/asm_backend_x86_64.c \
@@ -70,6 +94,16 @@ all: tokenizer parser-test aether-cli
 
 # Pattern: compile src/c_transpiler/*.c to build/c_transpiler/*.o
 $(BUILD_DIR)/c_transpiler/%.o: src/c_transpiler/%.c include/aether/c_transpiler.h
+	@mkdir -p $(@D)
+	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
+
+# Pattern: compile src/parser/*.c to build/parser/*.o
+$(BUILD_DIR)/parser/%.o: src/parser/%.c include/aether/parser.h include/aether/parser_internal.h
+	@mkdir -p $(@D)
+	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
+
+# Pattern: compile src/codegen/*.c to build/codegen/*.o
+$(BUILD_DIR)/codegen/%.o: src/codegen/%.c include/aether/codegen.h
 	@mkdir -p $(@D)
 	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
 

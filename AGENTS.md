@@ -8,7 +8,7 @@
 ## Quick Facts
 
 - **Language**: C11 (bootstrap), targeting Aether (self-hosting goal)
-- **Output**: LLVM IR → native code via LLVM backends (ELF64/Mach-O/PE32+/flat binary)
+- **Output**: C transpiler → native code via gcc/clang (ELF64/Mach-O/PE32+/flat binary)
 - **Build**: `make` → `./build/aether`
 - **Test**: `make test` (unit) + `make test-host` (native .ae fixtures)
 - **Install**: `sudo make install` or `make install-local`
@@ -29,19 +29,22 @@ compiler/
 │   ├── parser.c            # Recursive descent + Pratt parser
 │   ├── semantic.c          # Type checking, name resolution, const evaluation
 │   ├── optimizer.c         # DCE, constant folding, inlining, escape analysis
-│   ├── llvm/               # LLVM IR backend (13 modules, ~2350 lines total)
-│   │   ├── llvm_init.c     # LLVM context/module/builder creation
-│   │   ├── llvm_types.c    # Aether → LLVM type mapping
-│   │   ├── llvm_expr.c     # Expression codegen (literals, idents, ops, calls, indexing)
-│   │   ├── llvm_stmt.c     # Statement codegen (let, if, while, for, return, defer, block)
-│   │   ├── llvm_func.c     # Function codegen (decl, params, entry/exit, variadics)
-│   │   ├── llvm_string.c   # String operations (concat, interpolation, itoa)
-│   │   ├── llvm_asm.c      # Inline assembly (asm blocks, output bindings)
-│   │   ├── llvm_error.c    # Error handling (throws, try/catch, cleanup tables)
-│   │   ├── llvm_contract.c # Contract codegen (pre/post conditions)
-│   │   ├── llvm_runtime.c  # Runtime helpers (alloc, concat, itoa declarations)
-│   │   ├── llvm_target.c  # Target setup, object emission, linker scripts
-│   │   └── llvm_debug.c    # Debug info (DWARF metadata, source locations)
+│   ├── codegen/            # NASM codegen modules (15 files, ~200KB total)
+│   │   ├── codegen_init.c  # Codegen create/destroy
+│   │   ├── codegen_expr.c  # Expression codegen
+│   │   ├── codegen_stmt.c  # Statement codegen
+│   │   ├── codegen_func.c  # Function codegen
+│   │   ├── codegen_top.c   # Top-level codegen
+│   │   ├── codegen_target.c # Target setup
+│   │   ├── codegen_output.c # Output helpers
+│   │   ├── codegen_frame.c # Stack frame
+│   │   ├── codegen_defer.c # Defer
+│   │   ├── codegen_aelib.c # Aelib metadata
+│   │   ├── codegen_assemble.c # Assemble/link
+│   │   ├── codegen_enum_layout.c # Enum layout
+│   │   ├── codegen_type_helpers.c # Type helpers
+│   │   ├── codegen_mem_map.c # Memory map
+│   │   └── codegen_internal.h # Internal header
 │   ├── arena.c             # Arena allocator
 │   ├── str.c               # String view utilities
 │   └── vector.c            # Dynamic array
@@ -52,7 +55,8 @@ compiler/
 │   ├── lexer.h             # Lexer state
 │   ├── parser.h            # Parser state, precedence levels
 │   ├── semantic.h          # Semantic analyzer
-│   ├── llvm.h              # LlvmCodegen state, public API for all LLVM modules
+│   ├── codegen.h           # NASM codegen state, public API
+│   ├── c_transpiler.h      # C transpiler state, public API
 │   ├── optimizer.h         # Optimizer config
 │   ├── arena.h             # Arena allocator
 │   ├── str.h               # String view
@@ -60,15 +64,10 @@ compiler/
 ├── tests/                  # C test suite + .ae fixture programs
 │   ├── test_tokenizer.c    # Tokenizer unit tests
 │   ├── test_parser.c       # Parser unit tests
-│   ├── test_llvm_types.c   # LLVM type mapping tests
-│   ├── test_llvm_expr.c    # LLVM expression codegen tests
-│   ├── test_llvm_stmt.c    # LLVM statement codegen tests
-│   ├── test_llvm_func.c    # LLVM function codegen tests
-│   ├── test_llvm_string.c  # LLVM string operation tests
-│   ├── test_llvm_asm.c     # LLVM inline assembly tests
-│   ├── test_llvm_error.c   # LLVM error handling tests
-│   ├── test_llvm_contract.c# LLVM contract codegen tests
-│   ├── test_llvm_target.c  # LLVM target emission tests
+│   ├── test_asm.c          # ASM tests
+│   ├── test_asm_debug.c    # ASM debug tests
+│   ├── test_asm_mini.c     # ASM mini tests
+│   ├── test_reg.c          # Register tests
 │   ├── fixtures/           # .ae test programs
 │   └── debug_*.c           # Debug utilities
 ├── std/                    # Standard library (11 .ae modules)
@@ -86,7 +85,7 @@ compiler/
 ├── REQUIREMENTS.md         # Comprehensive language requirements
 ├── SPECIFICATION.md        # Full language specification with code examples
 ├── STATUS.md               # Implementation status (20 phases)
-├── LLVM_BACKEND.md         # LLVM backend architecture & design
+├── LLVM_BACKEND.md         # LLVM backend architecture & design (REMOVED — C transpiler is default)
 ├── AGENTS.md               # THIS FILE — AI agent guide
 ├── CONTRIBUTING.md         # Human contributor guide
 ├── Makefile                # Build system
@@ -105,10 +104,9 @@ Source (.ae)
       → AST (50+ node types)                                       ✅
         → Import Resolution (read, parse, merge imported files)     ✅
           → Semantic Analysis (type checking, name resolution)     ✅
-            → LLVM Codegen (LLVM IR via LLVM-C API)                 ✅
-              → LLVM Optimization (200+ passes)                    ✅
-                → LLVM Backend (x86_64/ARM64/RISC-V/WASM)          ✅
-                  → Binary Output (ELF64/Mach-O/PE32+/flat binary) ✅
+            → C Transpiler (C source via c_transpiler/)            ✅
+              → gcc/clang Compilation (native binary)              ✅
+                → Binary Output (ELF64/Mach-O/PE32+/flat binary)   ✅
 ```
 
 ---
@@ -160,24 +158,27 @@ Source (.ae)
 - `semantic_analyze()`: main entry point, walks AST and resolves types
 - `resolve_types()`: type resolution and checking
 
-### `src/llvm/` — LLVM IR Backend (13 modules)
+### `src/codegen/` — NASM Codegen Modules (15 files)
 
-See [LLVM_BACKEND.md](LLVM_BACKEND.md) for full design documentation.
+Used for `--target asm-x86_64|asm-arm64|asm-riscv64` targets. The default backend is the C transpiler (`src/c_transpiler/`).
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `llvm_init.c` | 80 | LLVM context/module/builder creation |
-| `llvm_types.c` | 120 | Aether → LLVM type mapping |
-| `llvm_expr.c` | 350 | Expression codegen (12 functions) |
-| `llvm_stmt.c` | 300 | Statement codegen (12 functions) |
-| `llvm_func.c` | 250 | Function codegen |
-| `llvm_string.c` | 200 | String operations |
-| `llvm_asm.c` | 150 | Inline assembly |
-| `llvm_error.c` | 200 | Error handling |
-| `llvm_contract.c` | 100 | Contract codegen |
-| `llvm_runtime.c` | 150 | Runtime helpers |
-| `llvm_target.c` | 200 | Target setup & emission |
-| `llvm_debug.c` | 150 | Debug info |
+| `codegen_init.c` | 46 | Codegen create/destroy |
+| `codegen_expr.c` | ~1200 | Expression codegen |
+| `codegen_stmt.c` | ~850 | Statement codegen |
+| `codegen_func.c` | ~200 | Function codegen |
+| `codegen_top.c` | ~900 | Top-level codegen |
+| `codegen_target.c` | ~85 | Target setup |
+| `codegen_output.c` | ~95 | Output helpers |
+| `codegen_frame.c` | ~200 | Stack frame |
+| `codegen_defer.c` | ~30 | Defer |
+| `codegen_aelib.c` | ~450 | Aelib metadata |
+| `codegen_assemble.c` | ~400 | Assemble/link |
+| `codegen_enum_layout.c` | ~55 | Enum layout |
+| `codegen_type_helpers.c` | ~180 | Type helpers |
+| `codegen_mem_map.c` | ~75 | Memory map |
+| `codegen_internal.h` | 189 | Internal header |
 
 ### `src/optimizer.c` — Optimization Passes
 - `optimize()`: runs all enabled passes in order
@@ -240,7 +241,7 @@ See [LLVM_BACKEND.md](LLVM_BACKEND.md) for full design documentation.
 
 7. **`__aether_concat` and `print()` must handle null string pointers**: When `main(inputString: string)` receives no args, the string pointer is null. The concat helper and print built-in must test for null before dereferencing. Null is treated as an empty string (len=0, no copy).
 
-8. **LLVM backend replaces NASM codegen**: The old `src/codegen.c` (NASM text generation) and `src/asm_*.c` (multi-target assembler) are superseded by the LLVM backend in `src/llvm/`. Do not add new features to the NASM codegen — add them to the LLVM backend instead.
+8. **C transpiler is the default backend**: The C transpiler (`src/c_transpiler/`) handles all non-asm targets. The NASM codegen (`src/codegen/`) is only used for `--target asm-x86_64|asm-arm64|asm-riscv64`. New features should be added to the C transpiler first.
 
 ---
 
@@ -252,17 +253,17 @@ See [LLVM_BACKEND.md](LLVM_BACKEND.md) for full design documentation.
 2. **AST**: Add new node type in `ast.h` and create helper in `ast.c`
 3. **Parser**: Add parsing logic in `parser.c`
 4. **Semantic**: Add type checking in `semantic.c`
-5. **Codegen**: Add code emission in the appropriate `src/llvm/*.c` module
+5. **Codegen**: Add code emission in the appropriate `src/c_transpiler/*.c` module
 6. **Optimizer**: Update DCE/optimization passes in `optimizer.c`
 7. **Tests**: Add test fixture in `tests/fixtures/` and update `Makefile`
 8. **Docs**: Update REQUIREMENTS.md, SPECIFICATION.md, STATUS.md, AGENTS.md
 
 ### Adding a New Compiler Target
 
-1. Add target enum in `include/aether/llvm.h` (Target enum)
-2. Add target triple in `src/llvm/llvm_target.c` (`llvm_target_triple()`)
-3. Add entry point / syscall handling in `src/llvm/llvm_func.c`
-4. Add emission logic in `src/llvm/llvm_target.c`
+1. Add target enum in `include/aether/codegen.h` (Target enum)
+2. Add target triple in `src/codegen/codegen_target.c` (`llvm_target_triple()`)
+3. Add entry point / syscall handling in `src/codegen/codegen_func.c`
+4. Add emission logic in `src/codegen/codegen_target.c`
 5. Add CLI flag in `aether.c` (`parse_args()`)
 6. Add test fixture and update Makefile
 
@@ -298,7 +299,7 @@ make install-local  # Install to ~/.local
 | 16 | 🔴 NOT STARTED | Protocol generation & hardware configuration |
 | 17 | 🟢 COMPLETE | `.aelib` library format |
 | 18 | 🟢 COMPLETE | Standard library implementation |
-| 19 | 🔴 NOT STARTED | LLVM backend migration |
+| 19 | ⚪ CANCELLED | LLVM backend migration (C transpiler is default backend) |
 | 20 | 🔴 NOT STARTED | Self-hosting |
 
 See [STATUS.md](STATUS.md) for detailed per-phase checklists.
@@ -316,7 +317,8 @@ See [STATUS.md](STATUS.md) for detailed per-phase checklists.
 | `src/semantic.c` | 700 | Type checking, name resolution |
 | `src/ast.c` | 590 | AST node creation |
 | `include/aether/ast.h` | 560 | AST node types (50+) |
-| `src/llvm/` (13 files) | ~2350 | LLVM IR backend |
+| `src/codegen/` (15 files) | ~200KB | NASM codegen (asm targets only) |
+| `src/c_transpiler/` (11 files) | ~150KB | C transpiler (default backend) |
 | `REQUIREMENTS.md` | 755 | Language requirements |
 | `SPECIFICATION.md` | 2773 | Language specification |
 | `STATUS.md` | 540 | Implementation status |
