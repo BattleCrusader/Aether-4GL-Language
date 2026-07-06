@@ -59,6 +59,10 @@ typedef struct {
 
     /* Program AST for type lookups */
     AstNode *program;
+
+    /* Imported .aelib paths for linking */
+    char **aelib_import_paths;
+    int aelib_import_count;
 } CCodegen;
 
 /* ──────────────────────────────────────────────

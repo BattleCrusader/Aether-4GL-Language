@@ -308,7 +308,32 @@ static int is_slice_expr(AstNode *node) {
         if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
         else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
         if (type_node) {
+            /* Primitive types are NOT slices */
+            if (type_node->type == NODE_TYPE_PRIMITIVE) return 0;
             if (type_node->type == NODE_TYPE_ARRAY || type_node->type == NODE_TYPE_SLICE) return 1;
+        }
+    }
+    if (node->type == NODE_FIELD_ACCESS) {
+        /* Field access: check if the field is a slice type */
+        AstNode *target = node->data.field.target;
+        AstNode *field_decl = NULL;
+        if (target && target->type == NODE_IDENT)
+            field_decl = target->data.ident.resolved;
+        if (field_decl && (field_decl->type == NODE_STRUCT_DECL || field_decl->type == NODE_CLASS_DECL)) {
+            StringView fname = node->data.field.field->data.ident.name;
+            for (int fi = 0; fi < field_decl->data.struct_decl.fields.count; fi++) {
+                AstNode *field = field_decl->data.struct_decl.fields.items[fi];
+                StringView field_name = field->data.param.name->data.ident.name;
+                AstNode *field_type = field->data.param.type;
+                if (field_name.len == fname.len && memcmp(field_name.data, fname.data, fname.len) == 0 &&
+                    field_type && (field_type->type == NODE_TYPE_ARRAY || field_type->type == NODE_TYPE_SLICE)) {
+                    return 1;
+                }
+            }
+        }
+        /* If we can't resolve the struct, assume it might be a slice (conservative) */
+        if (!field_decl || field_decl->type != NODE_STRUCT_DECL) {
+            return 1;
         }
     }
     if (node->type == NODE_BINARY_OP && node->data.binary.op == BIN_ADD) {
@@ -382,13 +407,13 @@ static int is_var_string_type(CCodegen *cg, StringView vname) {
 static bool c_emit_prop_setter_expr(CCodegen *cg, AstNode *node);
 
 static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
-    /* String compound assignment: text += expr → text = __aether_concat(text, ...) */
+    /* String compound assignment: text += expr → text = __aether_rt_concat(text, ...) */
     if (node->data.binary.op == BIN_ADD_ASSIGN) {
         AstNode *left = node->data.binary.left;
         AstNode *right = node->data.binary.right;
         if (is_string_expr(left)) {
             c_emit_expr(cg, left);
-            fputs(" = __aether_concat(", cg->out);
+            fputs(" = __aether_rt_concat(", cg->out);
             c_emit_expr(cg, left);
             fputs(", ", cg->out);
             if (right && right->type == NODE_IDENT) {
@@ -409,6 +434,27 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
                     }
                 }
             }
+            /* Check if right is a byte expression (e.g., text.data[i]) */
+            if (right && right->type == NODE_INDEX) {
+                /* Indexing into a string produces a byte — wrap it */
+                fputs("(string){ 1, (char[]){(", cg->out);
+                c_emit_expr(cg, right);
+                fputs("), '\\0'} }", cg->out);
+                fputs(")", cg->out);
+                fputs(";\n", cg->out);
+                return;
+            }
+            c_emit_expr(cg, right);
+            fputs(")", cg->out);
+            fputs(";\n", cg->out);
+            return;
+        }
+        /* Slice compound assignment: slice += value → slice = __aether_slice_concat(slice, (slice){...}) */
+        if (is_slice_expr(left)) {
+            c_emit_expr(cg, left);
+            fputs(" = __aether_slice_concat(", cg->out);
+            c_emit_expr(cg, left);
+            fputs(", ", cg->out);
             c_emit_expr(cg, right);
             fputs(")", cg->out);
             fputs(";\n", cg->out);
@@ -473,7 +519,7 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
         int left_str = is_string_expr(left);
         int right_str = is_string_expr(right);
         if (left_str || right_str) {
-            fputs("__aether_concat(", cg->out);
+            fputs("__aether_rt_concat(", cg->out);
             if (!left_str) {
                 if (is_byte_expr(left)) {
                     fputs("(string){ 1, (char[]){(", cg->out);
@@ -519,7 +565,7 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
 
     /* BIN_CONCAT is always string concat — auto-convert numerics with itoa */
     if (node->data.binary.op == BIN_CONCAT) {
-        fputs("__aether_concat(", cg->out);
+        fputs("__aether_rt_concat(", cg->out);
         AstNode *left = node->data.binary.left;
         AstNode *right = node->data.binary.right;
         /* Wrap non-string operands with __aether_itoa or 1-char string for bytes */
@@ -974,6 +1020,8 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
     /* Prefix sys function names to avoid C library conflicts */
     if (func_decl && func_decl->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
+    } else if (func_decl) {
+        fputs("__aether_", cg->out);
     }
     /* Mangle operator overload function names (op_+ → op_plus_<hash>, etc.) */
     if (fname.len >= 3 && memcmp(fname.data, "op_", 3) == 0) {
@@ -1106,6 +1154,105 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
     }
 }
 
+
+/* Resolve the element type name for a slice/array indexing expression.
+ * Returns a pointer to a static buffer (caller should strdup if persisting). */
+static const char *resolve_elem_type_name(CCodegen *cg, AstNode *target) {
+    if (!target) return "uint64_t";
+    AstNode *type_node = NULL;
+    if (target->type == NODE_IDENT) {
+        AstNode *decl = target->data.ident.resolved;
+        if (decl) {
+            if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+            else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+        }
+    } else if (target->type == NODE_FIELD_ACCESS) {
+        AstNode *ftarget = target->data.field.target;
+        AstNode *fdecl = NULL;
+        if (ftarget && ftarget->type == NODE_IDENT)
+            fdecl = ftarget->data.ident.resolved;
+        /* Follow ref T / ptr T to find the actual struct decl */
+        if (fdecl && (fdecl->type == NODE_PARAM || fdecl->type == NODE_LET)) {
+            AstNode *ftype = NULL;
+            if (fdecl->type == NODE_LET) ftype = fdecl->data.let_decl.type;
+            else if (fdecl->type == NODE_PARAM) ftype = fdecl->data.param.type;
+            if (ftype && ftype->type == NODE_TYPE_NAMED) {
+                /* Plain named type (e.g., HtmlNode) — search for struct decl */
+                StringView struct_name = ftype->data.type_node.name;
+                for (int di = 0; di < cg->program->data.list.count; di++) {
+                    AstNode *d = cg->program->data.list.items[di];
+                    if (d && (d->type == NODE_STRUCT_DECL || d->type == NODE_CLASS_DECL) &&
+                        d->data.struct_decl.name && d->data.struct_decl.name->type == NODE_IDENT) {
+                        StringView dn = d->data.struct_decl.name->data.ident.name;
+                        if (dn.len == struct_name.len && memcmp(dn.data, struct_name.data, dn.len) == 0) {
+                            fdecl = d;
+                            break;
+                        }
+                    }
+                }
+            } else if (ftype && (ftype->type == NODE_TYPE_REF || ftype->type == NODE_TYPE_PTR) &&
+                ftype->data.type_node.elem_type &&
+                ftype->data.type_node.elem_type->type == NODE_TYPE_NAMED) {
+                StringView struct_name = ftype->data.type_node.elem_type->data.type_node.name;
+                /* Search program for matching struct decl */
+                for (int di = 0; di < cg->program->data.list.count; di++) {
+                    AstNode *d = cg->program->data.list.items[di];
+                    if (d && (d->type == NODE_STRUCT_DECL || d->type == NODE_CLASS_DECL) &&
+                        d->data.struct_decl.name && d->data.struct_decl.name->type == NODE_IDENT) {
+                        StringView dn = d->data.struct_decl.name->data.ident.name;
+                        if (dn.len == struct_name.len && memcmp(dn.data, struct_name.data, dn.len) == 0) {
+                            StringView fname = target->data.field.field->data.ident.name;
+                            for (int fi = 0; fi < d->data.struct_decl.fields.count; fi++) {
+                                AstNode *field = d->data.struct_decl.fields.items[fi];
+                                StringView field_name = field->data.param.name->data.ident.name;
+                                AstNode *field_type = field->data.param.type;
+                                if (field_name.len == fname.len && memcmp(field_name.data, fname.data, fname.len) == 0) {
+                                    if (field_type && (field_type->type == NODE_TYPE_ARRAY || field_type->type == NODE_TYPE_SLICE)) {
+                                        AstNode *elem = field_type->data.type_node.elem_type;
+                                        if (elem) {
+                                            static char buf[256];
+                                            const char *t = c_type_name(elem);
+                                            snprintf(buf, sizeof(buf), "%s", t);
+                                            return buf;
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                return "uint64_t";
+            }
+        }
+        if (fdecl && (fdecl->type == NODE_STRUCT_DECL || fdecl->type == NODE_CLASS_DECL)) {
+            StringView fname = target->data.field.field->data.ident.name;
+            for (int fi = 0; fi < fdecl->data.struct_decl.fields.count; fi++) {
+                AstNode *field = fdecl->data.struct_decl.fields.items[fi];
+                StringView field_name = field->data.param.name->data.ident.name;
+                AstNode *field_type = field->data.param.type;
+                if (field_name.len == fname.len && memcmp(field_name.data, fname.data, fname.len) == 0) {
+                    type_node = field_type;
+                    break;
+                }
+            }
+        }
+    }
+    if (type_node) {
+        if (type_node->type == NODE_TYPE_ARRAY || type_node->type == NODE_TYPE_SLICE) {
+            AstNode *elem = type_node->data.type_node.elem_type;
+            if (elem) {
+                static char buf[256];
+                const char *t = c_type_name(elem);
+                snprintf(buf, sizeof(buf), "%s", t);
+                return buf;
+            }
+        }
+    }
+    return "uint64_t";
+}
+
 static void c_emit_index(CCodegen *cg, AstNode *node) {
     /* Check if target is a slice or string type — use .data[index] access */
     int is_slice_or_string = 0;
@@ -1119,9 +1266,57 @@ static void c_emit_index(CCodegen *cg, AstNode *node) {
                 else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
             }
         } else if (target->type == NODE_FIELD_ACCESS) {
-            /* Field access on a struct — the field is a slice or string type.
-               Both have .data, so use .data[index] access. */
-            is_slice_or_string = 2;
+            /* Field access on a struct — resolve field type to determine access method */
+            AstNode *ftarget = target->data.field.target;
+            AstNode *fdecl = NULL;
+            if (ftarget && ftarget->type == NODE_IDENT)
+                fdecl = ftarget->data.ident.resolved;
+            /* If fdecl is a param/let, follow its type to find the struct decl */
+            if (fdecl && (fdecl->type == NODE_PARAM || fdecl->type == NODE_LET)) {
+                AstNode *ftype = NULL;
+                if (fdecl->type == NODE_LET) ftype = fdecl->data.let_decl.type;
+                else if (fdecl->type == NODE_PARAM) ftype = fdecl->data.param.type;
+                if (ftype && (ftype->type == NODE_TYPE_REF || ftype->type == NODE_TYPE_PTR) &&
+                    ftype->data.type_node.elem_type &&
+                    ftype->data.type_node.elem_type->type == NODE_TYPE_NAMED) {
+                    /* ref Lexer → find the Lexer struct decl */
+                    StringView struct_name = ftype->data.type_node.elem_type->data.type_node.name;
+                    for (int di = 0; di < cg->program->data.list.count; di++) {
+                        AstNode *d = cg->program->data.list.items[di];
+                        if (d && (d->type == NODE_STRUCT_DECL || d->type == NODE_CLASS_DECL) &&
+                            d->data.struct_decl.name && d->data.struct_decl.name->type == NODE_IDENT) {
+                            StringView dn = d->data.struct_decl.name->data.ident.name;
+                            if (dn.len == struct_name.len && memcmp(dn.data, struct_name.data, dn.len) == 0) {
+                                fdecl = d;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (fdecl && (fdecl->type == NODE_STRUCT_DECL || fdecl->type == NODE_CLASS_DECL)) {
+                StringView fname = target->data.field.field->data.ident.name;
+                int found = 0;
+                for (int fi = 0; fi < fdecl->data.struct_decl.fields.count; fi++) {
+                    AstNode *field = fdecl->data.struct_decl.fields.items[fi];
+                    StringView field_name = field->data.param.name->data.ident.name;
+                    AstNode *field_type = field->data.param.type;
+                    if (field_name.len == fname.len && memcmp(field_name.data, fname.data, fname.len) == 0) {
+                        found = 1;
+                        if (field_type && field_type->type == NODE_TYPE_PRIMITIVE &&
+                            field_type->data.type_node.prim == PRIM_STRING) {
+                            is_slice_or_string = 2;
+                        } else {
+                            is_slice_or_string = 1;
+                        }
+                        break;
+                    }
+                }
+                if (!found) is_slice_or_string = 1;
+            } else {
+                /* Can't resolve struct — assume slice with elem_size */
+                is_slice_or_string = 1;
+            }
         } else if (target->type == NODE_INDEX) {
             /* Chained indexing: strings[i][j] — the inner index returns a string.
                Use .data[j] access for the outer index. */
@@ -1207,7 +1402,8 @@ static void c_emit_index(CCodegen *cg, AstNode *node) {
                 c_emit_expr(cg, node->data.index.target);
                 fputs(".elem_size))))", cg->out);
             } else {
-                fputs("(*((uint64_t*)((char*)(", cg->out);
+                const char *et = resolve_elem_type_name(cg, node->data.index.target);
+                fprintf(cg->out, "(*((%s*)((char*)(", et);
                 c_emit_expr(cg, node->data.index.target);
                 fputs(".data) + (", cg->out);
                 c_emit_expr(cg, node->data.index.index);
@@ -1216,7 +1412,9 @@ static void c_emit_index(CCodegen *cg, AstNode *node) {
                 fputs(".elem_size))))", cg->out);
             }
         } else {
-            fputs("(*((uint64_t*)((char*)(", cg->out);
+            /* For struct slices, cast to the proper struct type */
+            const char *et = resolve_elem_type_name(cg, node->data.index.target);
+            fprintf(cg->out, "(*((%s*)((char*)(", et);
             c_emit_expr(cg, node->data.index.target);
             fputs(".data) + (", cg->out);
             c_emit_expr(cg, node->data.index.index);

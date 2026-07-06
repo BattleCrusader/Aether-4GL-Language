@@ -314,11 +314,11 @@ AELIB_FIXTURES = \
 LIBAETHER_SRCS = std/arch.ae std/asm.ae std/collections.ae std/elf.ae std/fs.ae std/io.ae std/math.ae std/mem.ae std/serial.ae std/str.ae std/test.ae
 LIBAETHER_AELIB = build/lib/aether.aelib
 
-# Build aether.aelib: compile str + io into a single library
+# Build aether.aelib: compile all std sources as a single combined unit
 $(LIBAETHER_AELIB): aether-cli
 	@echo "=== Building aether.aelib ==="
 	@mkdir -p build/lib
-	# Concatenate str and io, strip import lines
+	# Concatenate all std sources, strip import lines (they're all in one file)
 	@perl -pe 's/^import\s+"[^"]*"\s*$$//' std/str.ae std/io.ae > /tmp/aether_combined.ae
 	@./$(BUILD_DIR)/aether --target lib /tmp/aether_combined.ae -o $@ 2>/dev/null || \
 	 { echo "ERROR: aether.aelib compilation failed"; exit 1; }

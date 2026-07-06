@@ -1,4 +1,5 @@
 #include "aether/c_transpiler.h"
+#include "aether/aelib.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,13 +64,24 @@ int c_compile(CCodegen *cg, const char *c_path, const char *output_path) {
     switch (cg->target) {
         case TARGET_HOST:
         case TARGET_MACHO64:
-        case TARGET_ELF64_HOST:
-            /* Standard host compilation */
+        case TARGET_ELF64_HOST: {
+            /* Standard host compilation — extract .o from imported .aelib files */
+            char aelib_args[4096] = "";
+            for (int i = 0; i < cg->aelib_import_count; i++) {
+                char o_path[1024];
+                snprintf(o_path, sizeof(o_path), "/tmp/aelib_%d.o", i);
+                if (aelib_extract_object(cg->aelib_import_paths[i], o_path) == 0) {
+                    size_t cur = strlen(aelib_args);
+                    snprintf(aelib_args + cur, sizeof(aelib_args) - cur,
+                        " \"%s\"", o_path);
+                }
+            }
             snprintf(cmd, sizeof(cmd),
-                "gcc -std=c23 -O%d -o \"%s\" \"%s\" 2>&1",
-                cg->opt_level, output_path, c_path);
+                "gcc -std=c23 -O%d -o \"%s\" \"%s\"%s 2>&1",
+                cg->opt_level, output_path, c_path, aelib_args);
             ret = system(cmd);
             break;
+        }
 
         case TARGET_FREESTANDING:
         case TARGET_KERNEL:
