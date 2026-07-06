@@ -83,25 +83,10 @@ char *decl_name(AstNode *node) {
     return strdup("");
 }
 
-/* Helper: check if a declaration is public */
+/* Helper: check if a declaration is public — everything is public by default */
 bool decl_is_pub(AstNode *node) {
-    if (!node) return false;
-    switch (node->type) {
-        case NODE_FUNC_DECL:
-            return node->data.func.is_pub || node->data.func.access == ACCESS_PUB;
-        case NODE_STRUCT_DECL:
-            return node->data.struct_decl.is_pub;
-        case NODE_CLASS_DECL:
-            return node->data.struct_decl.is_pub;
-        case NODE_ENUM_DECL:
-            return node->data.enum_decl.is_pub;
-        case NODE_CONST_DECL:
-            return node->data.let_decl.is_mut; /* const is always accessible */
-        case NODE_TYPE_ALIAS:
-            return true; /* type aliases are always accessible */
-        default:
-            return false;
-    }
+    (void)node;
+    return true;
 }
 
 /* Helper: get primitive type name for metadata */
