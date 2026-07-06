@@ -20,7 +20,7 @@ void c_emit_runtime(CCodegen *cg) {
     fputs("typedef struct { void *data; uint64_t len; uint64_t elem_size; } slice;\n\n", cg->out);
 
     /* Emit __aether_concat */
-    fputs("static string __aether_concat(string a, string b) {\n", cg->out);
+    fputs("static string __aether_rt_concat(string a, string b) {\n", cg->out);
     fputs("    char *buf = malloc(a.len + b.len + 1);\n", cg->out);
     fputs("    if (!buf) return (string){ 0, NULL };\n", cg->out);
     fputs("    memcpy(buf, a.data, a.len);\n", cg->out);
@@ -87,10 +87,10 @@ void c_emit_runtime(CCodegen *cg) {
     fputs("}\n\n", cg->out);
 
     /* Emit error handling globals — used by try/catch/throw */
-    fputs("int __aether_error_tag = 0;\n", cg->out);
-    fputs("uint64_t __aether_error_value = 0;\n", cg->out);
-    fputs("jmp_buf __aether_jmp_buf;\n\n", cg->out);
-    fputs("string __aether_error_msg = {0, NULL};\n\n", cg->out);
+    fputs("static int __aether_error_tag = 0;\n", cg->out);
+    fputs("static uint64_t __aether_error_value = 0;\n", cg->out);
+    fputs("static jmp_buf __aether_jmp_buf;\n\n", cg->out);
+    fputs("static string __aether_error_msg = {0, NULL};\n\n", cg->out);
 
     /* Emit RC retain/release helpers */
     fputs("static void __aether_rc_retain(void *ptr) {\n", cg->out);

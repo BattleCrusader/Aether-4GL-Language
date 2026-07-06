@@ -1109,7 +1109,18 @@ int main(int argc, char **argv) {
                 search_dirs[ndirs++] = "/usr/local/lib/aether";
                 search_dirs[ndirs] = NULL;
                 for (int di = 0; di < ndirs; di++) {
+                    /* Try .ae first */
                     char lib_path[1024];
+                    snprintf(lib_path, sizeof(lib_path), "%s/%.*s.ae",
+                        search_dirs[di], (int)path_len, path_start);
+                    ifile = fopen(lib_path, "rb");
+                    if (ifile) {
+                        snprintf(std_resolved, sizeof(std_resolved), "%s", lib_path);
+                        resolved_path = std_resolved;
+                        if (verbose) printf("  found in library path: %s\n", lib_path);
+                        break;
+                    }
+                    /* Then .aelib */
                     snprintf(lib_path, sizeof(lib_path), "%s/%.*s.aelib",
                         search_dirs[di], (int)path_len, path_start);
                     ifile = fopen(lib_path, "rb");
@@ -1131,120 +1142,80 @@ int main(int argc, char **argv) {
             if (is_aelib) {
                 /* ── .aelib import: create synthetic extern declarations ── */
                 if (verbose) printf("Import is .aelib: %s\n", resolved_path);
-
-                /* Read raw symbol table from the file directly */
-                fseek(ifile, 0, SEEK_SET);
-                uint8_t hdr_buf[46];
-                size_t meta_off = 0, meta_sz = 0;
-                if (fread(hdr_buf, 1, 46, ifile) == 46) {
-                    meta_off = (size_t)((uint64_t)hdr_buf[30] | ((uint64_t)hdr_buf[31] << 8) |
-                        ((uint64_t)hdr_buf[32] << 16) | ((uint64_t)hdr_buf[33] << 24) |
-                        ((uint64_t)hdr_buf[34] << 32) | ((uint64_t)hdr_buf[35] << 40) |
-                        ((uint64_t)hdr_buf[36] << 48) | ((uint64_t)hdr_buf[37] << 56));
-                    meta_sz = (size_t)((uint64_t)hdr_buf[38] | ((uint64_t)hdr_buf[39] << 8) |
-                        ((uint64_t)hdr_buf[40] << 16) | ((uint64_t)hdr_buf[41] << 24) |
-                        ((uint64_t)hdr_buf[42] << 32) | ((uint64_t)hdr_buf[43] << 40) |
-                        ((uint64_t)hdr_buf[44] << 48) | ((uint64_t)hdr_buf[45] << 56));
-                }
                 fclose(ifile);
 
                 int new_decls = 0;
-                uint8_t *meta = NULL; /* keep alive for StringView references */
-                if (meta_off > 0 && meta_sz > 0) {
-                    /* Read metadata section */
-                    FILE *mf = fopen(resolved_path, "rb");
-                    if (mf) {
-                        fseek(mf, (long)meta_off, SEEK_SET);
-                        meta = (uint8_t *)malloc(meta_sz);
-                        if (meta && fread(meta, 1, meta_sz, mf) == meta_sz) {
-                            /* Parse symbol count (at offset 10 in meta header) */
-                            uint32_t sc = (uint32_t)meta[10] | ((uint32_t)meta[11] << 8) |
-                                          ((uint32_t)meta[12] << 16) | ((uint32_t)meta[13] << 24);
-                            for (uint32_t si = 0; si < sc; si++) {
-                                size_t entry_off = 14 + (size_t)si * 18;
-                                uint32_t name_off = (uint32_t)meta[entry_off] | ((uint32_t)meta[entry_off+1] << 8) |
-                                    ((uint32_t)meta[entry_off+2] << 16) | ((uint32_t)meta[entry_off+3] << 24);
-                                uint8_t kind = meta[entry_off + 4];
-                                uint8_t flags = meta[entry_off + 5];
-                                uint32_t td_off2 = (uint32_t)meta[entry_off+10] | ((uint32_t)meta[entry_off+11] << 8) |
-                                    ((uint32_t)meta[entry_off+12] << 16) | ((uint32_t)meta[entry_off+13] << 24);
-                                uint32_t td_sz2 = (uint32_t)meta[entry_off+14] | ((uint32_t)meta[entry_off+15] << 8) |
-                                    ((uint32_t)meta[entry_off+16] << 16) | ((uint32_t)meta[entry_off+17] << 24);
+                AelibReader *r = aelib_open(resolved_path);
+                if (r) {
+                    int sc = aelib_get_symbol_count(r);
+                    for (int si = 0; si < sc; si++) {
+                        const char *name_ptr = NULL;
+                        int kind, flags;
+                        uint32_t td_off2, td_sz2;
+                        if (aelib_get_symbol(r, si, &name_ptr, &kind, &flags, &td_off2, &td_sz2) != 0)
+                            continue;
+                        if (kind != 0) continue; /* only functions */
+                        if (!name_ptr) continue;
+                        size_t name_len = strlen(name_ptr);
+                        if (verbose) printf("  .aelib symbol: '%s'\n", name_ptr);
 
-                                /* Resolve name (absolute offset within metadata) */
-                                const char *name_ptr = (const char *)meta + name_off;
-                                size_t name_len = strlen(name_ptr);
+                        Location loc = {0};
+                        /* Copy into arena — aelib_close will unmap the source data */
+                        char *name_arena = arena_strndup(parser->arena, name_ptr, name_len);
+                        StringView sv = {name_arena, name_len};
+                        AstNode *ident = node_ident(parser->arena, loc, sv);
+                        AstNode *func = node_func_decl(parser->arena, loc, ident,
+                            (flags & AELIB_FLAG_PUBLIC) != 0, false);
+                        func->data.func.body = NULL; /* extern */
+                        if (flags & AELIB_FLAG_SYS)
+                            func->data.func.is_sys = true;
 
-                                if (verbose) printf("  .aelib symbol: '%s' kind=%d pub=%d\n",
-                                    name_ptr, kind, (flags & 1));
-
-                                /* Create synthetic extern function declaration */
-                                Location loc = {0};
-                                StringView sv = {name_ptr, name_len};
-                                AstNode *ident = node_ident(parser->arena, loc, sv);
-                                AstNode *func = node_func_decl(parser->arena, loc, ident,
-                                    (flags & 1) != 0, false);
-                                func->data.func.body = NULL; /* extern */
-                                /* Mark as sys if the aelib metadata says so */
-                                if (flags & 0x02) {
-                                    func->data.func.is_sys = true;
-                                }
-
-                                /* Parse type data to get return type and params */
-                                if (td_sz2 > 0 && kind == 0) { /* function */
-                                    const uint8_t *td = meta + td_off2;
-                                    size_t tp = 0;
-                                    /* Return type name (null-terminated) */
-                                    const char *ret_name = (const char *)td;
-                                    size_t ret_len = strlen(ret_name);
-                                    StringView ret_sv = {ret_name, ret_len};
-                                    func->data.func.return_type = node_type_named(parser->arena, loc, ret_sv);
-                                    tp += ret_len + 1; /* skip return type + null */
-
-                                    if (tp < td_sz2) {
-                                        uint8_t pc = td[tp++];
-                                        for (int pi = 0; pi < (int)pc && tp < td_sz2; pi++) {
-                                            /* param name */
-                                            const char *pn = (const char *)td + tp;
-                                            while (tp < td_sz2 && td[tp] != 0) tp++;
-                                            tp++; /* skip null */
-                                            /* param type */
-                                            const char *pt = (const char *)td + tp;
-                                            while (tp < td_sz2 && td[tp] != 0) tp++;
-                                            tp++; /* skip null */
-                                            /* is_mut */
-                                            if (tp < td_sz2) tp++;
-
-                                            StringView pn_sv = {pn, strlen(pn)};
-                                            StringView pt_sv = {pt, strlen(pt)};
-                                            AstNode *pname = node_ident(parser->arena, loc, pn_sv);
-                                            AstNode *ptype = node_type_named(parser->arena, loc, pt_sv);
-                                            AstNode *param = node_param(parser->arena, loc, pname, ptype, false, false);
-                                            node_list_append(&func->data.func.params, param);
-                                        }
+                        /* Parse type data for return type and params */
+                        if (td_sz2 > 0) {
+                            size_t meta_sz;
+                            const uint8_t *meta = aelib_get_meta_section(r, &meta_sz);
+                            if (meta && td_off2 + td_sz2 <= meta_sz) {
+                                const uint8_t *td = meta + td_off2;
+                                size_t tp = 0;
+                                const char *ret_name = (const char *)td;
+                                size_t ret_len = strlen(ret_name);
+                                char *ret_arena = arena_strndup(parser->arena, ret_name, ret_len);
+                                StringView ret_sv = {ret_arena, ret_len};
+                                func->data.func.return_type = node_type_named(parser->arena, loc, ret_sv);
+                                tp += ret_len + 1;
+                                if (tp < td_sz2) {
+                                    uint8_t pc = td[tp++];
+                                    for (int pi = 0; pi < (int)pc && tp < td_sz2; pi++) {
+                                        const char *pn = (const char *)td + tp;
+                                        while (tp < td_sz2 && td[tp] != 0) tp++;
+                                        tp++;
+                                        const char *pt = (const char *)td + tp;
+                                        while (tp < td_sz2 && td[tp] != 0) tp++;
+                                        tp++;
+                                        if (tp < td_sz2) tp++;
+                                        char *pn_arena = arena_strndup(parser->arena, pn, strlen(pn));
+                                        char *pt_arena = arena_strndup(parser->arena, pt, strlen(pt));
+                                        StringView pn_sv = {pn_arena, strlen(pn_arena)};
+                                        StringView pt_sv = {pt_arena, strlen(pt_arena)};
+                                        AstNode *pname = node_ident(parser->arena, loc, pn_sv);
+                                        AstNode *ptype = node_type_named(parser->arena, loc, pt_sv);
+                                        AstNode *param = node_param(parser->arena, loc, pname, ptype, false, false);
+                                        node_list_append(&func->data.func.params, param);
                                     }
                                 }
-
-                                /* Add to program */
-                                int new_count = program->data.list.count + 1;
-                                AstNode **new_items = (AstNode **)malloc(new_count * sizeof(AstNode *));
-                                if (new_items) {
-                                    for (int k = 0; k < program->data.list.count; k++)
-                                        new_items[k] = program->data.list.items[k];
-                                    new_items[program->data.list.count] = func;
-                                    program->data.list.items = new_items;
-                                    program->data.list.count = new_count;
-                                    program->data.list.cap = new_count;
-                                }
-                                new_decls++;
                             }
                         }
-                        fclose(mf);
+
+                        /* Add to program using node_list_append (handles realloc properly) */
+                        node_list_append(&program->data.list, func);
+                        new_decls++;
                     }
+                    aelib_close(r);
                 }
-                /* NOTE: meta is intentionally NOT freed here — StringView fields
-                 * in the synthetic AST nodes point into it. It will be freed
-                 * at the end of main() alongside the source buffer. */
+
+                if (new_decls > 0) {
+                    if (verbose) printf("  Added %d extern declarations from .aelib\n", new_decls);
+                }
 
                 /* Track the .aelib path for linking */
                 if (imported_count >= imported_cap) {
@@ -1385,6 +1356,8 @@ int main(int argc, char **argv) {
     } else {
         Arena *c_arena = arena_create();
         CCodegen *cg = c_create(c_arena, target, opt_level);
+        cg->aelib_import_paths = aelib_import_paths;
+        cg->aelib_import_count = aelib_import_count;
 
         /* Generate C code to a temp file */
         char c_path[1024];
@@ -1503,7 +1476,7 @@ int main(int argc, char **argv) {
                         }
                     }
 
-                    aelib_add_symbol(aw, sym_name, kind, true, NULL, type_data, (uint32_t)type_data_size);
+                    aelib_add_symbol(aw, sym_name, kind, AELIB_FLAG_PUBLIC, NULL, type_data, (uint32_t)type_data_size);
                     free(type_data);
                 }
             }

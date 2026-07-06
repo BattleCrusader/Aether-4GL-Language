@@ -152,9 +152,20 @@ int aelib_find_symbol(const AelibReader *r, const char *name, int kind,
  * Returns NULL if offset is out of range. */
 const char *aelib_get_string(const AelibReader *r, uint32_t offset);
 
+/* Get symbol info by index. Returns 0 on success, -1 if index out of range.
+ * out_name: receives pointer into mmap'd data (do NOT free).
+ * out_kind, out_flags, out_td_offset, out_td_size: optional outputs. */
+int aelib_get_symbol(const AelibReader *r, int index,
+                     const char **out_name, int *out_kind, int *out_flags,
+                     uint32_t *out_td_offset, uint32_t *out_td_size);
+
 /* Get the raw code section (.o bytes).
  * Returns pointer to code data and sets *out_size. */
 const uint8_t *aelib_get_code_section(const AelibReader *r, size_t *out_size);
+
+/* Get the raw metadata section bytes.
+ * Returns pointer to metadata data and sets *out_size. */
+const uint8_t *aelib_get_meta_section(const AelibReader *r, size_t *out_size);
 
 /* Extract the code section to a .o file on disk.
  * Returns 0 on success, -1 on error. */

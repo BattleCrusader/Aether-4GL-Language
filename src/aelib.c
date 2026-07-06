@@ -140,48 +140,36 @@ int aelib_add_symbol(AelibWriter *w, const char *name, uint8_t kind,
 }
 
 int aelib_write(AelibWriter *w, const char *path) {
-    FILE *f = fopen(path, "wb");
-    if (!f) {
-        fprintf(stderr, "Error: cannot write '%s'\n", path);
-        return 1;
-    }
-
     /*
-     * Metadata section layout:
-     *   AelibMetaHeader (14 bytes)
-     *   SymEntry array (18 bytes each × sym_count)
-     *   Type data blob
-     *   String table
+     * .aelib format: [AelibHeader (46 bytes)] [code section (.o)] [metadata section]
+     * gcc links the .o inside: we extract it to a temp file and pass it to gcc.
+     * Our import resolver reads the metadata section directly.
      */
+    FILE *f = fopen(path, "wb");
+    if (!f) { return 1; }
 
+    /* Build metadata buffer */
     size_t meta_header_size = sizeof(AelibMetaHeader);
     size_t sym_entries_size = w->sym_count * sizeof(AelibSymEntry);
 
-    /* Compute total type data size from per-symbol data */
     size_t type_data_size = 0;
-    for (int i = 0; i < w->sym_count; i++) {
+    for (int i = 0; i < w->sym_count; i++)
         type_data_size += w->symbols[i].type_data_size;
-    }
 
     size_t string_table_size = w->string_table_size;
-
     size_t meta_total = meta_header_size + sym_entries_size + type_data_size + string_table_size;
 
-    /* Build the metadata buffer */
     uint8_t *meta_buf = (uint8_t *)malloc(meta_total);
     if (!meta_buf) { fclose(f); return 1; }
 
-    /* Write meta header */
     AelibMetaHeader *mh = (AelibMetaHeader *)meta_buf;
     memcpy(mh->magic, AEMETA_MAGIC, AEMETA_MAGIC_LEN);
     mh->version = AEMETA_VERSION;
     mh->sym_count = (uint32_t)w->sym_count;
 
-    /* Compute offsets within the metadata section */
     uint32_t type_data_offset = (uint32_t)(meta_header_size + sym_entries_size);
     uint32_t string_table_offset = type_data_offset + (uint32_t)type_data_size;
 
-    /* Write symbol entries */
     AelibSymEntry *sym_entries = (AelibSymEntry *)(meta_buf + meta_header_size);
     uint32_t cumulative_td_off = type_data_offset;
 
@@ -189,40 +177,25 @@ int aelib_write(AelibWriter *w, const char *path) {
         SymEntry *src = &w->symbols[i];
         AelibSymEntry *dst = &sym_entries[i];
 
-        /* Find name offset in string table by scanning */
         uint32_t name_off = string_table_offset;
         const char *p = w->string_table;
         uint32_t off = 0;
         while (off < w->string_table_size) {
-            if (strcmp(p, src->name) == 0) {
-                name_off = string_table_offset + off;
-                break;
-            }
-            size_t slen = strlen(p) + 1;
-            off += (uint32_t)slen;
-            p += slen;
+            if (strcmp(p, src->name) == 0) { name_off = string_table_offset + off; break; }
+            size_t slen = strlen(p) + 1; off += (uint32_t)slen; p += slen;
         }
 
-        /* Find namespace offset */
         uint32_t ns_off = 0;
         if (src->ns) {
-            off = 0;
-            p = w->string_table;
+            off = 0; p = w->string_table;
             while (off < w->string_table_size) {
-                if (strcmp(p, src->ns) == 0) {
-                    ns_off = string_table_offset + off;
-                    break;
-                }
-                size_t slen = strlen(p) + 1;
-                off += (uint32_t)slen;
-                p += slen;
+                if (strcmp(p, src->ns) == 0) { ns_off = string_table_offset + off; break; }
+                size_t slen = strlen(p) + 1; off += (uint32_t)slen; p += slen;
             }
         }
 
-        /* Copy type data into the metadata buffer at the cumulative offset */
-        if (src->type_data && src->type_data_size > 0) {
+        if (src->type_data && src->type_data_size > 0)
             memcpy(meta_buf + cumulative_td_off, src->type_data, src->type_data_size);
-        }
 
         dst->name_offset = name_off;
         dst->kind = src->kind;
@@ -230,45 +203,30 @@ int aelib_write(AelibWriter *w, const char *path) {
         dst->namespace_offset = ns_off;
         dst->type_data_offset = cumulative_td_off;
         dst->type_data_size = src->type_data_size;
-
         cumulative_td_off += src->type_data_size;
     }
 
-    /* Copy string table */
-    if (string_table_size > 0) {
+    if (string_table_size > 0)
         memcpy(meta_buf + string_table_offset, w->string_table, string_table_size);
-    }
 
-    /* Now write the file header */
+    /* Write header */
     AelibHeader header;
     memcpy(header.magic, AELIB_MAGIC, AELIB_MAGIC_LEN);
     header.version = AELIB_VERSION;
     header.flags = 0;
     header.abi_version = AELIB_ABI_VERSION;
-
-    /* Layout: header (46 bytes) | code section | metadata section */
-    uint64_t code_offset = sizeof(AelibHeader);
-    uint64_t meta_offset = code_offset + w->code_size;
-
-    header.code_offset = code_offset;
+    header.code_offset = sizeof(AelibHeader);
     header.code_size = (uint64_t)w->code_size;
-    header.meta_offset = meta_offset;
+    header.meta_offset = header.code_offset + header.code_size;
     header.meta_size = (uint64_t)meta_total;
 
-    /* Write header */
     fwrite(&header, sizeof(header), 1, f);
-
-    /* Write code section */
-    if (w->code_data && w->code_size > 0) {
+    if (w->code_data && w->code_size > 0)
         fwrite(w->code_data, 1, w->code_size, f);
-    }
-
-    /* Write metadata section */
     fwrite(meta_buf, 1, meta_total, f);
 
     fclose(f);
     free(meta_buf);
-
     return 0;
 }
 
@@ -464,6 +422,23 @@ int aelib_find_symbol(const AelibReader *r, const char *name, int kind,
     return 0;
 }
 
+/* ─── aelib_get_symbol ─── */
+
+int aelib_get_symbol(const AelibReader *r, int index,
+                     const char **out_name, int *out_kind, int *out_flags,
+                     uint32_t *out_td_offset, uint32_t *out_td_size) {
+    if (!r || index < 0 || index >= r->sym_count) return -1;
+    size_t off = r->sym_table_off + (size_t)index * 18;
+    size_t mo = (size_t)r->hdr.meta_offset;
+    uint32_t name_off = read_u32(r->data + off);
+    if (out_name) *out_name = (const char *)r->data + mo + name_off;
+    if (out_kind) *out_kind = r->data[off + 4];
+    if (out_flags) *out_flags = r->data[off + 5];
+    if (out_td_offset) *out_td_offset = read_u32(r->data + off + 10);
+    if (out_td_size) *out_td_size = read_u32(r->data + off + 14);
+    return 0;
+}
+
 /* ─── aelib_get_string ─── */
 
 const char *aelib_get_string(const AelibReader *r, uint32_t offset) {
@@ -478,6 +453,14 @@ const uint8_t *aelib_get_code_section(const AelibReader *r, size_t *out_size) {
     if (!r) { if (out_size) *out_size = 0; return NULL; }
     if (out_size) *out_size = (size_t)r->hdr.code_size;
     return r->data + (size_t)r->hdr.code_offset;
+}
+
+/* ─── aelib_get_meta_section ─── */
+
+const uint8_t *aelib_get_meta_section(const AelibReader *r, size_t *out_size) {
+    if (!r) { if (out_size) *out_size = 0; return NULL; }
+    if (out_size) *out_size = (size_t)r->hdr.meta_size;
+    return r->data + (size_t)r->hdr.meta_offset;
 }
 
 /* ─── aelib_extract_object ─── */

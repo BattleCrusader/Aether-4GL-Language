@@ -407,13 +407,13 @@ static int is_var_string_type(CCodegen *cg, StringView vname) {
 static bool c_emit_prop_setter_expr(CCodegen *cg, AstNode *node);
 
 static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
-    /* String compound assignment: text += expr → text = __aether_concat(text, ...) */
+    /* String compound assignment: text += expr → text = __aether_rt_concat(text, ...) */
     if (node->data.binary.op == BIN_ADD_ASSIGN) {
         AstNode *left = node->data.binary.left;
         AstNode *right = node->data.binary.right;
         if (is_string_expr(left)) {
             c_emit_expr(cg, left);
-            fputs(" = __aether_concat(", cg->out);
+            fputs(" = __aether_rt_concat(", cg->out);
             c_emit_expr(cg, left);
             fputs(", ", cg->out);
             if (right && right->type == NODE_IDENT) {
@@ -519,7 +519,7 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
         int left_str = is_string_expr(left);
         int right_str = is_string_expr(right);
         if (left_str || right_str) {
-            fputs("__aether_concat(", cg->out);
+            fputs("__aether_rt_concat(", cg->out);
             if (!left_str) {
                 if (is_byte_expr(left)) {
                     fputs("(string){ 1, (char[]){(", cg->out);
@@ -565,7 +565,7 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
 
     /* BIN_CONCAT is always string concat — auto-convert numerics with itoa */
     if (node->data.binary.op == BIN_CONCAT) {
-        fputs("__aether_concat(", cg->out);
+        fputs("__aether_rt_concat(", cg->out);
         AstNode *left = node->data.binary.left;
         AstNode *right = node->data.binary.right;
         /* Wrap non-string operands with __aether_itoa or 1-char string for bytes */
@@ -1020,9 +1020,8 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
     /* Prefix sys function names to avoid C library conflicts */
     if (func_decl && func_decl->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
-    } else if (func_decl && func_decl->data.func.body == NULL) {
-        /* Extern functions (from aelib) — prefix to avoid POSIX conflicts */
-        fputs("__aether_ext_", cg->out);
+    } else if (func_decl) {
+        fputs("__aether_", cg->out);
     }
     /* Mangle operator overload function names (op_+ → op_plus_<hash>, etc.) */
     if (fname.len >= 3 && memcmp(fname.data, "op_", 3) == 0) {
