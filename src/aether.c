@@ -1444,20 +1444,67 @@ int main(int argc, char **argv) {
             AelibWriter *aw = aelib_create();
             aelib_set_code(aw, code_data, rlen);
 
-            /* Add symbols from program */
+            /* Add symbols from program with type data */
             for (int i = 0; i < program->data.list.count; i++) {
                 AstNode *n = program->data.list.items[i];
                 if (!n) continue;
-                const char *sym_name = NULL;
-                uint8_t kind = 0;
                 if (n->type == NODE_FUNC_DECL && n->data.func.name) {
-                    sym_name = arena_strndup(sa_arena,
+                    const char *sym_name = arena_strndup(sa_arena,
                         n->data.func.name->data.ident.name.data,
                         n->data.func.name->data.ident.name.len);
-                    kind = 0; /* AELIB_SYM_FUNC */
-                }
-                if (sym_name) {
-                    aelib_add_symbol(aw, sym_name, kind, true, NULL, NULL, 0);
+                    uint8_t kind = 0; /* AELIB_SYM_FUNC */
+
+                    /* Build type data: return_type\0 + param_count(u8) + [name\0 + type\0 + is_mut(u8)]*N */
+                    uint8_t *type_data = NULL;
+                    size_t type_data_size = 0;
+                    if (n->data.func.return_type || n->data.func.params.count > 0) {
+                        /* Compute size */
+                        size_t td_size = 0;
+                        const char *ret_name = n->data.func.return_type ?
+                            c_type_name(n->data.func.return_type) : "void";
+                        td_size += strlen(ret_name) + 1;
+                        td_size += 1; /* param count */
+                        for (int pi = 0; pi < n->data.func.params.count; pi++) {
+                            AstNode *param = n->data.func.params.items[pi];
+                            if (param->type != NODE_PARAM) continue;
+                            StringView pn = param->data.param.name->data.ident.name;
+                            const char *pt = param->data.param.type ?
+                                c_type_name(param->data.param.type) : "uint64_t";
+                            td_size += pn.len + 1;
+                            td_size += strlen(pt) + 1;
+                            td_size += 1; /* is_mut */
+                        }
+                        /* Build */
+                        type_data = (uint8_t *)malloc(td_size);
+                        if (type_data) {
+                            size_t tp = 0;
+                            memcpy(type_data + tp, ret_name, strlen(ret_name) + 1);
+                            tp += strlen(ret_name) + 1;
+                            uint8_t pc = 0;
+                            for (int pi = 0; pi < n->data.func.params.count; pi++) {
+                                AstNode *param = n->data.func.params.items[pi];
+                                if (param->type == NODE_PARAM) pc++;
+                            }
+                            type_data[tp++] = pc;
+                            for (int pi = 0; pi < n->data.func.params.count; pi++) {
+                                AstNode *param = n->data.func.params.items[pi];
+                                if (param->type != NODE_PARAM) continue;
+                                StringView pn = param->data.param.name->data.ident.name;
+                                const char *pt = param->data.param.type ?
+                                    c_type_name(param->data.param.type) : "uint64_t";
+                                memcpy(type_data + tp, pn.data, pn.len);
+                                tp += pn.len;
+                                type_data[tp++] = 0;
+                                memcpy(type_data + tp, pt, strlen(pt) + 1);
+                                tp += strlen(pt) + 1;
+                                type_data[tp++] = param->data.param.is_mut ? 1 : 0;
+                            }
+                            type_data_size = td_size;
+                        }
+                    }
+
+                    aelib_add_symbol(aw, sym_name, kind, true, NULL, type_data, (uint32_t)type_data_size);
+                    free(type_data);
                 }
             }
 

@@ -308,7 +308,32 @@ static int is_slice_expr(AstNode *node) {
         if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
         else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
         if (type_node) {
+            /* Primitive types are NOT slices */
+            if (type_node->type == NODE_TYPE_PRIMITIVE) return 0;
             if (type_node->type == NODE_TYPE_ARRAY || type_node->type == NODE_TYPE_SLICE) return 1;
+        }
+    }
+    if (node->type == NODE_FIELD_ACCESS) {
+        /* Field access: check if the field is a slice type */
+        AstNode *target = node->data.field.target;
+        AstNode *field_decl = NULL;
+        if (target && target->type == NODE_IDENT)
+            field_decl = target->data.ident.resolved;
+        if (field_decl && (field_decl->type == NODE_STRUCT_DECL || field_decl->type == NODE_CLASS_DECL)) {
+            StringView fname = node->data.field.field->data.ident.name;
+            for (int fi = 0; fi < field_decl->data.struct_decl.fields.count; fi++) {
+                AstNode *field = field_decl->data.struct_decl.fields.items[fi];
+                StringView field_name = field->data.param.name->data.ident.name;
+                AstNode *field_type = field->data.param.type;
+                if (field_name.len == fname.len && memcmp(field_name.data, fname.data, fname.len) == 0 &&
+                    field_type && (field_type->type == NODE_TYPE_ARRAY || field_type->type == NODE_TYPE_SLICE)) {
+                    return 1;
+                }
+            }
+        }
+        /* If we can't resolve the struct, assume it might be a slice (conservative) */
+        if (!field_decl || field_decl->type != NODE_STRUCT_DECL) {
+            return 1;
         }
     }
     if (node->type == NODE_BINARY_OP && node->data.binary.op == BIN_ADD) {
@@ -409,6 +434,27 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
                     }
                 }
             }
+            /* Check if right is a byte expression (e.g., text.data[i]) */
+            if (right && right->type == NODE_INDEX) {
+                /* Indexing into a string produces a byte — wrap it */
+                fputs("(string){ 1, (char[]){(", cg->out);
+                c_emit_expr(cg, right);
+                fputs("), '\\0'} }", cg->out);
+                fputs(")", cg->out);
+                fputs(";\n", cg->out);
+                return;
+            }
+            c_emit_expr(cg, right);
+            fputs(")", cg->out);
+            fputs(";\n", cg->out);
+            return;
+        }
+        /* Slice compound assignment: slice += value → slice = __aether_slice_concat(slice, (slice){...}) */
+        if (is_slice_expr(left)) {
+            c_emit_expr(cg, left);
+            fputs(" = __aether_slice_concat(", cg->out);
+            c_emit_expr(cg, left);
+            fputs(", ", cg->out);
             c_emit_expr(cg, right);
             fputs(")", cg->out);
             fputs(";\n", cg->out);
@@ -974,6 +1020,9 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
     /* Prefix sys function names to avoid C library conflicts */
     if (func_decl && func_decl->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
+    } else if (func_decl && func_decl->data.func.body == NULL) {
+        /* Extern functions (from aelib) — prefix to avoid POSIX conflicts */
+        fputs("__aether_ext_", cg->out);
     }
     /* Mangle operator overload function names (op_+ → op_plus_<hash>, etc.) */
     if (fname.len >= 3 && memcmp(fname.data, "op_", 3) == 0) {
@@ -1120,8 +1169,8 @@ static void c_emit_index(CCodegen *cg, AstNode *node) {
             }
         } else if (target->type == NODE_FIELD_ACCESS) {
             /* Field access on a struct — the field is a slice or string type.
-               Both have .data, so use .data[index] access. */
-            is_slice_or_string = 2;
+               Both have .data, use elem_size-based access. */
+            is_slice_or_string = 1;
         } else if (target->type == NODE_INDEX) {
             /* Chained indexing: strings[i][j] — the inner index returns a string.
                Use .data[j] access for the outer index. */
@@ -1216,6 +1265,7 @@ static void c_emit_index(CCodegen *cg, AstNode *node) {
                 fputs(".elem_size))))", cg->out);
             }
         } else {
+            /* For struct slices, cast to the proper struct type */
             fputs("(*((uint64_t*)((char*)(", cg->out);
             c_emit_expr(cg, node->data.index.target);
             fputs(".data) + (", cg->out);
