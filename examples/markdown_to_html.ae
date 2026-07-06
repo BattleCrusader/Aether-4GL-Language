@@ -63,26 +63,30 @@ func lexerCreate(input: string): Lexer {
 }
 
 func lexerPeek(l: ref Lexer): byte {
-    if l.pos >= #l.input { return 0 }
+    if l.pos >= #l.input {
+ return 0 
+}
     return l.input[l.pos]
 }
 
 func lexerAdvance(l: ref Lexer) {
     if l.pos < #l.input {
         if l.input[l.pos] == 10 {
-            l.line = l.line + 1
+            l.line++
             l.col = 1
         } else {
-            l.col = l.col + 1
+            l.col++
         }
-        l.pos = l.pos + 1
+        l.pos++
     }
 }
 
 func lexerSkipWhitespace(l: ref Lexer) {
     while true {
         let c: byte = lexerPeek(l)
-        if c == 32 or c == 9 { lexerAdvance(l) } else { break }
+        if c == 32 or c == 9 {
+ lexerAdvance(l) } else { break 
+}
     }
 }
 
@@ -99,7 +103,7 @@ func lexerEmitToken(l: ref Lexer, kind: TokenType, text: string, line: u64, col:
     t.text = text
     t.line = line
     t.col = col
-    l.tokens = l.tokens + [t]
+    l.tokens += [t]
 }
 
 func lexerTokenize(l: ref Lexer): [Token] {
@@ -109,7 +113,9 @@ func lexerTokenize(l: ref Lexer): [Token] {
         let startLine: u64 = l.line
         let startCol: u64 = l.col
 
-        if c == 0 { break }
+        if c == 0 {
+ break 
+}
 
         // Newline
         if c == 10 {
@@ -147,29 +153,47 @@ func lexerTokenize(l: ref Lexer): [Token] {
         }
 
         // Brackets
-        if c == 91 { lexerAdvance(l); lexerEmitToken(l, TokenType::LBRACKET, "[", startLine, startCol); continue }
-        if c == 93 { lexerAdvance(l); lexerEmitToken(l, TokenType::RBRACKET, "]", startLine, startCol); continue }
-        if c == 40 { lexerAdvance(l); lexerEmitToken(l, TokenType::LPAREN, "(", startLine, startCol); continue }
-        if c == 41 { lexerAdvance(l); lexerEmitToken(l, TokenType::RPAREN, ")", startLine, startCol); continue }
+        if c == 91 {
+ lexerAdvance(l); lexerEmitToken(l, TokenType::LBRACKET, "[", startLine, startCol); continue 
+}
+        if c == 93 {
+ lexerAdvance(l); lexerEmitToken(l, TokenType::RBRACKET, "]", startLine, startCol); continue 
+}
+        if c == 40 {
+ lexerAdvance(l); lexerEmitToken(l, TokenType::LPAREN, "(", startLine, startCol); continue 
+}
+        if c == 41 {
+ lexerAdvance(l); lexerEmitToken(l, TokenType::RPAREN, ")", startLine, startCol); continue 
+}
 
         // Bang
-        if c == 33 { lexerAdvance(l); lexerEmitToken(l, TokenType::BANG, "!", startLine, startCol); continue }
+        if c == 33 {
+ lexerAdvance(l); lexerEmitToken(l, TokenType::BANG, "!", startLine, startCol); continue 
+}
 
         // Dash
-        if c == 45 { lexerAdvance(l); lexerEmitToken(l, TokenType::DASH, "-", startLine, startCol); continue }
+        if c == 45 {
+ lexerAdvance(l); lexerEmitToken(l, TokenType::DASH, "-", startLine, startCol); continue 
+}
 
         // Greater-than (blockquote)
-        if c == 62 { lexerAdvance(l); lexerEmitToken(l, TokenType::GT, ">", startLine, startCol); continue }
+        if c == 62 {
+ lexerAdvance(l); lexerEmitToken(l, TokenType::GT, ">", startLine, startCol); continue 
+}
 
         // Space or tab — skip
-        if c == 32 or c == 9 { lexerSkipWhitespace(l); continue }
+        if c == 32 or c == 9 {
+ lexerSkipWhitespace(l); continue 
+}
 
         // Regular text — read until a special character
         let mut text: string = ""
         while true {
             let ch: byte = lexerPeek(l)
-            if lexerIsSpecial(ch) { break }
-            text = text + ch
+            if lexerIsSpecial(ch) {
+ break 
+}
+            text += ch
             lexerAdvance(l)
         }
         if #text > 0 {
@@ -239,13 +263,15 @@ func parserPeek(p: ref Parser): Token {
 
 func parserAdvance(p: ref Parser) {
     if p.pos < #p.tokens {
-        p.pos = p.pos + 1
+        p.pos++
     }
 }
 
 func parserExpect(p: ref Parser, kind: TokenType): bool {
     let t: Token = parserPeek(p)
-    if t.kind == kind { parserAdvance(p); return true }
+    if t.kind == kind {
+ parserAdvance(p); return true 
+}
     return false
 }
 
@@ -256,7 +282,9 @@ func parserParse(p: ref Parser): HtmlNode {
 
     while p.pos < #p.tokens {
         let t: Token = parserPeek(p)
-        if t.kind == TokenType::TOK_EOF { break }
+        if t.kind == TokenType::TOK_EOF {
+ break 
+}
 
         // Skip standalone newlines
         if t.kind == TokenType::NEWLINE {
@@ -269,13 +297,13 @@ func parserParse(p: ref Parser): HtmlNode {
             let mut dashCount: u64 = 1
             parserAdvance(p)
             while parserPeek(p).kind == TokenType::DASH {
-                dashCount = dashCount + 1
+                dashCount++
                 parserAdvance(p)
             }
             if dashCount >= 3 {
                 let mut hr: HtmlNode
                 hr.kind = HtmlNodeType::HORIZONTAL_RULE
-                root.children = root.children + [hr]
+                root.children += [hr]
                 parserExpect(p, TokenType::NEWLINE)
                 continue
             }
@@ -283,7 +311,7 @@ func parserParse(p: ref Parser): HtmlNode {
             let mut text: HtmlNode
             text.kind = HtmlNodeType::RAW_TEXT
             text.text = "-"
-            root.children = root.children + [text]
+            root.children += [text]
             continue
         }
 
@@ -292,23 +320,27 @@ func parserParse(p: ref Parser): HtmlNode {
             let mut level: u64 = 1
             parserAdvance(p)
             while parserPeek(p).kind == TokenType::HASH {
-                level = level + 1
+                level++
                 parserAdvance(p)
             }
             // Read the rest of the line
             let mut headingText: string = ""
             while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::TOK_EOF {
-                headingText = headingText + parserPeek(p).text
+                headingText += parserPeek(p).text
                 parserAdvance(p)
             }
             parserExpect(p, TokenType::NEWLINE)
 
             let mut heading: HtmlNode
-            if level == 1 { heading.kind = HtmlNodeType::HEADING1 }
-            elif level == 2 { heading.kind = HtmlNodeType::HEADING2 }
-            else { heading.kind = HtmlNodeType::HEADING3 }
+            if level == 1 {
+                heading.kind = HtmlNodeType::HEADING1 
+            } elif level == 2 {
+                heading.kind = HtmlNodeType::HEADING2 
+            } else {
+                heading.kind = HtmlNodeType::HEADING3 
+            }
             heading.text = headingText
-            root.children = root.children + [heading]
+            root.children += [heading]
             continue
         }
 
@@ -317,14 +349,14 @@ func parserParse(p: ref Parser): HtmlNode {
             parserAdvance(p)
             let mut quoteText: string = ""
             while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::TOK_EOF {
-                quoteText = quoteText + parserPeek(p).text
+                quoteText += parserPeek(p).text
                 parserAdvance(p)
             }
             parserExpect(p, TokenType::NEWLINE)
             let mut bq: HtmlNode
             bq.kind = HtmlNodeType::BLOCKQUOTE_NODE
             bq.text = quoteText
-            root.children = root.children + [bq]
+            root.children += [bq]
             continue
         }
 
@@ -333,14 +365,14 @@ func parserParse(p: ref Parser): HtmlNode {
             parserAdvance(p)
             let mut itemText: string = ""
             while parserPeek(p).kind != TokenType::NEWLINE and parserPeek(p).kind != TokenType::TOK_EOF {
-                itemText = itemText + parserPeek(p).text
+                itemText += parserPeek(p).text
                 parserAdvance(p)
             }
             parserExpect(p, TokenType::NEWLINE)
             let mut li: HtmlNode
             li.kind = HtmlNodeType::LIST_ITEM_NODE
             li.text = itemText
-            root.children = root.children + [li]
+            root.children += [li]
             continue
         }
 
@@ -349,7 +381,7 @@ func parserParse(p: ref Parser): HtmlNode {
         while parserPeek(p).kind != TokenType::NEWLINE && parserPeek(p).kind != TokenType::TOK_EOF
               && parserPeek(p).kind != TokenType::HASH && parserPeek(p).kind != TokenType::GT
               && parserPeek(p).kind != TokenType::DASH {
-            paraText = paraText + parserPeek(p).text
+            paraText += parserPeek(p).text
             parserAdvance(p)
         }
         // Consume the newline
@@ -363,7 +395,7 @@ func parserParse(p: ref Parser): HtmlNode {
             let mut para: HtmlNode
             para.kind = HtmlNodeType::PARAGRAPH
             para.text = paraText
-            root.children = root.children + [para]
+            root.children += [para]
         }
     }
 
@@ -379,14 +411,22 @@ func escapeHtml(text: string): string {
     let mut i: u64 = 0
     while true {
         let c: byte = text[i]
-        if c == 0 { return result }
-        if c == 38 { result = result + "&amp;" }
-        elif c == 60 { result = result + "&lt;" }
-        elif c == 62 { result = result + "&gt;" }
-        elif c == 34 { result = result + "&quot;" }
-        elif c == 39 { result = result + "&#39;" }
-        else { result = result + c }
-        i = i + 1
+        if c == 0 {
+            return result 
+        } elif c == 38 {
+            result += "&amp;" 
+        } elif c == 60 {
+            result += "&lt;" 
+        } elif c == 62 {
+            result += "&gt;" 
+        } elif c == 34 {
+            result += "&quot;" 
+        } elif c == 39 {
+            result += "&#39;" 
+        } else {
+            result += c 
+        }
+        i++
     }
     return result
 }
@@ -403,15 +443,15 @@ func renderInlineMarkdown(text: string): string {
         // Bold: **text**
         if c == 42 and i + 1 < len and text[i + 1] == 42 {
             let mut boldText: string = ""
-            i = i + 2
+            i += 2
             while i < len {
                 if text[i] == 42 and i + 1 < len and text[i + 1] == 42 {
-                    result = result + "<strong>" + escapeHtml(boldText) + "</strong>"
-                    i = i + 2
+                    result += "</strong>"
+                    i += 2
                     break
                 }
-                boldText = boldText + text[i]
-                i = i + 1
+                boldText += text[i]
+                i++
             }
             continue
         }
@@ -419,15 +459,15 @@ func renderInlineMarkdown(text: string): string {
         // Italic: *text*
         if c == 42 {
             let mut italicText: string = ""
-            i = i + 1
+            i++
             while i < len {
                 if text[i] == 42 {
-                    result = result + "<em>" + escapeHtml(italicText) + "</em>"
-                    i = i + 1
+                    result += "</em>"
+                    i++
                     break
                 }
-                italicText = italicText + text[i]
-                i = i + 1
+                italicText += text[i]
+                i++
             }
             continue
         }
@@ -435,15 +475,15 @@ func renderInlineMarkdown(text: string): string {
         // Inline code: `code`
         if c == 96 {
             let mut codeText: string = ""
-            i = i + 1
+            i++
             while i < len {
                 if text[i] == 96 {
-                    result = result + "<code>" + escapeHtml(codeText) + "</code>"
-                    i = i + 1
+                    result += "</code>"
+                    i++
                     break
                 }
-                codeText = codeText + text[i]
-                i = i + 1
+                codeText += text[i]
+                i++
             }
             continue
         }
@@ -451,69 +491,83 @@ func renderInlineMarkdown(text: string): string {
         // Link: [text](url)
         if c == 91 {
             let mut linkText: string = ""
-            i = i + 1
+            i++
             while i < len and text[i] != 93 {
-                linkText = linkText + text[i]
-                i = i + 1
+                linkText += text[i]
+                i++
             }
-            if i < len { i = i + 1 }
+            if i < len {
+                i++ 
+            }
             if i < len and text[i] == 40 {
                 let mut url: string = ""
-                i = i + 1
+                i++
                 while i < len and text[i] != 41 {
-                    url = url + text[i]
-                    i = i + 1
+                    url += text[i]
+                    i++
                 }
-                if i < len { i = i + 1 }
-                result = result + "<a href=\"" + escapeHtml(url) + "\">" + escapeHtml(linkText) + "</a>"
+                if i < len {
+                    i++ 
+                }
+                result += "</a>"
                 continue
             }
-            result = result + "[" + linkText
+            result += linkText
             continue
         }
 
-        result = result + c
-        i = i + 1
+        result += c
+        i++
     }
     return result
 }
 
 func renderHtml(root: HtmlNode): string {
     let mut html: string = "<!DOCTYPE html>\n<html>\n<head>\n"
-    html = html + "<meta charset=\"UTF-8\">\n"
-    html = html + "<title>Markdown Output</title>\n"
-    html = html + "<style>\n"
-    html = html + "body \{ font-family: -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; \}\n"
-    html = html + "code \{ background: #f4f4f4; padding: 2px 6px; border-radius: 3px; \}\n"
-    html = html + "pre \{ background: #f4f4f4; padding: 16px; border-radius: 5px; overflow-x: auto; \}\n"
-    html = html + "blockquote \{ border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; \}\n"
-    html = html + "hr \{ border: none; border-top: 2px solid #ddd; \}\n"
-    html = html + "</style>\n</head>\n<body>\n"
+    html += "<meta charset=\"UTF-8\">\n"
+    html += "<title>Markdown Output</title>\n"
+    html += "<style>\n"
+    html += "body \{
+ font-family: -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; \
+}\n"
+    html += "code \{
+ background: #f4f4f4; padding: 2px 6px; border-radius: 3px; \
+}\n"
+    html += "pre \{
+ background: #f4f4f4; padding: 16px; border-radius: 5px; overflow-x: auto; \
+}\n"
+    html += "blockquote \{
+ border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; \
+}\n"
+    html += "hr \{
+ border: none; border-top: 2px solid #ddd; \
+}\n"
+    html += "</style>\n</head>\n<body>\n"
 
     let mut i: u64 = 0
     while i < #root.children {
         let node: HtmlNode = root.children[i]
         if node.kind == HtmlNodeType::HEADING1 {
-            html = html + "<h1>" + escapeHtml(node.text) + "</h1>\n"
+            html += "</h1>\n"
         } elif node.kind == HtmlNodeType::HEADING2 {
-            html = html + "<h2>" + escapeHtml(node.text) + "</h2>\n"
+            html += "</h2>\n"
         } elif node.kind == HtmlNodeType::HEADING3 {
-            html = html + "<h3>" + escapeHtml(node.text) + "</h3>\n"
+            html += "</h3>\n"
         } elif node.kind == HtmlNodeType::PARAGRAPH {
-            html = html + "<p>" + renderInlineMarkdown(node.text) + "</p>\n"
+            html += "</p>\n"
         } elif node.kind == HtmlNodeType::BLOCKQUOTE_NODE {
-            html = html + "<blockquote><p>" + escapeHtml(node.text) + "</p></blockquote>\n"
+            html += "</p></blockquote>\n"
         } elif node.kind == HtmlNodeType::LIST_ITEM_NODE {
-            html = html + "<ul>\n<li>" + renderInlineMarkdown(node.text) + "</li>\n</ul>\n"
+            html += "</li>\n</ul>\n"
         } elif node.kind == HtmlNodeType::HORIZONTAL_RULE {
-            html = html + "<hr>\n"
+            html += "<hr>\n"
         } elif node.kind == HtmlNodeType::RAW_TEXT {
-            html = html + escapeHtml(node.text)
+            html += escapeHtml(node.text)
         }
-        i = i + 1
+        i++
     }
 
-    html = html + "</body>\n</html>\n"
+    html += "</body>\n</html>\n"
     return html
 }
 
@@ -527,8 +581,10 @@ func main(): u64 {
     let mut fullInput: string = input
     while true {
         let line: string = readLine()
-        if stringLength(line) == 0 { break }
-        fullInput = fullInput + "\n" + line
+        if stringLength(line) == 0 {
+            break 
+        }
+        fullInput += line
     }
 
     // Tokenize

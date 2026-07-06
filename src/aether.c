@@ -1,8 +1,8 @@
 /*
  * aether.c — Bootstrap compiler CLI.
- * Reads .ae files, tokenizes, parses, analyzes, generates NASM,
- * assembles with nasm, and links with ld (freestanding ELF64)
- * or clang (Mach-O 64 for macOS).
+ * Reads .ae files, tokenizes, parses, analyzes, generates C code
+ * (via c_transpiler/) or NASM (via codegen/), compiles with gcc/clang,
+ * and links for the target platform.
  *
  * Also supports:
  *   aether init <name>   — scaffold a new project

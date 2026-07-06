@@ -33,19 +33,8 @@ echo $?             # Should print 42
 ## Prerequisites
 
 - **C compiler**: GCC or Clang (for building the bootstrap compiler)
-- **LLVM 18+**: LLVM development libraries (for the LLVM IR backend)
 - **make**: Build system
 - **Python 3**: For some build tools
-
-On macOS:
-```bash
-brew install llvm
-```
-
-On Linux:
-```bash
-sudo apt-get install llvm-dev
-```
 
 ## Project Overview
 
@@ -54,8 +43,8 @@ The Aether compiler is a from-scratch language compiler that:
 1. Reads `.ae` source files
 2. Tokenizes and parses them into an AST
 3. Performs semantic analysis and optimization
-4. Generates LLVM IR via the LLVM-C API
-5. Emits object files, assembly listings, or flat binaries via LLVM backends
+4. Generates C code via the C transpiler (default) or NASM assembly (for asm targets)
+5. Compiles the C code with gcc/clang to produce native binaries
 
 The compiler is written in C11 (bootstrap phase) and will eventually be rewritten in Aether (self-hosting).
 
@@ -72,18 +61,11 @@ The compiler is written in C11 (bootstrap phase) and will eventually be rewritte
 | `parser.c` | Recursive descent + Pratt parser | Adding new syntax, changing grammar |
 | `semantic.c` | Type checking, name resolution, const evaluation | Adding type rules, compile-time evaluation |
 | `optimizer.c` | DCE, constant folding, inlining | Adding optimization passes, fixing optimizer bugs |
-| `llvm/llvm_init.c` | LLVM context/module/builder creation | Changing LLVM initialization |
-| `llvm/llvm_types.c` | Aether → LLVM type mapping | Adding new primitive types |
-| `llvm/llvm_expr.c` | Expression codegen (literals, ops, calls, indexing) | Adding expression-level features |
-| `llvm/llvm_stmt.c` | Statement codegen (let, if, while, for, return, defer) | Adding statement-level features |
-| `llvm/llvm_func.c` | Function codegen (decl, params, entry/exit, variadics) | Changing function ABI |
-| `llvm/llvm_string.c` | String operations (concat, interpolation, itoa) | Changing string representation |
-| `llvm/llvm_asm.c` | Inline assembly (asm blocks, output bindings) | Changing inline asm support |
-| `llvm/llvm_error.c` | Error handling (throws, try/catch, cleanup tables) | Changing exception mechanism |
-| `llvm/llvm_contract.c` | Contract codegen (pre/post conditions) | Changing contract semantics |
-| `llvm/llvm_runtime.c` | Runtime helpers (alloc, concat, itoa declarations) | Adding runtime functions |
-| `llvm/llvm_target.c` | Target setup, object emission, linker scripts | Adding new targets |
-| `llvm/llvm_debug.c` | Debug info (DWARF metadata, source locations) | Improving debug experience |
+| `codegen/` (15 files) | NASM codegen for asm targets | Changing assembly output, adding asm target features |
+| `c_transpiler/` (11 files) | C transpiler (default backend) | Adding new language features, fixing codegen bugs |
+| `arena.c` | Arena allocator | Changing memory management |
+| `str.c` | String view utilities | Changing string handling |
+| `vector.c` | Dynamic array | Changing dynamic array behavior |
 
 ### Header Files (`include/aether/`)
 
@@ -95,7 +77,8 @@ The compiler is written in C11 (bootstrap phase) and will eventually be rewritte
 | `lexer.h` | `Lexer` struct |
 | `parser.h` | `Parser` struct, `Precedence` enum |
 | `semantic.h` | `SemanticAnalyzer` struct |
-| `llvm.h` | `LlvmCodegen` struct, public API for all LLVM modules |
+| `codegen.h` | `Codegen` struct, `Target` enum, NASM codegen API |
+| `c_transpiler.h` | `CCodegen` struct, C transpiler API |
 | `optimizer.h` | `OptimizerConfig` struct |
 
 ### Standard Library (`std/`)
@@ -146,15 +129,15 @@ Follow this order:
    - Add type checking rules
    - Update `const_eval_expr()` if compile-time evaluable
 
-5. **Codegen** (in `src/llvm/`):
-   - Add code emission in the appropriate LLVM module
-   - `llvm_expr.c` for expression features
-   - `llvm_stmt.c` for statement features
-   - `llvm_func.c` for function-level features
-   - `llvm_string.c` for string operations
-   - `llvm_error.c` for error handling
-   - `llvm_asm.c` for inline assembly
-   - `llvm_contract.c` for contract programming
+5. **Codegen** (in `src/c_transpiler/`):
+   - Add code emission in the appropriate C transpiler module
+   - `c_expr.c` for expression features
+   - `c_stmt.c` for statement features
+   - `c_func.c` for function-level features
+   - `c_string.c` for string operations
+   - `c_error.c` for error handling
+   - `c_asm.c` for inline assembly
+   - `c_contract.c` for contract programming
 
 6. **Optimizer** (`optimizer.c` + `optimizer.h`):
    - Update DCE to handle new node types
@@ -190,7 +173,7 @@ Follow this order:
 - **Error handling**: Return error codes, use `fprintf(stderr, ...)` for errors
 - **No dynamic allocation**: Use arena allocator for AST nodes
 - **No stdlib**: The compiler must compile with `-ffreestanding` eventually
-- **LLVM modules**: Each file under 400 lines, one concern per file
+- **C transpiler modules**: Each file under 2000 lines, one concern per file
 
 ### Testing
 
@@ -225,12 +208,12 @@ Fixes #123
 - Simple, portable, well-understood
 - Easy to bootstrap (every platform has a C compiler)
 
-### Why LLVM?
-- Register allocation, instruction selection, and optimization handled by LLVM
-- Free multi-arch backends: x86_64, ARM64, RISC-V, WASM
-- Proper DWARF debug info
-- Battle-tested optimization passes (200+)
-- The LLVM-C API is stable and well-documented
+### Why C Transpiler?
+- Generates portable C code that any C compiler can compile
+- No LLVM dependency — simpler build system
+- Easy to debug (inspect the generated C)
+- Full control over output — no black box optimization
+- C compilers handle register allocation, calling conventions, and multi-arch
 
 ### Why Arena Allocation?
 - No individual frees needed (entire arena freed at once)
@@ -248,6 +231,5 @@ Fixes #123
 - Read [REQUIREMENTS.md](REQUIREMENTS.md) for language requirements
 - Read [SPECIFICATION.md](SPECIFICATION.md) for language specification
 - Read [STATUS.md](STATUS.md) for implementation status
-- Read [LLVM_BACKEND.md](LLVM_BACKEND.md) for LLVM backend design
 - Read [AGENTS.md](AGENTS.md) for AI agent guide (also useful for humans)
 - Read the source code — it's well-commented
