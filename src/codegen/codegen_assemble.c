@@ -87,24 +87,28 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         return ret;
     }
 
-    /* .aelib library target: assemble to .o for archiving */
+    /* .aelib library target: assemble to .o then wrap in aelib format */
     if (cg->target == TARGET_LIB) {
         /* Always use ELF64 for .aelib — the object code is used across toolchains */
         const char *nasm_fmt = "elf64";
 
+        /* Use a temp .o file so we don't overwrite the .aelib output */
+        char obj_path[1024];
+        snprintf(obj_path, sizeof(obj_path), "%s.o", output_file);
+
         char cmd[2048];
-        snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o \"%s\" \"%s\"", nasm_fmt, output_file, asm_file);
+        snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o \"%s\" \"%s\"", nasm_fmt, obj_path, asm_file);
         int ret = system(cmd);
         if (ret != 0) {
             fprintf(stderr, "nasm failed (exit %d)\n", ret);
             return ret;
         }
 
-        /* Also build the .aelib archive from the .o */
+        /* Build the .aelib archive from the .o */
         {
             /* Read the .o file */
-            FILE *f = fopen(output_file, "rb");
-            if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", output_file); return 1; }
+            FILE *f = fopen(obj_path, "rb");
+            if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", obj_path); return 1; }
             fseek(f, 0, SEEK_END);
             long flen = ftell(f);
             fseek(f, 0, SEEK_SET);
@@ -116,9 +120,14 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
             /* Set code data on the aelib writer */
             aelib_set_code(cg->aelib_writer, code_data, rlen);
 
-            /* Write the .aelib file alongside the .o */
+            /* Write the .aelib file */
             char aelib_path[1024];
-            snprintf(aelib_path, sizeof(aelib_path), "%s.aelib", output_file);
+            const char *out_ext = strrchr(output_file, '.');
+            if (out_ext && strcmp(out_ext, ".aelib") == 0) {
+                snprintf(aelib_path, sizeof(aelib_path), "%s", output_file);
+            } else {
+                snprintf(aelib_path, sizeof(aelib_path), "%s.aelib", output_file);
+            }
             ret = aelib_write(cg->aelib_writer, aelib_path);
             if (ret != 0) {
                 fprintf(stderr, "aelib_write failed\n");

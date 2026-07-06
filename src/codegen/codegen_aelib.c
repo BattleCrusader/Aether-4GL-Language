@@ -83,25 +83,10 @@ char *decl_name(AstNode *node) {
     return strdup("");
 }
 
-/* Helper: check if a declaration is public */
+/* Helper: check if a declaration is public — everything is public by default */
 bool decl_is_pub(AstNode *node) {
-    if (!node) return false;
-    switch (node->type) {
-        case NODE_FUNC_DECL:
-            return node->data.func.is_pub || node->data.func.access == ACCESS_PUB;
-        case NODE_STRUCT_DECL:
-            return node->data.struct_decl.is_pub;
-        case NODE_CLASS_DECL:
-            return node->data.struct_decl.is_pub;
-        case NODE_ENUM_DECL:
-            return node->data.enum_decl.is_pub;
-        case NODE_CONST_DECL:
-            return node->data.let_decl.is_mut; /* const is always accessible */
-        case NODE_TYPE_ALIAS:
-            return true; /* type aliases are always accessible */
-        default:
-            return false;
-    }
+    (void)node;
+    return true;
 }
 
 /* Helper: get primitive type name for metadata */
@@ -409,7 +394,6 @@ int codegen_extract_metadata(Codegen *cg, AstNode *program) {
         if (!node) continue;
 
         const char *name = decl_name(node);
-        bool is_pub = decl_is_pub(node);
         uint8_t kind;
         uint8_t *type_data = NULL;
         size_t type_data_size = 0;
@@ -439,7 +423,11 @@ int codegen_extract_metadata(Codegen *cg, AstNode *program) {
         }
 
         if (name && name[0]) {
-            aelib_add_symbol(cg->aelib_writer, name, kind, is_pub, NULL,
+            uint8_t sym_flags = AELIB_FLAG_PUBLIC;
+            if (node->type == NODE_FUNC_DECL && node->data.func.is_sys) {
+                sym_flags |= AELIB_FLAG_SYS;
+            }
+            aelib_add_symbol(cg->aelib_writer, name, kind, sym_flags, NULL,
                              type_data, (uint32_t)type_data_size);
         }
 

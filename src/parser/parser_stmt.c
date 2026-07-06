@@ -63,14 +63,17 @@ AstNode *parse_statement(Parser *p) {
         AstNode *cond = parse_expr(p);
         AstNode *then_block = NULL;
 
-        /* Handle block (braced or indented) */
+        /* Handle block (braced) or single statement */
         if (parser_check(p, TOKEN_LBRACE)) {
             parser_advance(p);
             then_block = parse_block_braced(p);
         } else {
-            /* Indented block follows */
-            parser_advance(p); /* consume newline? */
-            then_block = parse_block_braced(p);
+            /* Single-statement body: if cond stmt */
+            AstNode *stmt = parse_statement(p);
+            if (stmt) {
+                then_block = node_block(p->arena, stmt->loc);
+                node_list_append(&then_block->data.list, stmt);
+            }
         }
 
         /* elif chain */
@@ -84,6 +87,12 @@ AstNode *parse_statement(Parser *p) {
             if (parser_check(p, TOKEN_LBRACE)) {
                 parser_advance(p);
                 elif_block = parse_block_braced(p);
+            } else {
+                AstNode *stmt = parse_statement(p);
+                if (stmt) {
+                    elif_block = node_block(p->arena, stmt->loc);
+                    node_list_append(&elif_block->data.list, stmt);
+                }
             }
             AstNode *elif_node = node_if(p->arena, p->previous.loc, elif_cond, elif_block, NULL, NULL);
             if (!elif_chain) {
@@ -106,7 +115,11 @@ AstNode *parse_statement(Parser *p) {
                 parser_advance(p);
                 else_block = parse_block_braced(p);
             } else {
-                else_block = parse_block_braced(p);
+                AstNode *stmt = parse_statement(p);
+                if (stmt) {
+                    else_block = node_block(p->arena, stmt->loc);
+                    node_list_append(&else_block->data.list, stmt);
+                }
             }
         }
 
@@ -120,6 +133,12 @@ AstNode *parse_statement(Parser *p) {
         if (parser_check(p, TOKEN_LBRACE)) {
             parser_advance(p);
             body = parse_block_braced(p);
+        } else {
+            AstNode *stmt = parse_statement(p);
+            if (stmt) {
+                body = node_block(p->arena, stmt->loc);
+                node_list_append(&body->data.list, stmt);
+            }
         }
         return node_while(p->arena, p->previous.loc, cond, body);
     }

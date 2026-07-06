@@ -35,7 +35,18 @@ AstNode *parse_match_arm(Parser *p) {
     }
 
     parser_expect(p, TOKEN_ARROW, "match arm arrow (->)");
-    AstNode *body = parse_expr(p);
+    AstNode *body;
+    /* Body can be an expression or a statement (e.g., return, break) */
+    if (parser_check(p, TOKEN_KW_RETURN) || parser_check(p, TOKEN_KW_BREAK) ||
+        parser_check(p, TOKEN_KW_CONTINUE) || parser_check(p, TOKEN_KW_THROW) ||
+        parser_check(p, TOKEN_KW_IF) || parser_check(p, TOKEN_KW_WHILE) ||
+        parser_check(p, TOKEN_KW_FOR) || parser_check(p, TOKEN_KW_MATCH) ||
+        parser_check(p, TOKEN_KW_LET) || parser_check(p, TOKEN_KW_DEFER) ||
+        parser_check(p, TOKEN_KW_UNSAFE) || parser_check(p, TOKEN_KW_TRY)) {
+        body = parse_statement(p);
+    } else {
+        body = parse_expr(p);
+    }
 
     AstNode *arm = node_match_arm(p->arena,
         pattern ? pattern->loc : p->previous.loc, pattern, body);

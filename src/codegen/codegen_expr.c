@@ -750,7 +750,7 @@ void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                         node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL &&
                         node->data.call.callee->data.ident.resolved->data.func.is_sys) {
                         int idx = node->data.call.callee->data.ident.resolved->data.func.sys_index;
-                        if (idx >= 0) {
+                        if (idx >= 0 && cg->target != TARGET_LIB) {
                             cg_comment(cg, "syscall via 0x5000 table");
                             char tmp[64];
                             snprintf(tmp, sizeof(tmp), "mov rax, 0x%x", 0x5000 + idx * 8);

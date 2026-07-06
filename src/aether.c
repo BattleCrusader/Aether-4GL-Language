@@ -19,6 +19,7 @@
 #include "aether/codegen.h"
 #include "aether/c_transpiler.h"
 #include "aether/optimizer.h"
+#include "aether/aelib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1094,6 +1095,34 @@ int main(int argc, char **argv) {
                 }
             }
 
+            /* Try library search paths: build/lib/, ~/.local/lib/aether/, /usr/local/lib/aether/ */
+            if (!ifile) {
+                const char *home = getenv("HOME");
+                char home_lib[1024] = {0};
+                if (home) {
+                    snprintf(home_lib, sizeof(home_lib), "%s/.local/lib/aether", home);
+                }
+                const char *search_dirs[4];
+                int ndirs = 0;
+                search_dirs[ndirs++] = "build/lib";
+                if (home_lib[0]) search_dirs[ndirs++] = home_lib;
+                search_dirs[ndirs++] = "/usr/local/lib/aether";
+                search_dirs[ndirs] = NULL;
+                for (int di = 0; di < ndirs; di++) {
+                    char lib_path[1024];
+                    snprintf(lib_path, sizeof(lib_path), "%s/%.*s.aelib",
+                        search_dirs[di], (int)path_len, path_start);
+                    ifile = fopen(lib_path, "rb");
+                    if (ifile) {
+                        snprintf(std_resolved, sizeof(std_resolved), "%s", lib_path);
+                        resolved_path = std_resolved;
+                        is_aelib = true;
+                        if (verbose) printf("  found in library path: %s\n", lib_path);
+                        break;
+                    }
+                }
+            }
+
             if (!ifile) {
                 fprintf(stderr, "Error: cannot open import '%s' (tried .ae, .aelib, and std paths)\n", import_path);
                 return 1;
@@ -1156,6 +1185,10 @@ int main(int argc, char **argv) {
                                 AstNode *func = node_func_decl(parser->arena, loc, ident,
                                     (flags & 1) != 0, false);
                                 func->data.func.body = NULL; /* extern */
+                                /* Mark as sys if the aelib metadata says so */
+                                if (flags & 0x02) {
+                                    func->data.func.is_sys = true;
+                                }
 
                                 /* Parse type data to get return type and params */
                                 if (td_sz2 > 0 && kind == 0) { /* function */
@@ -1381,6 +1414,66 @@ int main(int argc, char **argv) {
         if (stop_after_asm) {
             /* Just emit C source, don't compile */
             if (verbose) printf("Wrote %s\n", c_path);
+        } else if (target == TARGET_LIB) {
+            /* Compile C to .o, then wrap in .aelib */
+            char o_path[1024];
+            snprintf(o_path, sizeof(o_path), "%s.o", output_file ? output_file : "/tmp/aether_out");
+            if (c_compile(cg, c_path, o_path) != 0) {
+                fprintf(stderr, "C compilation to .o failed\n");
+                arena_destroy(c_arena);
+                parser_destroy(parser);
+                free(source);
+                arena_destroy(sa_arena);
+                return 1;
+            }
+            remove(c_path);
+
+            /* Read the .o file */
+            FILE *of = fopen(o_path, "rb");
+            if (!of) { fprintf(stderr, "Error: cannot read .o file\n"); return 1; }
+            fseek(of, 0, SEEK_END);
+            long olen = ftell(of);
+            fseek(of, 0, SEEK_SET);
+            uint8_t *code_data = (uint8_t *)malloc((size_t)olen);
+            if (!code_data) { fclose(of); return 1; }
+            size_t rlen = fread(code_data, 1, (size_t)olen, of);
+            fclose(of);
+            remove(o_path);
+
+            /* Build .aelib */
+            AelibWriter *aw = aelib_create();
+            aelib_set_code(aw, code_data, rlen);
+
+            /* Add symbols from program */
+            for (int i = 0; i < program->data.list.count; i++) {
+                AstNode *n = program->data.list.items[i];
+                if (!n) continue;
+                const char *sym_name = NULL;
+                uint8_t kind = 0;
+                if (n->type == NODE_FUNC_DECL && n->data.func.name) {
+                    sym_name = arena_strndup(sa_arena,
+                        n->data.func.name->data.ident.name.data,
+                        n->data.func.name->data.ident.name.len);
+                    kind = 0; /* AELIB_SYM_FUNC */
+                }
+                if (sym_name) {
+                    aelib_add_symbol(aw, sym_name, kind, true, NULL, NULL, 0);
+                }
+            }
+
+            const char *aelib_path = output_file;
+            if (!aelib_path) aelib_path = "/tmp/aether.aelib";
+            int ret = aelib_write(aw, aelib_path);
+            if (ret != 0) {
+                fprintf(stderr, "aelib_write failed\n");
+                arena_destroy(c_arena);
+                parser_destroy(parser);
+                free(source);
+                arena_destroy(sa_arena);
+                return 1;
+            }
+
+            if (verbose) printf("Wrote .aelib to %s\n", aelib_path);
         } else {
             /* Compile C to native binary */
             if (c_compile(cg, c_path, output_file) != 0) {

@@ -2850,16 +2850,16 @@ For closed-source third-party library distribution, Aether uses `.aelib` — an 
 
 ```
 # All public decls from a library
-import "libtest"
+import "test"
 
 # Only public decls from a specific class/namespace
-import "libtest" : Foo
+import "test" : Foo
 
 # From multiple classes
-import "libtest" : Foo, Bar
+import "test" : Foo, Bar
 
 # Explicit .aelib file
-import "libtest.aelib" : Foo
+import "test.aelib" : Foo
 
 # Standard library (auto-resolved by compiler)
 import "std/io"
@@ -2889,7 +2889,7 @@ For `.aelib` libraries, visibility is enforced via metadata gating — `private`
 ### 26.7 Build Command
 
 ```
-aether build --target lib libtest.ae -o libtest.aelib
+aether build --target lib test.ae -o test.aelib
 ```
 
 The new `--target lib` target produces code + metadata in one `.aelib` file.

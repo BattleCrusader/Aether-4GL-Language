@@ -7,10 +7,7 @@
 // Usage: aether run examples/markdown_to_html.ae
 //        (reads from stdin, writes HTML to stdout)
 
-import "std/io"
-import "std/str"
-import "std/math"
-import "std/test"
+import "aether"
 
 // ═══════════════════════════════════════════════════════════════
 // §1 — Token types for the Markdown lexer
@@ -63,9 +60,7 @@ func lexerCreate(input: string): Lexer {
 }
 
 func lexerPeek(l: ref Lexer): byte {
-    if l.pos >= #l.input {
- return 0 
-}
+    if l.pos >= #l.input return 0
     return l.input[l.pos]
 }
 
@@ -74,9 +69,7 @@ func lexerAdvance(l: ref Lexer) {
         if l.input[l.pos] == 10 {
             l.line++
             l.col = 1
-        } else {
-            l.col++
-        }
+        } else l.col++
         l.pos++
     }
 }
@@ -84,9 +77,8 @@ func lexerAdvance(l: ref Lexer) {
 func lexerSkipWhitespace(l: ref Lexer) {
     while true {
         let c: byte = lexerPeek(l)
-        if c == 32 or c == 9 {
- lexerAdvance(l) } else { break 
-}
+        if c == 32 or c == 9 lexerAdvance(l) 
+        else break
     }
 }
 
@@ -113,9 +105,7 @@ func lexerTokenize(l: ref Lexer): [Token] {
         let startLine: u64 = l.line
         let startCol: u64 = l.col
 
-        if c == 0 {
- break 
-}
+        if c == 0 break
 
         // Newline
         if c == 10 {
@@ -154,51 +144,52 @@ func lexerTokenize(l: ref Lexer): [Token] {
 
         // Brackets
         if c == 91 {
- lexerAdvance(l); lexerEmitToken(l, TokenType::LBRACKET, "[", startLine, startCol); continue 
-}
+            lexerAdvance(l)
+            lexerEmitToken(l, TokenType::LBRACKET, "[", startLine, startCol)
+            continue
+        }
         if c == 93 {
- lexerAdvance(l); lexerEmitToken(l, TokenType::RBRACKET, "]", startLine, startCol); continue 
-}
+            lexerAdvance(l); lexerEmitToken(l, TokenType::RBRACKET, "]", startLine, startCol); continue 
+        }
         if c == 40 {
- lexerAdvance(l); lexerEmitToken(l, TokenType::LPAREN, "(", startLine, startCol); continue 
-}
+            lexerAdvance(l);
+            lexerEmitToken(l, TokenType::LPAREN, "(", startLine, startCol);
+            continue;
+        }
         if c == 41 {
- lexerAdvance(l); lexerEmitToken(l, TokenType::RPAREN, ")", startLine, startCol); continue 
-}
+            lexerAdvance(l); lexerEmitToken(l, TokenType::RPAREN, ")", startLine, startCol); continue 
+        }
 
         // Bang
         if c == 33 {
- lexerAdvance(l); lexerEmitToken(l, TokenType::BANG, "!", startLine, startCol); continue 
-}
+            lexerAdvance(l); lexerEmitToken(l, TokenType::BANG, "!", startLine, startCol); continue 
+        }
 
         // Dash
         if c == 45 {
- lexerAdvance(l); lexerEmitToken(l, TokenType::DASH, "-", startLine, startCol); continue 
-}
+            lexerAdvance(l); lexerEmitToken(l, TokenType::DASH, "-", startLine, startCol); continue 
+        }
 
         // Greater-than (blockquote)
         if c == 62 {
- lexerAdvance(l); lexerEmitToken(l, TokenType::GT, ">", startLine, startCol); continue 
-}
+            lexerAdvance(l); lexerEmitToken(l, TokenType::GT, ">", startLine, startCol); continue 
+        }
 
         // Space or tab — skip
         if c == 32 or c == 9 {
- lexerSkipWhitespace(l); continue 
-}
+            lexerSkipWhitespace(l);
+            continue 
+        }
 
         // Regular text — read until a special character
         let mut text: string = ""
         while true {
             let ch: byte = lexerPeek(l)
-            if lexerIsSpecial(ch) {
- break 
-}
+            if lexerIsSpecial(ch) { break }
             text += ch
             lexerAdvance(l)
         }
-        if #text > 0 {
-            lexerEmitToken(l, TokenType::TEXT, text, startLine, startCol)
-        }
+        if #text > 0 { lexerEmitToken(l, TokenType::TEXT, text, startLine, startCol); }
     }
     lexerEmitToken(l, TokenType::TOK_EOF, "", l.line, l.col)
     return l.tokens
@@ -411,11 +402,8 @@ func escapeHtml(text: string): string {
     let mut i: u64 = 0
     while true {
         let c: byte = text[i]
-        if c == 0 {
-            return result 
-        } elif c == 38 {
-            result += "&amp;" 
-        } elif c == 60 {
+
+        if c == 60 {
             result += "&lt;" 
         } elif c == 62 {
             result += "&gt;" 
@@ -423,9 +411,14 @@ func escapeHtml(text: string): string {
             result += "&quot;" 
         } elif c == 39 {
             result += "&#39;" 
-        } else {
-            result += c 
         }
+
+        match c {
+            case 38 -> result += "&amp;" 
+            case 0 -> return result
+            case _ -> result += c
+        }
+
         i++
     }
     return result
