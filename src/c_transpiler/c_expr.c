@@ -1372,31 +1372,7 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
         case NODE_ARRAY_LIT: {
             /* Array literal: emit as slice compound literal with elem_size */
             int count = node->data.array_lit.elements.count;
-            if (count == 0) {
-                fputs("(slice){ NULL, 0, 8 }", cg->out);
-            } else {
-                int es = 8;
-                int is_str = 0;
-                if (count > 0) {
-                    AstNode *first = node->data.array_lit.elements.items[0];
-                    if (first && first->type == NODE_LITERAL_STRING) {
-                        is_str = 1;
-                    } else if (first && is_string_expr(first)) {
-                        is_str = 1;
-                    }
-                }
-                if (is_str) es = 16;
-                fputs("(slice){ (void*)(", cg->out);
-                fputs(is_str ? "string" : "uint64_t", cg->out);
-                fprintf(cg->out, "[]){", count);
-                for (int i = 0; i < count; i++) {
-                    if (i > 0) fputs(", ", cg->out);
-                    c_emit_expr(cg, node->data.array_lit.elements.items[i]);
-                }
-                fprintf(cg->out, "}, %d, %d }", count, es);
-            }
-            break;
-        }
+            if (count == 0) {                fputs("(slice){ NULL, 0, 8 }", cg->out);            } else {                int es = 8;                int is_str = 0;                const char *elem_type = "uint64_t";                if (count > 0) {                    AstNode *first = node->data.array_lit.elements.items[0];                    if (first && first->type == NODE_LITERAL_STRING) {                        is_str = 1;                    } else if (first && is_string_expr(first)) {                        is_str = 1;                    }                    /* Determine element type for non-string arrays */                    if (!is_str) {                        if (first->type == NODE_LITERAL_INT || first->type == NODE_LITERAL_FLOAT ||                            first->type == NODE_LITERAL_BOOL || first->type == NODE_LITERAL_CHAR) {                            elem_type = "uint64_t";                        } else {                            /* Struct or other complex type - use the type name of the element */                            AstNode *decl = NULL;                            if (first->type == NODE_IDENT) decl = first->data.ident.resolved;                            if (decl && decl->type == NODE_LET) {                                char buf[256];                                const char *t = c_type_name(decl->data.let_decl.type);                                snprintf(buf, sizeof(buf), "%s", t);                                elem_type = strdup(buf);                            } else if (decl && decl->type == NODE_PARAM) {                                char buf[256];                                const char *t = c_type_name(decl->data.param.type);                                snprintf(buf, sizeof(buf), "%s", t);                                elem_type = strdup(buf);                            }                        }                    }                }                if (is_str) es = 16;                fputs("(slice){ (void*)(", cg->out);                fputs(is_str ? "string" : elem_type, cg->out);                fprintf(cg->out, "[]){", count);                for (int i = 0; i < count; i++) {                    if (i > 0) fputs(", ", cg->out);                    c_emit_expr(cg, node->data.array_lit.elements.items[i]);                }                fprintf(cg->out, "}, %d, %d }", count, es);            }            break;        }
         case NODE_LAMBDA: {
             /* Lambda: emit the function name (function pointer) for the
              * pre-collected lambda function. The function itself was already
