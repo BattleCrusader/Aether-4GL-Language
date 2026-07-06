@@ -1094,6 +1094,40 @@ int main(int argc, char **argv) {
                 }
             }
 
+            /* Try library search paths: build/lib/, ~/.local/lib/aether/, /usr/local/lib/aether/ */
+            if (!ifile) {
+                const char *home = getenv("HOME");
+                char home_lib[1024] = {0};
+                if (home) {
+                    snprintf(home_lib, sizeof(home_lib), "%s/.local/lib/aether", home);
+                }
+                const char *search_dirs[4];
+                int ndirs = 0;
+                search_dirs[ndirs++] = "build/lib";
+                if (home_lib[0]) search_dirs[ndirs++] = home_lib;
+                search_dirs[ndirs++] = "/usr/local/lib/aether";
+                search_dirs[ndirs] = NULL;
+                for (int di = 0; di < ndirs; di++) {
+                    char lib_path[1024];
+                    snprintf(lib_path, sizeof(lib_path), "%s/%.*s.aelib",
+                        search_dirs[di], (int)path_len, path_start);
+                    ifile = fopen(lib_path, "rb");
+                    if (!ifile) {
+                        /* Also try lib<name>.aelib convention */
+                        snprintf(lib_path, sizeof(lib_path), "%s/lib%.*s.aelib",
+                            search_dirs[di], (int)path_len, path_start);
+                        ifile = fopen(lib_path, "rb");
+                    }
+                    if (ifile) {
+                        snprintf(std_resolved, sizeof(std_resolved), "%s", lib_path);
+                        resolved_path = std_resolved;
+                        is_aelib = true;
+                        if (verbose) printf("  found in library path: %s\n", lib_path);
+                        break;
+                    }
+                }
+            }
+
             if (!ifile) {
                 fprintf(stderr, "Error: cannot open import '%s' (tried .ae, .aelib, and std paths)\n", import_path);
                 return 1;
