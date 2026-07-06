@@ -7,10 +7,7 @@
 // Usage: aether run examples/markdown_to_html.ae
 //        (reads from stdin, writes HTML to stdout)
 
-import "std/io"
-import "std/str"
-import "std/math"
-import "std/test"
+import "aether"
 
 // ═══════════════════════════════════════════════════════════════
 // §1 — Token types for the Markdown lexer
