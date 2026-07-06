@@ -90,6 +90,9 @@ void c_emit_func_prototype(CCodegen *cg, AstNode *node) {
     /* Emit function name */
     if (node->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
+    } else if (node->data.func.body == NULL) {
+        /* Extern functions (from aelib) — prefix to avoid POSIX conflicts */
+        fputs("__aether_ext_", cg->out);
     }
     /* Check if this is an impl block method — prefix with type name */
     if (node->data.func.is_impl_method && node->data.func.impl_type_name.data) {
@@ -183,6 +186,9 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
     } else {
         if (node->data.func.is_sys) {
             fputs("__aether_sys_", cg->out);
+        } else if (node->data.func.body == NULL) {
+            /* Extern functions (from aelib) — prefix to avoid POSIX conflicts */
+            fputs("__aether_ext_", cg->out);
         }
         fputs(mangle_func_name(fname, node->data.func.sig_hash), cg->out);
         /* Disambiguate getter/setter for struct methods */

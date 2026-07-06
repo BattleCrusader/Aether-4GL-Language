@@ -103,7 +103,7 @@ void aelib_set_code(AelibWriter *w, uint8_t *data, size_t size) {
 }
 
 int aelib_add_symbol(AelibWriter *w, const char *name, uint8_t kind,
-                     bool is_pub, const char *ns,
+                     uint8_t flags, const char *ns,
                      const uint8_t *type_data, uint32_t type_data_size)
 {
     if (w->sym_count >= w->sym_cap) {
@@ -119,7 +119,7 @@ int aelib_add_symbol(AelibWriter *w, const char *name, uint8_t kind,
     /* We know names are short identifiers (< 64 chars), so pass a safe max */
     e->name = strndup(name ? name : "", name ? strlen(name) : 0);
     e->kind = kind;
-    e->flags = is_pub ? AELIB_FLAG_PUBLIC : 0;
+    e->flags = flags;
     e->ns = ns ? strndup(ns, 64) : NULL;
     e->type_data = NULL;
     e->type_data_size = 0;

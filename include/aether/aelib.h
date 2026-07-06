@@ -46,6 +46,7 @@ extern "C" {
 
 /* Symbol flags */
 #define AELIB_FLAG_PUBLIC  0x01
+#define AELIB_FLAG_SYS     0x02
 
 /* ================================================================
  * On-disk structures (packed, little-endian)
@@ -105,13 +106,13 @@ void aelib_set_code(AelibWriter *w, uint8_t *data, size_t size);
 /* Add a symbol to the metadata section.
  * name: the symbol name (will be copied into string table)
  * kind: AELIB_SYM_* constant
- * is_pub: true if public
+ * flags: AELIB_FLAG_* bitmask (AELIB_FLAG_PUBLIC, AELIB_FLAG_SYS, etc.)
  * namespace: namespace/class name, NULL for top-level
  * type_data: raw type data blob (will be copied)
  * type_data_size: size of type data
  * Returns the index of the added symbol. */
 int aelib_add_symbol(AelibWriter *w, const char *name, uint8_t kind,
-                     bool is_pub, const char *ns,
+                     uint8_t flags, const char *ns,
                      const uint8_t *type_data, uint32_t type_data_size);
 
 /* Write the .aelib file to disk.

@@ -1185,6 +1185,10 @@ int main(int argc, char **argv) {
                                 AstNode *func = node_func_decl(parser->arena, loc, ident,
                                     (flags & 1) != 0, false);
                                 func->data.func.body = NULL; /* extern */
+                                /* Mark as sys if the aelib metadata says so */
+                                if (flags & 0x02) {
+                                    func->data.func.is_sys = true;
+                                }
 
                                 /* Parse type data to get return type and params */
                                 if (td_sz2 > 0 && kind == 0) { /* function */

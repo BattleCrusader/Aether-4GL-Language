@@ -382,6 +382,40 @@ static int is_var_string_type(CCodegen *cg, StringView vname) {
 static bool c_emit_prop_setter_expr(CCodegen *cg, AstNode *node);
 
 static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
+    /* String compound assignment: text += expr → text = __aether_concat(text, ...) */
+    if (node->data.binary.op == BIN_ADD_ASSIGN) {
+        AstNode *left = node->data.binary.left;
+        AstNode *right = node->data.binary.right;
+        if (is_string_expr(left)) {
+            c_emit_expr(cg, left);
+            fputs(" = __aether_concat(", cg->out);
+            c_emit_expr(cg, left);
+            fputs(", ", cg->out);
+            if (right && right->type == NODE_IDENT) {
+                AstNode *decl = right->data.ident.resolved;
+                if (decl) {
+                    AstNode *arg_type = NULL;
+                    if (decl->type == NODE_PARAM) arg_type = decl->data.param.type;
+                    if (decl->type == NODE_LET) arg_type = decl->data.let_decl.type;
+                    if (arg_type && arg_type->type == NODE_TYPE_PRIMITIVE &&
+                        arg_type->data.type_node.prim == PRIM_BYTE) {
+                        /* byte → wrap as (string){1, (char[]){byte, '\0'}} */
+                        fputs("(string){ 1, (char[]){(", cg->out);
+                        c_emit_expr(cg, right);
+                        fputs("), '\\0'} }", cg->out);
+                        fputs(")", cg->out);
+                        fputs(";\n", cg->out);
+                        return;
+                    }
+                }
+            }
+            c_emit_expr(cg, right);
+            fputs(")", cg->out);
+            fputs(";\n", cg->out);
+            return;
+        }
+    }
+
     /* Property setter dispatch: t.prop = value → propName_setter(&t, value) */
     if (node->data.binary.op == BIN_ASSIGN) {
         if (c_emit_prop_setter_expr(cg, node)) {
@@ -654,21 +688,28 @@ static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
             /* Array length: stored in first 8 bytes of header.
                For slice types, use .len field instead. */
             {
-                /* Check if operand is a slice type */
+                /* Check if operand is a slice type or string */
                 AstNode *operand = node->data.unary.operand;
-                int is_slice = 0;
+                int has_len_field = 0;
                 if (operand && operand->type == NODE_IDENT) {
                     AstNode *decl = operand->data.ident.resolved;
                     if (decl) {
                         AstNode *type_node = NULL;
                         if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
                         else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
-                        if (type_node && (type_node->type == NODE_TYPE_SLICE || type_node->type == NODE_TYPE_ARRAY)) {
-                            is_slice = 1;
+                        if (type_node && (type_node->type == NODE_TYPE_SLICE ||
+                            type_node->type == NODE_TYPE_ARRAY ||
+                            (type_node->type == NODE_TYPE_PRIMITIVE &&
+                             type_node->data.type_node.prim == PRIM_STRING))) {
+                            has_len_field = 1;
                         }
                     }
                 }
-                if (is_slice) {
+                if (operand && operand->type == NODE_FIELD_ACCESS) {
+                    /* Field access: both string and slice have .len */
+                    has_len_field = 1;
+                }
+                if (has_len_field) {
                     c_emit_expr(cg, operand);
                     fputs(".len", cg->out);
                 } else {
@@ -1007,13 +1048,24 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
         if (func_decl) (void)func_decl->data.func.params.items[i];
         if (i < (int)node->data.call.args.count) {
             AstNode *arg = node->data.call.args.items[i];
-            /* Auto-add & for struct args passed to void* params */
+            /* Auto-add & for struct args passed to ref/ptr params */
             int needs_ref = 0;
             if (func_decl && i < func_decl->data.func.params.count) {
                 AstNode *ptype = func_decl->data.func.params.items[i]->data.param.type;
                 if (ptype && (ptype->type == NODE_TYPE_REF || ptype->type == NODE_TYPE_PTR) &&
                     arg->type == NODE_IDENT) {
-                    needs_ref = 1;
+                    /* Only add & if the argument is not already a pointer/ref type */
+                    int already_ptr = 0;
+                    AstNode *arg_decl = arg->data.ident.resolved;
+                    if (arg_decl) {
+                        AstNode *arg_type = NULL;
+                        if (arg_decl->type == NODE_LET) arg_type = arg_decl->data.let_decl.type;
+                        else if (arg_decl->type == NODE_PARAM) arg_type = arg_decl->data.param.type;
+                        if (arg_type && (arg_type->type == NODE_TYPE_REF || arg_type->type == NODE_TYPE_PTR)) {
+                            already_ptr = 1;
+                        }
+                    }
+                    if (!already_ptr) needs_ref = 1;
                 }
             }
             if (needs_ref) fputs("&(", cg->out);
@@ -1067,9 +1119,9 @@ static void c_emit_index(CCodegen *cg, AstNode *node) {
                 else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
             }
         } else if (target->type == NODE_FIELD_ACCESS) {
-            /* Field access on a struct — the field is a slice type.
-               Always use .data access for struct field indexing. */
-            is_slice_or_string = 1;
+            /* Field access on a struct — the field is a slice or string type.
+               Both have .data, so use .data[index] access. */
+            is_slice_or_string = 2;
         } else if (target->type == NODE_INDEX) {
             /* Chained indexing: strings[i][j] — the inner index returns a string.
                Use .data[j] access for the outer index. */
@@ -1086,6 +1138,27 @@ static void c_emit_index(CCodegen *cg, AstNode *node) {
         }
     }
     if (is_slice_or_string == 1) {
+        /* Check if target is a plain string — it has no elem_size field */
+        int is_plain_string = 0;
+        if (target && target->type == NODE_IDENT) {
+            AstNode *decl = target->data.ident.resolved;
+            if (decl) {
+                AstNode *ttype = NULL;
+                if (decl->type == NODE_LET) ttype = decl->data.let_decl.type;
+                else if (decl->type == NODE_PARAM) ttype = decl->data.param.type;
+                if (ttype && ttype->type == NODE_TYPE_PRIMITIVE &&
+                    ttype->data.type_node.prim == PRIM_STRING) {
+                    is_plain_string = 1;
+                }
+            }
+        }
+        if (is_plain_string) {
+            c_emit_expr(cg, node->data.index.target);
+            fputs(".data[", cg->out);
+            c_emit_expr(cg, node->data.index.index);
+            fputc(']', cg->out);
+            return;
+        }
         /* Use elem_size from the slice struct for proper byte-offset indexing.
            Cast to char*, offset by index * elem_size, then cast to uint64_t* for the value.
            For string slices, cast to string* to read the full 16-byte struct. */

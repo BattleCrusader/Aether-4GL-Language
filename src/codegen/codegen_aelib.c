@@ -394,7 +394,6 @@ int codegen_extract_metadata(Codegen *cg, AstNode *program) {
         if (!node) continue;
 
         const char *name = decl_name(node);
-        bool is_pub = decl_is_pub(node);
         uint8_t kind;
         uint8_t *type_data = NULL;
         size_t type_data_size = 0;
@@ -424,7 +423,11 @@ int codegen_extract_metadata(Codegen *cg, AstNode *program) {
         }
 
         if (name && name[0]) {
-            aelib_add_symbol(cg->aelib_writer, name, kind, is_pub, NULL,
+            uint8_t sym_flags = AELIB_FLAG_PUBLIC;
+            if (node->type == NODE_FUNC_DECL && node->data.func.is_sys) {
+                sym_flags |= AELIB_FLAG_SYS;
+            }
+            aelib_add_symbol(cg->aelib_writer, name, kind, sym_flags, NULL,
                              type_data, (uint32_t)type_data_size);
         }
 
