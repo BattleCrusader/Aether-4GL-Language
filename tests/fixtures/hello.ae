@@ -1,7 +1,3 @@
-// hello.ae — minimal Aether test program
-import "std/test"
-
-@test
-func main(): void {
-    assertEquals(1, 1, "basic assertion")
+func main() {
+	let x: i64 = 42
 }
