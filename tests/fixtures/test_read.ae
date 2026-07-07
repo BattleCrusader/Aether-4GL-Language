@@ -1,0 +1,8 @@
+import "aether"
+
+func main(): u64 {
+    let line: string = readLine()
+    print("got: '" + line + "'\n")
+    print("len: " + string(stringLength(line)) + "\n")
+    return 0
+}

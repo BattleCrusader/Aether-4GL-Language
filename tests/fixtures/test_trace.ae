@@ -1,0 +1,14 @@
+import "aether"
+
+func main(): u64 {
+    let input: string = "hello\n"
+    let mut lexer: Lexer = lexerCreate(input)
+    let tokens: [Token] = lexerTokenize(ref lexer)
+    let mut i: u64 = 0
+    while i < #tokens {
+        let t: Token = tokens[i]
+        print("[" + string(i) + "] kind=" + string(t.kind) + " text='" + t.text + "'\n")
+        i++
+    }
+    return 0
+}

@@ -79,7 +79,7 @@ aether run hello.ae
 
 3. **Automatic memory management, no GC** — Memory is managed at compile time through escape analysis, region inference, and deterministic scope-based deallocation. No garbage collector, no reference counting overhead.
 
-4. **No interpreter** — Aether compiles directly to native code. There is no VM, no JIT, no bytecode. The compiler itself is written in C (bootstrap) and will eventually be self-hosting.
+4. **No interpreter** — Aether compiles directly to native code. There is no VM, no JIT, no bytecode. The compiler is written in Aether and eventually self-hosts.
 
 5. **OS-native from day one** — The language is designed alongside the Aether OS. Every feature exists because the OS needs it: syscall tables, kernel modules, boot sectors, flat binaries.
 
@@ -133,22 +133,22 @@ PascalCase     // valid
 ```
 and         as          bool        break       byte
 catch       char        class       const       continue
-defer       double      dyn         elif        else
+copy        defer       double      dyn         elif        else
 enum        export      extern      false       float
 for         func        heap        i8          i16
 i32         i64         if          impl        import
-in          init        inline      int         internal
-let         module      mut         none        not
-or          owned       pool        post        pre
-private     protocol    public      ptr         rc
-ref         region      return      self        static
-string      struct      super       sys         throw
-trait       true        try         type        u8
-u16         u32         u64         u128        unsafe
-use         var         void        while       yield
+in          init        int         internal    let
+module      none        not         or
+pool        post        pre         private     protocol
+public      region
+return      self        static      string     struct
+super       sys         throw       trait       true
+try         type        u8          u16         u32
+u64         u128        unsafe      var         void
+while       yield
 ```
 
-> **Note:** `int`, `float`, `double`, and `char` are type aliases (see §4.3). `void` is a zero-sized type used for functions with no return value. `none` is the null value for optional types. `true` and `false` are boolean literals. `self` is the implicit method receiver. `init` and `drop` are special method names for constructors and destructors.
+> **Note:** `int`, `float`, `double`, and `char` are type aliases (see §4.3). `var` declares a mutable binding. `let` declares an immutable binding. `copy` forces pass-by-value copy. `void` is a zero-sized type used for functions with no return value. `none` is the null value for optional types. `true` and `false` are boolean literals. `self` is the implicit method receiver. `init` and `drop` are special method names for constructors and destructors. All objects are reference types with automatic memory management.
 
 ### 3.4 Operators
 
@@ -182,7 +182,7 @@ This is guaranteed behavior — the compiler never evaluates the right side when
 **Prefix/postfix increment and decrement** (`++x`, `x++`, `--x`, `x--`): Both prefix and postfix forms are supported. The parser creates `UNARY_INC` and `UNARY_DEC` nodes, and codegen emits `inc`/`dec` instructions. Prefix form returns the incremented value; postfix form returns the original value.
 
 ```aether
-let mut x: u64 = 5
+var x: u64 = 5
 x += 3           // x = 8  (compound add)
 x *= 2           // x = 16  (compound mul)
 ++x              // x = 17  (prefix increment)
@@ -347,13 +347,13 @@ let y: u64 = 2
 let sum = "{x + y}"             # BIN_CONCAT("", __aether_itoa(x + y))
 ```
 
-**Runtime**: The `__aether_concat(left: ptr, right: ptr) -> rax: ptr` function:
+**Runtime**: The `__aether_concat(left: u64, right: u64) -> u64` function:
 1. Computes strlen of both strings
 2. Allocates a buffer via `__aether_alloc` (bump allocator)
 3. Copies both strings into the buffer
 4. Returns the new string pointer
 
-The `__aether_itoa(rdi: u64) -> rax: ptr` function:
+The `__aether_itoa(rdi: u64) -> u64` function:
 1. Allocates 21 bytes (max 20 digits + null)
 2. Handles zero case (returns "0")
 3. Writes digits from end backwards using repeated div by 10
@@ -442,19 +442,16 @@ let l: f64 = 3.141592653589793 // 64-bit float
 let arr: [u64; 4] = [1, 2, 3, 4]
 let dyn_arr: [u64]      // dynamic array (slice)
 
-// Pointers
-let ptr: *u64 = &value
-let null_ptr: *u64 = none
+// Pointers are not supported — use reference types instead
+let r: u64 = &value
+let null_ref: u64 = none
 
 // References (preferred over pointers)
-let r: ref u64 = &value
-let mut_r: mut ref u64 = &mut value
-
-// Owned references
-let o: owned String = String::new()
+let r: u64 = &value
+var ref_r: u64 = &value
 
 // Reference-counted
-let rc: rc SharedData = rc_new(data)
+let shared: SharedData = new_ref(data)
 
 // Optionals
 let opt: u64? = some(42)
@@ -581,7 +578,7 @@ class Counter {
 **Key rules:**
 - `init` is the constructor name — called automatically on variable declaration
 - `drop` is the destructor name — called automatically at scope exit
-- Methods defined inside the class body get implicit `self: ref Type` as first parameter
+- Methods defined inside the class body get implicit `self: Type` as first parameter
 - Fields are initialized in declaration order
 - Classes are emitted as C structs with companion functions
 
@@ -612,8 +609,8 @@ impl Drawable for Circle {
 
 **Key characteristics of traits:**
 - **Behavior-only**: Traits define method signatures, never fields or data
-- **Static dispatch by default**: `ref Trait` compiles to monomorphized code — zero overhead
-- **Dynamic dispatch opt-in**: `ref dyn Trait` uses fat pointers (vtable + data pointer) for runtime polymorphism
+- **Static dispatch by default**: `Trait` compiles to monomorphized code — zero overhead
+- **Dynamic dispatch opt-in**: `dyn Trait` uses fat pointers (vtable + data pointer) for runtime polymorphism
 - **Generic type params**: Traits can be parameterized (`trait Comparable<T>`) for type-safe generic algorithms
 - **Type constraints**: Traits can constrain generic type params (`func min<T: Comparable>(a: T, b: T): T`)
 - **No data**: Traits describe *what a type can do*, not *what a type is*
@@ -706,25 +703,30 @@ match x {
 
 ## 5. Variables and Bindings
 
-### 5.1 Let Bindings
+### 5.1 Variable Bindings
 
-**`let`** declares an immutable binding. **`let mut`** declares a mutable binding. Types can be explicit or inferred from the initializer.
+**`let`** declares an immutable binding. **`var`** declares a mutable binding. Types can be explicit or inferred from the initializer.
 
 ```aether
-let x: u64 = 42          // explicit type
-let y = 42               // type inferred (u64)
-let mut z = 10           // mutable
-z = 20                   // ok
+let x: u64 = 42          // immutable, explicit type
+let y = 42               // immutable, type inferred (u64)
+var z = 10               // mutable, type inferred
+z = 20                   // ok — mutability allowed
+
+var a: u64 = 5           // mutable, explicit type
+a = 15                   // ok
 
 const MAX = 100          // compile-time constant (must be a literal or const expression)
 ```
 
+> **Note:** `let` (immutable) and `var` (mutable) are the two variable declaration forms. All objects are reference types with automatic memory management. Use `copy` to force pass-by-value when needed.
+
 **Key rules:**
-- `let` bindings are immutable by default — use `mut` to allow reassignment
+- `let` bindings are immutable by default — use `var` to allow reassignment
 - Type inference works for all expressions including function calls, arithmetic, and struct literals
 - `const` is evaluated at compile time and substituted inline — no runtime storage
 - Shadowing is allowed: `let x = 10; let x = x + 5;` creates a new binding
-- Destructuring is supported: `let (a, b) = (1, 2);`
+- Destructuring is supported: `let (a, b) = (1, 2); var (c, d) = (3, 4);`
 
 **Destructuring example:**
 ```aether
@@ -751,7 +753,7 @@ let x = 10
 let x = x + 5   // shadows previous x, now 15
 ```
 
-Shadowing creates a new binding with the same name in the same or inner scope. The previous binding is hidden, not modified. This is different from mutation (`mut`) — shadowing changes the binding, mutation changes the value.
+Shadowing creates a new binding with the same name in the same or inner scope. The previous binding is hidden, not modified. This is different from reassignment — shadowing changes the binding, reassignment changes the value.
 
 ### 5.4 Global Variables
 
@@ -759,7 +761,7 @@ File-scope `let` declarations create global variables. They are initialized at p
 
 ```aether
 let GLOBAL_CONFIG: string = "default"
-let mut counter: u64 = 0
+var counter: u64 = 0
 ```
 
 Global variables are stored in the `.bss` (zero-initialized) or `.data` (initialized) section. Mutable globals require `unsafe` to access from multiple functions, as the compiler cannot prove thread safety.
@@ -820,7 +822,7 @@ func divide(a: u64, b: u64): (u64, u64) {
 ```
 
 **Key rules:**
-- Parameters are passed by value (copy) unless `ref` or pointer types are used
+- Parameters are passed by reference (all objects are reference types)
 - The last expression in a block is implicitly returned if no explicit `return`
 - `return` is optional in expression-bodied functions (`-> expr`)
 - Void functions implicitly return `0` at the end (via `xor rax, rax` in assembly)
@@ -831,7 +833,7 @@ Attributes modify function behavior at compile time. They are written as `@name`
 
 ```aether
 // Inline hint
-inline func fast_path(): u64 { return 42 }
+@force_inline func fast_path(): u64 { return 42 }
 
 // Force inline
 @force_inline func always_inline(): u64 { return 42 }
@@ -906,8 +908,8 @@ Inside the function, the variadic parameter behaves like an array. Iterating ove
 
 ```aether
 extern func puts(s: string): int
-extern func malloc(size: u64): ptr void
-extern func free(ptr: ptr void)
+extern func malloc(size: u64): u64
+extern func free(ptr: u64)
 ```
 
 Extern functions are declared without a body. They tell the compiler the function exists in another object file or shared library. The compiler emits an `extern` NASM directive and generates a call instruction with the correct ABI (SysV for x86_64).
@@ -1130,7 +1132,7 @@ func process() {
 ```
 
 **Key rules:**
-- All `let` bindings without `heap`, `region`, or `rc` are stack-allocated
+- All `let` bindings without `heap` or `region` are stack-allocated
 - The compiler tracks the lifetime of each variable and emits cleanup at scope exit
 - For types with `drop` methods (classes), the destructor is called in LIFO order
 - Stack allocation is zero-cost — just a stack pointer bump
@@ -1140,7 +1142,7 @@ func process() {
 When a reference to a stack variable could outlive its scope, the compiler **automatically promotes** it to heap allocation. No programmer annotation needed for simple cases.
 
 ```aether
-func make_point(x: int, y: int): ref Point {
+func make_point(x: int, y: int): Point {
     let p = Point(x, y)
     // compiler detects: p's reference escapes this frame
     // auto-promotes p to heap
@@ -1154,7 +1156,7 @@ Escape analysis is conservative — if the compiler cannot prove a reference doe
 
 ```aether
 let big = heap Buffer(1024 * 1024)
-let shared = heap rc SharedState()
+let shared = heap SharedState()
 ```
 
 The `heap` keyword forces heap allocation even if escape analysis would stack-allocate. Use it for:
@@ -1162,32 +1164,32 @@ The `heap` keyword forces heap allocation even if escape analysis would stack-al
 - Objects that need to outlive the current function
 - When you need explicit control over lifetime
 
-### 8.4 Ownership and Borrowing
+### 8.4 Ownership and Memory Management
 
-Aether's ownership model is inspired by Rust but with different syntax and semantics:
-
-- **`owned T`** — single-owner, moved on assignment, freed when owner drops
-- **`ref T`** — borrowed reference, non-owning, must not outlive the lender
-- **`rc T`** — reference-counted shared ownership with atomic reference counting, freed when count reaches zero
+Aether uses automatic memory management with escape analysis and region inference. All objects are reference types — the compiler infers whether a binding is borrowed or shared and inserts reference count operations automatically.
 
 ```aether
-func consume(val: owned Buffer) {   // val will be freed at end
-    process(val)
-}  // val freed here
-
-func observe(val: ref Buffer) {     // borrow, no ownership
+func consume(val: Buffer) {   // borrow, compiler infers non-owning
     print(val.size())
 }  // nothing freed, borrow ends
 
-func share(val: rc Buffer) {        // shared ownership
-    let clone = val  // increments refcount
-}  // decrements refcount, frees if zero
+func share(val: Buffer) {        // shared, compiler infers shared ownership
+    let clone = val  // compiler inserts refcount increment
+}  // compiler inserts refcount decrement, frees if zero
+```
+
+**Force a copy:** Use `copy` to force pass-by-value when the compiler would otherwise infer a borrow:
+
+```aether
+func process(data: copy Data)      // explicit copy on call
+let x = copy original              // explicit copy at binding
 ```
 
 **Key rules:**
-- `owned` values are moved on assignment — the original binding becomes invalid
-- `ref` bindings are non-owning — they must not outlive the value they reference
-- `rc` types use atomic reference counting — thread-safe but with overhead
+- All objects are reference types — the compiler manages lifetimes automatically
+- The compiler infers borrowing vs. shared ownership through escape analysis
+- Use `copy` to force a pass-by-value copy when needed
+- Region inference groups objects that share the same lifetime
 - The compiler enforces ownership at compile time where possible
 
 ### 8.5 Region-Based Allocation
@@ -1239,29 +1241,21 @@ let val = opt or default_value
 ```
 ```
 
-### 8.7 Pointers (Opt-In, Unsafe)
+### 8.7 Unsafe Blocks
 
-```aether
-func read_mmio(addr: ptr u64): u64 {
-    unsafe {
-        return *addr
-    }
-}
-```
+`unsafe` blocks opt into operations the compiler cannot prove safe:
 
 **What is allowed inside `unsafe` blocks:**
-- Dereferencing raw pointers (`*ptr`)
 - Calling functions marked `unsafe`
 - Inline assembly (`asm { }`)
-- Direct memory manipulation (pointer arithmetic, type punning)
+- Direct memory manipulation
 - Accessing or modifying mutable statics
 
 **What is NOT allowed inside `unsafe` blocks:**
-- Bypassing the type system (you cannot cast `ptr u64` to `string` without an explicit `as` cast)
 - Creating references with invalid lifetimes (the borrow checker still applies to `ref` types)
 - Calling non-`unsafe` functions with invalid arguments (type checking still applies)
 
-> **Safety note:** `unsafe` does not disable the compiler. Type checking, borrow checking, and lifetime analysis still apply to `ref` types. `unsafe` only enables operations that the compiler cannot prove safe: pointer dereference, inline assembly, and FFI calls.
+> **Safety note:** `unsafe` does not disable the compiler. Type checking, borrow checking, and lifetime analysis still apply. `unsafe` only enables operations that the compiler cannot prove safe: inline assembly, FFI calls, and direct memory access.
 
 ### 8.8 Automatic Destructor Insertion
 
@@ -1298,7 +1292,7 @@ class File {
         sys_close(self.fd)
     }
 
-    public func read( buf: ref [u8]): int {
+    public func read( buf: [u8]): int {
         return sys_read(self.fd, buf)
     }
 
@@ -1310,7 +1304,7 @@ class File {
 
 ### 9.2 Implicit `self`
 
-`self` is **never written in the parameter list**. The parser auto-injects `self: ref Type` as the first parameter for methods defined inside struct/class bodies.
+`self` is **never written in the parameter list**. The parser auto-injects `self: Type` as the first parameter for methods defined inside struct/class bodies.
 
 ```aether
 class Point {
@@ -1318,7 +1312,7 @@ class Point {
     y: int
 
     // self is implicit — never write it in params
-    func distance(other: ref Point): float {
+    func distance(other: Point): float {
         let dx = self.x - other.x
         let dy = self.y - other.y
         return sqrt(dx*dx + dy*dy)
@@ -1354,12 +1348,12 @@ impl Serializable for Point {
 }
 
 // Static dispatch (zero-cost)
-func save_static(value: ref Serializable) {
+func save_static(value: Serializable) {
     let bytes = value.serialize()
 }
 
 // Dynamic dispatch (vtable)
-func save_dynamic(value: ref dyn Serializable) {
+func save_dynamic(value: dyn Serializable) {
     let bytes = value.serialize()
 }
 ```
@@ -1497,7 +1491,7 @@ func identity<T>(value: T): T {
     return value
 }
 
-func swap<T>(a: ref T, b: ref T) {
+func swap<T>(a: T, b: T) {
     let tmp = *a
     *a = *b
     *b = tmp
@@ -1528,11 +1522,11 @@ class Stack<T> {
 
 ```aether
 trait Comparable<T> {
-    func less_than( other: ref T): bool
+    func less_than( other: T): bool
 }
 
 impl<T> Comparable<T> for u64 {
-    func less_than( other: ref u64): bool {
+    func less_than( other: u64): bool {
         return self < other
     }
 }
@@ -1702,8 +1696,8 @@ Aether transparently catches hardware faults (segmentation faults, bus errors, p
 
 ```aether
 try {
-    let ptr: *u64 = 0
-    let val = *ptr  # null pointer dereference — caught!
+    let null_ref: u64 = none
+    let val = null_ref  # null reference dereference — caught!
 } catch _ {
     print("caught a segfault")
 }
@@ -1777,7 +1771,7 @@ Contract programming allows you to specify **preconditions**, **postconditions**
 **`pre(expr)`** declares a condition that must be true **before** a function executes. **`post(expr)`** declares a condition that must be true **after** a function returns. The `old()` function inside a `post()` condition refers to the value of an expression before the function executed.
 
 ```aether
-func withdraw(account: ref Account, amount: u64)
+func withdraw(account: Account, amount: u64)
     pre(account.balance >= amount)
     post(account.balance == old(account.balance) - amount)
 {
@@ -1981,14 +1975,14 @@ trait Drawable {
 }
 
 // Static dispatch (default) — monomorphized, zero-cost
-func render_static(items: [ref Drawable]) {
+func render_static(items: [Drawable]) {
     for item in items {
         item.draw()
     }
 }
 
 // Dynamic dispatch — vtable lookup
-func render_dynamic(items: [ref dyn Drawable]) {
+func render_dynamic(items: [dyn Drawable]) {
     for item in items {
         item.draw()
     }
@@ -2192,7 +2186,7 @@ The compiler knows the Aether syscall table and generates optimal call sequences
 sys func putc(c: byte) at(0)
 sys func puts(s: string) at(1)
 sys func open(path: string): int at(2)
-sys func read(fd: int, buf: ref [u8]): int at(3)
+sys func read(fd: int, buf: [u8]): int at(3)
 sys func exit() at(7)
 ```
 
@@ -2601,7 +2595,7 @@ impl<T> trait Hashable {
             case [u8] => hash_bytes(self)
             case string => hash_str(self)
             case struct { ...fields } => {
-                let mut h = 0
+                var h = 0
                 for field in fields { h ^= field.hash() }
                 h
             }
@@ -2680,7 +2674,7 @@ The compiler embeds this as an ELF note section. The OS can query it without loa
 ```aether
 // Functions declare what capabilities they need
 @requires(io, mem)
-func write_disk(sector: u64, data: ref [u8]) {
+func write_disk(sector: u64, data: [u8]) {
     // Compiler verifies caller has io and mem capabilities
 }
 
@@ -2918,12 +2912,12 @@ An ELF file with a metadata section (`.aeb`) is trivially reverse-engineerable w
 ## Appendix A: Reserved Words
 
 ```
-as, asm, break, case, catch, class, const, continue, default,
+as, asm, break, case, catch, class, const, continue, copy,
 defer, do, dyn, elif, else, enum, export, extern, false, for,
-func, heap, if, impl, import, in, init, drop, let, match, mod,
-module, mut, none, not, or, and, owned, pool, post, pre, private,
-protocol, public, ptr, rc, ref, region, return, self, static, struct,
-super, sys, test, throw, trait, true, try, type, unsafe, use,
+func, heap, if, impl, import, in, init, drop, let, match,
+module, none, not, or, and, pool, post, pre, private,
+protocol, public, region, return, self, static, struct,
+super, sys, test, throw, trait, true, try, type, unsafe,
 var, where, while, yield
 ```
 

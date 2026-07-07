@@ -31,14 +31,10 @@ func readLine(): string {
     while !done {
         let bytesRead: u64 = read(0, buf, 1)
         if bytesRead == 0 { done = true; break }
-        let mut tempByte: byte = 0
-        asm: (tempByte) {
-            mov rdi, [buf]
-            mov al, [rdi]
-            movzx rax, al
-        }
-        if tempByte == 10 { done = true; break }
-        let s: string = string(tempByte)
+        let byteVal: u64 = buf[0]
+        let c: byte = byteVal
+        if c == 10 { done = true; break }
+        let s: string = string(c)
         result = result + s
     }
     return result
