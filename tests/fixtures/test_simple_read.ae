@@ -1,0 +1,7 @@
+import "aether"
+
+func main(): u64 {
+    let line: string = readLine()
+    print(line)
+    return 0
+}
