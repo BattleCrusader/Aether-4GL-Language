@@ -59,6 +59,7 @@ const (
 	TOKEN_GREATER_GREATER_EQUAL
 	TOKEN_DOT_DOT
 	TOKEN_DOT_DOT_EQUAL
+	TOKEN_DOT_DOT_DOT
 	TOKEN_ARROW
 	TOKEN_COLON_COLON
 	TOKEN_HASH
@@ -387,7 +388,9 @@ func (l *Lexer) scanToken() {
 		}
 	case '.':
 		if l.match('.') {
-			if l.match('=') {
+			if l.match('.') {
+				l.addToken(TOKEN_DOT_DOT_DOT)
+			} else if l.match('=') {
 				l.addToken(TOKEN_DOT_DOT_EQUAL)
 			} else {
 				l.addToken(TOKEN_DOT_DOT)
