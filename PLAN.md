@@ -157,12 +157,20 @@ Since the bootstrap tool emits native code, it can use:
 ### Phase 1: Bootstrap Tool (Go) — Core Language ✅
 **Goal:** Bootstrap tool can compile the simplest Aether program.
 
-- [ ] Go lexer tokenizes Aether source
-- [ ] Go parser builds AST for basic expressions and function calls
-- [ ] Go codegen emits native code for `func main() { print("hello") }`
-- [ ] Bootstrap tool produces working `hello` binary
+- [x] Go lexer tokenizes Aether source (68 keywords, all operators, all literal forms)
+- [x] Go parser builds AST for all Phase 1 features (func, class, struct, enum, if/elif/else, while, for/in, match/case, defer, try/catch, throw, let/var, all expressions)
+- [x] Go codegen emits native x86_64 code (mov, add/sub/mul/div, cmp/jmp/call, push/pop, syscall, setcc)
+- [x] Go linker produces valid ELF64 binary with proper program headers
+- [x] Bootstrap tool produces working `hello` binary
+- [x] 35 comprehensive tests covering lexer, parser, semantic analysis, full pipeline, and edge cases
 
-**Deliverable:** `./bootstrap` (Go binary) → compiles `hello.ae` → produces `hello` (native).
+**Deliverable:** `./cmd/bootstrap/aether` (Go binary) → compiles `hello.ae` → produces `hello` (native ELF64).
+
+**Test suite:** `cmd/bootstrap/compiler_test.go` — 35 tests, all passing:
+- Lexer: keywords (all 68), operators, literals, comments, hex/binary/octal, string interpolation, empty input, unterminated strings
+- Parser: empty program, func decl, params+return, if/elif/else, while, for/in, match/case, binary/unary expressions, array literals, string interpolation, defer/try/throw, struct, enum, compound assignment, method calls, nested blocks, multiple functions, ranges, tuples, for-each
+- Semantic: basic analysis, let-without-init error, undefined symbol error
+- Integration: full pipeline (lex → parse → semantic → codegen → link → ELF binary)
 
 ### Phase 2: Aether Compiler Source (Aether)
 **Goal:** Write the Aether compiler in Aether.

@@ -119,8 +119,20 @@ func (p *Parser) parseDecl() Decl {
 	if p.match(TOKEN_KW_PUBLIC) || p.match(TOKEN_KW_PRIVATE) || p.match(TOKEN_KW_EXPORT) {
 		// visibility modifier — peek at what follows
 	}
+	// Collect leading attributes
+	var attrs []*Attribute
+	for p.check(TOKEN_AT) {
+		p.advance()
+		attr := &Attribute{pos: p.previous().Pos()}
+		if p.check(TOKEN_IDENT) {
+			attr.Name = p.advance().Lexeme
+		}
+		attrs = append(attrs, attr)
+	}
 	if p.check(TOKEN_KW_FUNC) {
-		return p.parseFuncDecl()
+		fd := p.parseFuncDecl()
+		fd.Attrs = append(attrs, fd.Attrs...)
+		return fd
 	}
 	if p.check(TOKEN_KW_CLASS) {
 		return p.parseClassDecl()
@@ -592,8 +604,10 @@ func (p *Parser) getPrecedence() int {
 		TOKEN_PIPE_EQUAL, TOKEN_CARET_EQUAL, TOKEN_LESS_LESS_EQUAL,
 		TOKEN_GREATER_GREATER_EQUAL:
 		return PREC_ASSIGNMENT
-	case TOKEN_DOT_DOT, TOKEN_DOT_DOT_EQUAL:
+	case TOKEN_KW_AS:
 		return PREC_ASSIGNMENT + 1
+	case TOKEN_DOT_DOT, TOKEN_DOT_DOT_EQUAL:
+		return PREC_ASSIGNMENT + 2
 	case TOKEN_KW_OR:
 		return PREC_OR
 	case TOKEN_PIPE_PIPE:
@@ -629,6 +643,11 @@ func (p *Parser) prefixFn() func() Expr {
 	switch p.peek().Type {
 	case TOKEN_IDENT:
 		return p.parseIdentPrefix
+	case TOKEN_KW_BOOL, TOKEN_KW_BYTE, TOKEN_KW_CHAR, TOKEN_KW_STRING, TOKEN_KW_VOID,
+		TOKEN_KW_INT, TOKEN_KW_FLOAT, TOKEN_KW_DOUBLE,
+		TOKEN_KW_U8, TOKEN_KW_U16, TOKEN_KW_U32, TOKEN_KW_U64, TOKEN_KW_U128,
+		TOKEN_KW_I8, TOKEN_KW_I16, TOKEN_KW_I32, TOKEN_KW_I64:
+		return p.parseTypeKeywordPrefix
 	case TOKEN_INTEGER, TOKEN_FLOAT, TOKEN_STRING, TOKEN_CHAR, TOKEN_KW_TRUE, TOKEN_KW_FALSE, TOKEN_KW_NONE:
 		return p.parseLiteral
 	case TOKEN_LPAREN:
@@ -651,9 +670,17 @@ func (p *Parser) prefixFn() func() Expr {
 		return p.parseCopyPrefix
 	case TOKEN_KW_HEAP:
 		return p.parseHeapPrefix
+	case TOKEN_KW_NOT:
+		return p.parseNotPrefix
 	default:
 		return nil
 	}
+}
+
+func (p *Parser) parseNotPrefix() Expr {
+	tok := p.advance()
+	operand := p.parsePrecedence(PREC_UNARY)
+	return &UnaryExpr{pos: tok.Pos(), Op: "!", Operand: operand}
 }
 
 func (p *Parser) infixFn() func(Expr) Expr {
@@ -694,6 +721,11 @@ func (p *Parser) infixFn() func(Expr) Expr {
 // Prefix parse functions
 
 func (p *Parser) parseIdentPrefix() Expr {
+	tok := p.advance()
+	return &IdentExpr{pos: tok.Pos(), Name: tok.Lexeme}
+}
+
+func (p *Parser) parseTypeKeywordPrefix() Expr {
 	tok := p.advance()
 	return &IdentExpr{pos: tok.Pos(), Name: tok.Lexeme}
 }
@@ -946,6 +978,20 @@ func (p *Parser) parseInInfix(left Expr) Expr {
 
 func (p *Parser) parseType() *TypeAnnotation {
 	ta := &TypeAnnotation{pos: p.peek().Pos()}
+	if p.check(TOKEN_DOT_DOT_DOT) {
+		// Variadic type: ...type
+		p.advance()
+		ta.Name = "..."
+		if p.check(TOKEN_IDENT) || p.check(TOKEN_KW_BOOL) || p.check(TOKEN_KW_BYTE) ||
+			p.check(TOKEN_KW_CHAR) || p.check(TOKEN_KW_STRING) || p.check(TOKEN_KW_VOID) ||
+			p.check(TOKEN_KW_INT) || p.check(TOKEN_KW_FLOAT) || p.check(TOKEN_KW_DOUBLE) ||
+			p.check(TOKEN_KW_U8) || p.check(TOKEN_KW_U16) || p.check(TOKEN_KW_U32) ||
+			p.check(TOKEN_KW_U64) || p.check(TOKEN_KW_U128) ||
+			p.check(TOKEN_KW_I8) || p.check(TOKEN_KW_I16) || p.check(TOKEN_KW_I32) || p.check(TOKEN_KW_I64) {
+			ta.Name += p.advance().Lexeme
+		}
+		return ta
+	}
 	if p.check(TOKEN_IDENT) || p.check(TOKEN_KW_BOOL) || p.check(TOKEN_KW_BYTE) ||
 		p.check(TOKEN_KW_CHAR) || p.check(TOKEN_KW_STRING) || p.check(TOKEN_KW_VOID) ||
 		p.check(TOKEN_KW_INT) || p.check(TOKEN_KW_FLOAT) || p.check(TOKEN_KW_DOUBLE) ||
