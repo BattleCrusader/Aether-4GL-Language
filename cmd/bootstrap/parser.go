@@ -450,7 +450,6 @@ func (p *Parser) parseBlock() *Block {
 		} else if p.check(TOKEN_RBRACE) || p.isAtEnd() {
 			break
 		} else {
-			// Advance to avoid infinite loop on parse failure
 			p.advance()
 		}
 	}
@@ -458,16 +457,31 @@ func (p *Parser) parseBlock() *Block {
 	return b
 }
 
+// parseBlockOrStmt parses either a { } block or a single statement.
+// Used for if/elif/else, while, for, defer, try/catch, match case bodies.
+func (p *Parser) parseBlockOrStmt() *Block {
+	if p.check(TOKEN_LBRACE) {
+		return p.parseBlock()
+	}
+	// Single statement — wrap in a Block
+	b := &Block{pos: p.peek().Pos()}
+	stmt := p.parseStatement()
+	if stmt != nil {
+		b.Stmts = append(b.Stmts, stmt)
+	}
+	return b
+}
+
 func (p *Parser) parseIfStmt() Stmt {
 	is := &IfStmt{pos: p.previous().Pos()}
 	is.Cond = p.parseExpression()
-	is.ThenBlock = p.parseBlock()
+	is.ThenBlock = p.parseBlockOrStmt()
 	for p.match(TOKEN_KW_ELIF) {
-		eb := &ElifBlock{Cond: p.parseExpression(), Block: p.parseBlock()}
+		eb := &ElifBlock{Cond: p.parseExpression(), Block: p.parseBlockOrStmt()}
 		is.ElifBlocks = append(is.ElifBlocks, eb)
 	}
 	if p.match(TOKEN_KW_ELSE) {
-		is.ElseBlock = p.parseBlock()
+		is.ElseBlock = p.parseBlockOrStmt()
 	}
 	return is
 }
@@ -475,7 +489,7 @@ func (p *Parser) parseIfStmt() Stmt {
 func (p *Parser) parseWhileStmt() Stmt {
 	ws := &WhileStmt{pos: p.previous().Pos()}
 	ws.Cond = p.parseExpression()
-	ws.Body = p.parseBlock()
+	ws.Body = p.parseBlockOrStmt()
 	return ws
 }
 
@@ -493,7 +507,7 @@ func (p *Parser) parseForStmt() Stmt {
 	}
 	p.expect(TOKEN_KW_IN, "expected 'in' in for loop")
 	fs.Iterable = p.parseExpression()
-	fs.Body = p.parseBlock()
+	fs.Body = p.parseBlockOrStmt()
 	return fs
 }
 
@@ -506,17 +520,17 @@ func (p *Parser) parseMatchStmt() Stmt {
 			mc := &MatchCase{pos: p.previous().Pos()}
 			mc.Pattern = p.parseExpression()
 			if p.match(TOKEN_ARROW) {
-				mc.Body = p.parseStatement()
+				mc.Body = p.parseBlockOrStmt()
 			} else {
-				mc.Body = p.parseBlock()
+				mc.Body = p.parseBlockOrStmt()
 			}
 			ms.Cases = append(ms.Cases, mc)
 		} else if p.match(TOKEN_KW_ELSE) {
 			mc := &MatchCase{pos: p.previous().Pos(), Pattern: &IdentExpr{Name: "_"}}
 			if p.match(TOKEN_ARROW) {
-				mc.Body = p.parseStatement()
+				mc.Body = p.parseBlockOrStmt()
 			} else {
-				mc.Body = p.parseBlock()
+				mc.Body = p.parseBlockOrStmt()
 			}
 			ms.Cases = append(ms.Cases, mc)
 		} else {
@@ -530,18 +544,18 @@ func (p *Parser) parseMatchStmt() Stmt {
 
 func (p *Parser) parseDeferStmt() Stmt {
 	ds := &DeferStmt{pos: p.previous().Pos()}
-	ds.Body = p.parseBlock()
+	ds.Body = p.parseBlockOrStmt()
 	return ds
 }
 
 func (p *Parser) parseTryStmt() Stmt {
 	ts := &TryStmt{pos: p.previous().Pos()}
-	ts.Body = p.parseBlock()
+	ts.Body = p.parseBlockOrStmt()
 	if p.match(TOKEN_KW_CATCH) {
 		if p.check(TOKEN_IDENT) {
 			ts.CatchVar = p.advance().Lexeme
 		}
-		ts.CatchBody = p.parseBlock()
+		ts.CatchBody = p.parseBlockOrStmt()
 	}
 	return ts
 }

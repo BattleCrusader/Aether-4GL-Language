@@ -674,3 +674,55 @@ func TestFullPipelineWithAllFeatures(t *testing.T) {
 		t.Fatalf("linking failed: %v", err)
 	}
 }
+
+// ============================================================
+// Brace-less block tests
+// ============================================================
+
+func TestParserIfWithoutBraces(t *testing.T) {
+	parseSource(t, "func test() {\n	if a == b return a\n}\n")
+}
+
+func TestParserIfElseWithoutBraces(t *testing.T) {
+	parseSource(t, "func test() {\n	if a == b return a else return b\n}\n")
+}
+
+func TestParserWhileWithoutBraces(t *testing.T) {
+	parseSource(t, "func test() {\n	while x < 10 x = x + 1\n}\n")
+}
+
+func TestParserForWithoutBraces(t *testing.T) {
+	parseSource(t, "func test() {\n	for i in 0..10 print(i)\n}\n")
+}
+
+func TestParserIfOnOneLine(t *testing.T) {
+	parseSource(t, "func test() {\n	if a == b { return a }\n}\n")
+}
+
+func TestParserWhileOnOneLine(t *testing.T) {
+	parseSource(t, "func test() {\n	while x < 10 { x = x + 1 }\n}\n")
+}
+
+func TestParserForOnOneLine(t *testing.T) {
+	parseSource(t, "func test() {\n	for i in 0..10 { print(i) }\n}\n")
+}
+
+func TestParserDeferWithoutBraces(t *testing.T) {
+	parseSource(t, "func test() {\n	defer cleanup()\n}\n")
+}
+
+func TestParserTryCatchWithoutBraces(t *testing.T) {
+	parseSource(t, "func test() {\n	try risky() catch e print(e)\n}\n")
+}
+
+func TestParserMatchCaseWithoutBraces(t *testing.T) {
+	parseSource(t, "func test(x: i64): i64 {\n	match x {\n		case 1 -> 10\n		case 2 -> 20\n		else -> 0\n	}\n}\n")
+}
+
+func TestParserNestedIfWithoutBraces(t *testing.T) {
+	parseSource(t, "func test() {\n	if a if b return c\n}\n")
+}
+
+func TestParserMixedBracesAndNoBraces(t *testing.T) {
+	parseSource(t, "func test() {\n	if a {\n		if b return c\n	} else {\n		if d return e\n	}\n}\n")
+}
