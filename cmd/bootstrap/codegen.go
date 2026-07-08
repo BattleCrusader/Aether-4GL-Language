@@ -1613,24 +1613,6 @@ func (c *Codegen) emitAeIndex() {
 	c.label("__ae_index")
 	c.emitPush("rbp")
 	c.emitMovR64R64("rbp", "rsp")
-
-	// rax = *(rdi + rsi)  (load byte, zero-extend)
-	c.emitAddR64R64("rdi", "rsi") // rdi = string + index
-	c.emitXorR64R64("rax", "rax") // clear rax
-	// mov al, byte [rdi]
-	c.emitByte(0x8A) // mov r/m8, r8
-	c.emitByte(0x07) // modrm: mod=00, reg=0, rm=111(rdi)
-	// Actually: 8A /r for mov r8, r/m8
-	// modrm: mod=00, reg=000(rax), rm=111(rdi) => 07
-	// But we need to zero-extend. Let's use movzx.
-	// movzx rax, byte [rdi]
-	c.emitMovzxR64R8("rax", "rdi") // wait, this is reg-to-reg
-
-	// Let me redo this properly
-	c.text = c.text[:c.labels["__ae_index"]]
-
-	c.emitPush("rbp")
-	c.emitMovR64R64("rbp", "rsp")
 	c.emitPush("rdi")
 	c.emitPush("rsi")
 
