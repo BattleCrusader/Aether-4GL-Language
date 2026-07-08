@@ -1,0 +1,89 @@
+// ast.ae — AST node definitions for the Aether compiler
+// Written in Aether v1
+
+// Source position
+struct Pos {
+    line: u64,
+    col: u64,
+}
+
+// Type annotation
+struct TypeAnnotation {
+    name: string,
+}
+
+// ===== Declarations =====
+
+struct Param {
+    name: string,
+    paramType: TypeAnnotation,
+    hasDefault: bool,
+}
+
+struct FuncDecl {
+    name: string,
+    params: [Param],
+    returnType: TypeAnnotation,
+    hasReturnType: bool,
+    hasBody: bool,
+    attrs: [string],
+}
+
+struct VarDecl {
+    name: string,
+    varType: TypeAnnotation,
+    hasType: bool,
+    hasInit: bool,
+    isLet: bool,
+}
+
+struct StructField {
+    name: string,
+    fieldType: TypeAnnotation,
+}
+
+struct StructDecl {
+    name: string,
+    fields: [StructField],
+}
+
+struct EnumVariant {
+    name: string,
+    hasPayload: bool,
+}
+
+struct EnumDecl {
+    name: string,
+    variants: [EnumVariant],
+}
+
+// ===== Statements =====
+
+// Block is a list of statement indices into the program's statement pool
+struct Block {
+    stmts: [u64],  // indices into stmt pool
+}
+
+// ===== Expressions =====
+
+struct BinaryExpr {
+    op: string,
+    left: u64,  // index into expr pool
+    right: u64,
+}
+
+struct UnaryExpr {
+    op: string,
+    operand: u64,
+    isPostfix: bool,
+}
+
+struct CallExpr {
+    callee: u64,
+    args: [u64],
+}
+
+struct LiteralExpr {
+    value: string,
+    literalType: u64,  // 0=int, 1=float, 2=string, 3=bool, 4=char, 5=none
+}

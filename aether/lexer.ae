@@ -1,0 +1,363 @@
+// lexer.ae — Lexer for the Aether compiler
+// Tokenizes Aether source into a stream of tokens
+// Written in Aether v1
+
+import "tokenizer.ae"
+
+struct Lexer {
+    source: string,
+    start: u64,
+    current: u64,
+    line: u64,
+    column: u64,
+    tokens: [Token],
+    hadError: bool,
+    errorMsg: string,
+}
+
+func newLexer(source: string): Lexer {
+    return Lexer{source, 0, 0, 1, 1, [], false, ""}
+}
+
+func isAtEnd(l: Lexer): bool {
+    return l.current >= #l.source
+}
+
+func advance(l: Lexer): Lexer {
+    l.current = l.current + 1
+    l.column = l.column + 1
+    return l
+}
+
+func peek(l: Lexer): byte {
+    if isAtEnd(l) {
+        return 0
+    }
+    return l.source[l.current]
+}
+
+func peekNext(l: Lexer): byte {
+    if l.current + 1 >= #l.source {
+        return 0
+    }
+    return l.source[l.current + 1]
+}
+
+func match(l: Lexer, expected: byte): Lexer {
+    if isAtEnd(l) {
+        return l
+    }
+    if l.source[l.current] != expected {
+        return l
+    }
+    l.current = l.current + 1
+    l.column = l.column + 1
+    return l
+}
+
+func addToken(l: Lexer, typ: u64): Lexer {
+    let lexeme = l.source[l.start:l.current]
+    l.tokens = push(l.tokens, Token{typ, lexeme, l.line, l.column - (l.current - l.start), ""})
+    return l
+}
+
+func addTokenLiteral(l: Lexer, typ: u64, literal: string): Lexer {
+    let lexeme = l.source[l.start:l.current]
+    l.tokens = push(l.tokens, Token{typ, lexeme, l.line, l.column - (l.current - l.start), literal})
+    return l
+}
+
+func isDigit(c: byte): bool {
+    return c >= 48 and c <= 57  // '0' to '9'
+}
+
+func isAlpha(c: byte): bool {
+    return (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95  // A-Z, a-z, _
+}
+
+func isAlphaNumeric(c: byte): bool {
+    return isAlpha(c) or isDigit(c)
+}
+
+func string(l: Lexer): Lexer {
+    while peek(l) != 34 and not isAtEnd(l) {  // 34 = '"'
+        if peek(l) == 10 {  // '\n'
+            l.line = l.line + 1
+            l.column = 0
+        }
+        if peek(l) == 92 and peekNext(l) == 34 {  // backslash + quote
+            l = advance(l)
+            l = advance(l)
+        } else if peek(l) == 92 and peekNext(l) == 123 {  // backslash + {
+            l = advance(l)
+            l = advance(l)
+        } else {
+            l = advance(l)
+        }
+    }
+    if isAtEnd(l) {
+        l.hadError = true
+        l.errorMsg = "unterminated string"
+        return l
+    }
+    l = advance(l)  // closing quote
+    let lexeme = l.source[l.start:l.current]
+    l = addTokenLiteral(l, TOKEN_STRING, lexeme[1:#lexeme-1])
+    return l
+}
+
+func char(l: Lexer): Lexer {
+    if peek(l) == 92 {  // backslash
+        l = advance(l)
+        l = advance(l)
+    } else {
+        l = advance(l)
+    }
+    if peek(l) != 39 {  // '
+        l.hadError = true
+        l.errorMsg = "unterminated char literal"
+        return l
+    }
+    l = advance(l)
+    let lexeme = l.source[l.start:l.current]
+    l = addTokenLiteral(l, TOKEN_CHAR, lexeme)
+    return l
+}
+
+func number(l: Lexer): Lexer {
+    while isDigit(peek(l)) {
+        l = advance(l)
+    }
+    if peek(l) == 46 and peekNext(l) != 46 and isDigit(peekNext(l)) {  // '.' but not '..'
+        l = advance(l)
+        while isDigit(peek(l)) {
+            l = advance(l)
+        }
+        if peek(l) == 101 or peek(l) == 69 {  // 'e' or 'E'
+            l = advance(l)
+            if peek(l) == 43 or peek(l) == 45 {  // '+' or '-'
+                l = advance(l)
+            }
+            while isDigit(peek(l)) {
+                l = advance(l)
+            }
+        }
+        let lexeme = l.source[l.start:l.current]
+        l = addTokenLiteral(l, TOKEN_FLOAT, lexeme)
+    } else {
+        let lexeme = l.source[l.start:l.current]
+        l = addTokenLiteral(l, TOKEN_INTEGER, lexeme)
+    }
+    return l
+}
+
+func identifier(l: Lexer): Lexer {
+    while isAlphaNumeric(peek(l)) {
+        l = advance(l)
+    }
+    let lexeme = l.source[l.start:l.current]
+    // Check if it's a keyword
+    var found = false
+    for i in 0..#keywordNames {
+        if keywordNames[i] == lexeme {
+            l = addToken(l, keywordTokens[i])
+            found = true
+            break
+        }
+    }
+    if not found {
+        l = addToken(l, TOKEN_IDENT)
+    }
+    return l
+}
+
+func scanToken(l: Lexer): Lexer {
+    let c = advance(l).source[l.current - 1]
+    match c {
+        case 40 -> l = addToken(l, TOKEN_LPAREN)  // (
+        case 41 -> l = addToken(l, TOKEN_RPAREN)  // )
+        case 123 -> l = addToken(l, TOKEN_LBRACE)  // {
+        case 125 -> l = addToken(l, TOKEN_RBRACE)  // }
+        case 91 -> l = addToken(l, TOKEN_LBRACKET)  // [
+        case 93 -> l = addToken(l, TOKEN_RBRACKET)  // ]
+        case 44 -> l = addToken(l, TOKEN_COMMA)  // ,
+        case 59 -> l = addToken(l, TOKEN_SEMICOLON)  // ;
+        case 58 -> {  // :
+            if match(l, 58).current > l.current {  // ::
+                l = addToken(l, TOKEN_COLON_COLON)
+            } else {
+                l = addToken(l, TOKEN_COLON)
+            }
+        }
+        case 63 -> l = addToken(l, TOKEN_QUESTION)  // ?
+        case 64 -> l = addToken(l, TOKEN_AT)  // @
+        case 35 -> l = addToken(l, TOKEN_HASH)  // #
+        case 46 -> {  // .
+            if match(l, 46).current > l.current {  // ..
+                if match(l, 46).current > l.current {  // ...
+                    l = addToken(l, TOKEN_DOT_DOT_DOT)
+                } else if match(l, 61).current > l.current {  // ..=
+                    l = addToken(l, TOKEN_DOT_DOT_EQUAL)
+                } else {
+                    l = addToken(l, TOKEN_DOT_DOT)
+                }
+            } else {
+                l = addToken(l, TOKEN_DOT)
+            }
+        }
+        case 43 -> {  // +
+            if match(l, 43).current > l.current {  // ++
+                l = addToken(l, TOKEN_PLUS_PLUS)
+            } else if match(l, 61).current > l.current {  // +=
+                l = addToken(l, TOKEN_PLUS_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_PLUS)
+            }
+        }
+        case 45 -> {  // -
+            if match(l, 45).current > l.current {  // --
+                l = addToken(l, TOKEN_MINUS_MINUS)
+            } else if match(l, 61).current > l.current {  // -=
+                l = addToken(l, TOKEN_MINUS_EQUAL)
+            } else if match(l, 62).current > l.current {  // ->
+                l = addToken(l, TOKEN_ARROW)
+            } else {
+                l = addToken(l, TOKEN_MINUS)
+            }
+        }
+        case 42 -> {  // *
+            if match(l, 61).current > l.current {  // *=
+                l = addToken(l, TOKEN_STAR_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_STAR)
+            }
+        }
+        case 47 -> {  // /
+            if match(l, 47).current > l.current {  // // comment
+                while peek(l) != 10 and not isAtEnd(l) {
+                    l = advance(l)
+                }
+            } else if match(l, 42).current > l.current {  // /* comment
+                while not isAtEnd(l) {
+                    if peek(l) == 42 and peekNext(l) == 47 {
+                        l = advance(l)
+                        l = advance(l)
+                        break
+                    }
+                    if peek(l) == 10 {
+                        l.line = l.line + 1
+                        l.column = 0
+                    }
+                    l = advance(l)
+                }
+            } else if match(l, 61).current > l.current {  // /=
+                l = addToken(l, TOKEN_SLASH_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_SLASH)
+            }
+        }
+        case 37 -> {  // %
+            if match(l, 61).current > l.current {  // %=
+                l = addToken(l, TOKEN_PERCENT_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_PERCENT)
+            }
+        }
+        case 38 -> {  // &
+            if match(l, 38).current > l.current {  // &&
+                l = addToken(l, TOKEN_AMPERSAND_AMPERSAND)
+            } else if match(l, 61).current > l.current {  // &=
+                l = addToken(l, TOKEN_AMPERSAND_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_AMPERSAND)
+            }
+        }
+        case 124 -> {  // |
+            if match(l, 124).current > l.current {  // ||
+                l = addToken(l, TOKEN_PIPE_PIPE)
+            } else if match(l, 61).current > l.current {  // |=
+                l = addToken(l, TOKEN_PIPE_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_PIPE)
+            }
+        }
+        case 94 -> {  // ^
+            if match(l, 61).current > l.current {  // ^=
+                l = addToken(l, TOKEN_CARET_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_CARET)
+            }
+        }
+        case 126 -> l = addToken(l, TOKEN_TILDE)  // ~
+        case 33 -> {  // !
+            if match(l, 61).current > l.current {  // !=
+                l = addToken(l, TOKEN_EXCLAIM_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_EXCLAIM)
+            }
+        }
+        case 60 -> {  // <
+            if match(l, 60).current > l.current {  // <<
+                if match(l, 61).current > l.current {  // <<=
+                    l = addToken(l, TOKEN_LESS_LESS_EQUAL)
+                } else {
+                    l = addToken(l, TOKEN_LESS_LESS)
+                }
+            } else if match(l, 61).current > l.current {  // <=
+                l = addToken(l, TOKEN_LESS_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_LESS)
+            }
+        }
+        case 62 -> {  // >
+            if match(l, 62).current > l.current {  // >>
+                if match(l, 61).current > l.current {  // >>=
+                    l = addToken(l, TOKEN_GREATER_GREATER_EQUAL)
+                } else {
+                    l = addToken(l, TOKEN_GREATER_GREATER)
+                }
+            } else if match(l, 61).current > l.current {  // >=
+                l = addToken(l, TOKEN_GREATER_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_GREATER)
+            }
+        }
+        case 61 -> {  // =
+            if match(l, 61).current > l.current {  // ==
+                l = addToken(l, TOKEN_EQUAL_EQUAL)
+            } else {
+                l = addToken(l, TOKEN_EQUAL)
+            }
+        }
+        case 32, 13, 9 -> {}  // space, CR, tab — skip
+        case 10 -> {  // newline
+            l.line = l.line + 1
+            l.column = 1
+        }
+        case 34 -> l = string(l)  // "
+        case 39 -> l = char(l)  // '
+        else -> {
+            if isDigit(c) {
+                l = number(l)
+            } else if isAlpha(c) {
+                l = identifier(l)
+            } else {
+                l.hadError = true
+                l.errorMsg = "unexpected character"
+            }
+        }
+    }
+    return l
+}
+
+func tokenize(l: Lexer): Lexer {
+    while not isAtEnd(l) {
+        l.start = l.current
+        l = scanToken(l)
+        if l.hadError {
+            return l
+        }
+    }
+    l = addToken(l, TOKEN_EOF)
+    return l
+}

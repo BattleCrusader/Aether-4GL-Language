@@ -299,7 +299,7 @@ func tokenName(t TokenType) string {
 	if name, ok := names[t]; ok {
 		return name
 	}
-	if t >= TOKEN_KW_AND && t <= TOKEN_KW_YIELD {
+	if t >= TOKEN_KW_AND && t <= TOKEN_KW_CASE {
 		return "KEYWORD"
 	}
 	return "UNKNOWN"
@@ -617,6 +617,40 @@ func (l *Lexer) char() {
 
 // number lexes an integer or float literal
 func (l *Lexer) number() {
+	// Check for hex (0x), binary (0b), octal (0o)
+	if l.source[l.current-1] == '0' {
+		next := l.peek()
+		if next == 'x' || next == 'X' {
+			l.advance() // consume 'x'
+			for unicode.IsDigit(rune(l.peek())) || (l.peek() >= 'a' && l.peek() <= 'f') || (l.peek() >= 'A' && l.peek() <= 'F') {
+				l.advance()
+			}
+			lexeme := l.source[l.start:l.current]
+			cleaned := strings.ReplaceAll(lexeme, "_", "")
+			l.addTokenWithLiteral(TOKEN_INTEGER, cleaned)
+			return
+		}
+		if next == 'b' || next == 'B' {
+			l.advance() // consume 'b'
+			for l.peek() == '0' || l.peek() == '1' || l.peek() == '_' {
+				l.advance()
+			}
+			lexeme := l.source[l.start:l.current]
+			cleaned := strings.ReplaceAll(lexeme, "_", "")
+			l.addTokenWithLiteral(TOKEN_INTEGER, cleaned)
+			return
+		}
+		if next == 'o' || next == 'O' {
+			l.advance() // consume 'o'
+			for l.peek() >= '0' && l.peek() <= '7' {
+				l.advance()
+			}
+			lexeme := l.source[l.start:l.current]
+			l.addTokenWithLiteral(TOKEN_INTEGER, lexeme)
+			return
+		}
+	}
+
 	// Read integer part
 	for unicode.IsDigit(rune(l.peek())) {
 		l.advance()

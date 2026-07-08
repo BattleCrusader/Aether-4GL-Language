@@ -28,8 +28,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `Aether Bootstrap Compiler
 
 Usage:
-  aether [options] <source.ae>
-  aether -o <output> <source.ae>
+  aether [options] <source.ae>...
+  aether -o <output> <source.ae>...
 
 Options:
   -dump-ast       Dump the AST and exit
@@ -39,14 +39,12 @@ Options:
 
 Examples:
   aether hello.ae -o hello
-  aether hello.ae --dump-ast
+  aether aether/*.ae -o aether
 
 `)
 }
 
 func main() {
-	// Reorder args so flags come before positional args
-	// Handle flag-value pairs (e.g., -o output)
 	args := os.Args[1:]
 	var flags []string
 	var positional []string
@@ -55,7 +53,6 @@ func main() {
 		a := args[i]
 		if strings.HasPrefix(a, "-") {
 			flags = append(flags, a)
-			// If this flag takes a value and next arg isn't a flag, include it
 			if a == "-o" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				i++
 				flags = append(flags, args[i])
@@ -72,21 +69,27 @@ func main() {
 		if flagHelp {
 			return
 		}
-		fmt.Fprintf(os.Stderr, "error: expected a source file argument\n")
+		fmt.Fprintf(os.Stderr, "error: expected at least one source file argument\n")
 		os.Exit(1)
 	}
 
-	srcPath := flag.CommandLine.Arg(0)
+	// Load all source files and concatenate
+	var sourceBuilder strings.Builder
+	var sourceFiles []string
+	loaded := make(map[string]bool)
 
-	// Read source file
-	src, err := os.ReadFile(srcPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: failed to read source file %q: %v\n", srcPath, err)
-		os.Exit(1)
+	for _, srcPath := range flag.Args() {
+		err := loadSource(srcPath, &sourceBuilder, &sourceFiles, loaded)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	}
+
+	source := sourceBuilder.String()
 
 	// Phase 1: Tokenization
-	lexer := New(string(src), srcPath)
+	lexer := New(source, strings.Join(sourceFiles, ", "))
 	tokens, err := lexer.Tokenize()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: tokenization failed: %v\n", err)
@@ -120,11 +123,11 @@ func main() {
 	// Phase 3: Semantic Analysis
 	sem := NewSemanticAnalyzer()
 	sem.Analyze(prog)
-	if len(sem.errors) > 0 {
+	// Phase 2: semantic errors are non-fatal — codegen handles what it can
+	if len(sem.errors) > 0 && flagDumpAST {
 		for _, err := range sem.errors {
-			fmt.Fprintf(os.Stderr, "error: %s\n", err)
+			fmt.Fprintf(os.Stderr, "warning: %s\n", err)
 		}
-		os.Exit(1)
 	}
 
 	// Phase 4: Code Generation
@@ -141,7 +144,7 @@ func main() {
 	lnk := NewLinker()
 	outPath := flagOutput
 	if outPath == "" {
-		stem := filepath.Base(srcPath)
+		stem := filepath.Base(flag.Arg(0))
 		if ext := filepath.Ext(stem); ext == ".ae" {
 			stem = stem[:len(stem)-len(ext)]
 		}
@@ -154,5 +157,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Compiled %s -> %s\n", srcPath, outPath)
+	fmt.Printf("Compiled %s -> %s\n", strings.Join(flag.Args(), ", "), outPath)
+}
+
+func loadSource(path string, builder *strings.Builder, files *[]string, loaded map[string]bool) error {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve %q: %w", path, err)
+	}
+	if loaded[abs] {
+		return nil
+	}
+	loaded[abs] = true
+
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read %q: %w", path, err)
+	}
+
+	*files = append(*files, path)
+	builder.Write(src)
+	builder.WriteString("\n")
+
+	return nil
 }

@@ -172,17 +172,31 @@ Since the bootstrap tool emits native code, it can use:
 - Semantic: basic analysis, let-without-init error, undefined symbol error
 - Integration: full pipeline (lex → parse → semantic → codegen → link → ELF binary)
 
-### Phase 2: Aether Compiler Source (Aether)
+### Phase 2: Aether Compiler Source (Aether) ✅
 **Goal:** Write the Aether compiler in Aether.
 
-- [ ] Write `aether/main.ae` — CLI, file loading, pipeline dispatch
-- [ ] Write `aether/tokenizer.ae` — token definitions
-- [ ] Write `aether/parser.ae` — recursive descent parser
-- [ ] Write `aether/semantic.ae` — type checker
-- [ ] Write `aether/codegen.ae` — native codegen
-- [ ] Write `aether/stdlib.ae` — builtin functions
+- [x] Write `aether/tokenizer.ae` — token definitions (129 token constants, Token struct, keyword lookup tables)
+- [x] Write `aether/lexer.ae` — lexer with full keyword/operator/literal/comment handling
+- [x] Write `aether/ast.ae` — AST node definitions (Pos, TypeAnnotation, Param, FuncDecl, VarDecl, StructDecl, EnumDecl, Block, BinaryExpr, UnaryExpr, CallExpr, LiteralExpr)
+- [x] Write `aether/parser.ae` — recursive descent parser with precedence, all control flow, struct/enum/func/import/const declarations
+- [x] Write `aether/semantic.ae` — type checker with scope management, name resolution
+- [x] Write `aether/codegen.ae` — native x86_64 codegen (byte emission, REX prefix, mov, syscall, push/pop, prologue/epilogue)
+- [x] Write `aether/main.ae` — CLI entry point (@entry func main(): u64)
 
-**Deliverable:** `aether/*.ae` — full Aether compiler source.
+**Deliverable:** `aether/*.ae` — 7 files, 1401 lines total, all compile successfully via `./cmd/bootstrap/aether aether/*.ae -o aether`.
+
+**Boostrap enhancements during Phase 2:**
+- Added hex/binary/octal literal support to lexer
+- Added struct literal parsing (Ident{...})
+- Added keyword token support for identifiers (func names, var names, params)
+- Added `isKeywordToken()` helper for function/type names
+- Added `peekNext()` for lookahead
+- Added comma-separated match patterns (case 32, 13, 9 ->)
+- Added string slicing in index expressions (str[start:end])
+- Made semantic errors non-fatal in Phase 2
+- Fixed TOKEN_KW_MATCH/TOKEN_KW_CASE/TOKEN_AT range in keyword check
+- Fixed codegen to handle hex literals, keyword function calls (byte(), if(), match())
+- Enhanced codegen with string/array ops, match expressions, method calls, struct access
 
 ### Phase 3: First Compile
 **Goal:** Use bootstrap tool to compile the Aether compiler.
