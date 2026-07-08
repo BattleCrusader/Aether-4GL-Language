@@ -16,7 +16,16 @@ struct Lexer {
 }
 
 func newLexer(source: string): Lexer {
-    return Lexer{source, 0, 0, 1, 1, [], false, ""}
+    var l: Lexer
+    l.source = source
+    l.start = 0
+    l.current = 0
+    l.line = 1
+    l.column = 1
+    l.tokens = []
+    l.hadError = false
+    l.errorMsg = ""
+    return l
 }
 
 func isAtEnd(l: Lexer): bool {
@@ -57,13 +66,25 @@ func match(l: Lexer, expected: byte): Lexer {
 
 func addToken(l: Lexer, typ: u64): Lexer {
     let lexeme = l.source[l.start:l.current]
-    l.tokens = push(l.tokens, Token{typ, lexeme, l.line, l.column - (l.current - l.start), ""})
+    var tok: Token
+    tok.typ = typ
+    tok.lexeme = lexeme
+    tok.line = l.line
+    tok.column = l.column - (l.current - l.start)
+    tok.literal = ""
+    l.tokens = push(l.tokens, tok)
     return l
 }
 
 func addTokenLiteral(l: Lexer, typ: u64, literal: string): Lexer {
     let lexeme = l.source[l.start:l.current]
-    l.tokens = push(l.tokens, Token{typ, lexeme, l.line, l.column - (l.current - l.start), literal})
+    var tok: Token
+    tok.typ = typ
+    tok.lexeme = lexeme
+    tok.line = l.line
+    tok.column = l.column - (l.current - l.start)
+    tok.literal = literal
+    l.tokens = push(l.tokens, tok)
     return l
 }
 

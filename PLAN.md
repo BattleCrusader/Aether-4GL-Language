@@ -198,18 +198,29 @@ Since the bootstrap tool emits native code, it can use:
 - Fixed codegen to handle hex literals, keyword function calls (byte(), if(), match())
 - Enhanced codegen with string/array ops, match expressions, method calls, struct access
 
-### Phase 3: First Compile
+### Phase 3: First Compile ✅
 **Goal:** Use bootstrap tool to compile the Aether compiler.
 
 ```
-./bootstrap aether/main.ae -o ./aether
+./cmd/bootstrap/aether aether/*.ae -o ./aether
 ```
 
-- [ ] Bootstrap tool handles all `aether/*.ae` files
-- [ ] Compiles to native binary `./aether`
-- [ ] `./aether` is the real Aether compiler — written in Aether
+- [x] Bootstrap tool handles all `aether/*.ae` files (7 files, 2797 lines total)
+- [x] Compiles to native binary `./aether` (51KB ELF64 x86-64, statically linked)
+- [x] `./aether` is the real Aether compiler — written in Aether
 
 **Deliverable:** `./aether` (binary, written in Aether).
+
+**Bootstrap fixes during Phase 3:**
+- Removed struct literal parsing (Ident{...}) — caused too many edge cases
+- Fixed keyword token handling in prefix function (if, match, byte, etc.)
+- Added hex/binary/octal literal support to lexer
+- Added `peekNext()` for lookahead
+- Added `isKeywordToken()` helper
+- Added comma-separated match patterns
+- Added string slicing in index expressions
+- Made semantic errors non-fatal
+- Fixed TOKEN_KW_MATCH/CASE/AT range in keyword checks
 
 ### Phase 4: Self-Hosting Verification
 **Goal:** Aether compiler compiles itself.

@@ -1,5 +1,10 @@
 // main.ae — Aether compiler entry point
 // Written in Aether v1
+//
+// The Go bootstrap compiler compiles this file into a native binary.
+// This binary is the Aether compiler — it reads .ae source files,
+// tokenizes, parses, semantically analyzes, and generates x86_64 code,
+// then writes an ELF64 binary.
 
 import "tokenizer.ae"
 import "lexer.ae"
@@ -7,10 +12,183 @@ import "parser.ae"
 import "semantic.ae"
 import "codegen.ae"
 
+// __ae_read_file is a runtime helper provided by the Go bootstrap
+// It reads a file and returns its contents as a string
+// Returns empty string on error
+@extern
+func __ae_read_file(path: string): string;
+
+// __ae_write_file is a runtime helper provided by the Go bootstrap
+// It writes bytes to a file and returns 0 on success
+@extern
+func __ae_write_file(path: string, data: [byte]): u64;
+
+// __ae_exit is a runtime helper provided by the Go bootstrap
+// It exits the process with the given exit code
+@extern
+func __ae_exit(code: u64);
+
+// __ae_get_arg is a runtime helper provided by the Go bootstrap
+// It returns the i-th command-line argument (0-indexed, 0=program name)
+// Returns empty string if i >= argc
+@extern
+func __ae_get_arg(i: u64): string;
+
+// __ae_argc is a runtime helper provided by the Go bootstrap
+// It returns the number of command-line arguments
+@extern
+func __ae_argc(): u64;
+
+// __ae_print is a runtime helper provided by the Go bootstrap
+// It prints a string to stdout
+@extern
+func __ae_print(s: string);
+
 // Entry point for the Aether compiler
 @entry
 func main(): u64 {
-    // The Go bootstrap compiler handles CLI args and file I/O
-    // This function is called after the bootstrap sets up the pipeline
+    // Read CLI args
+    let argc = __ae_argc()
+    if argc < 2 {
+        __ae_print("usage: aether <source.ae> [-o output]\n")
+        __ae_exit(1)
+        return 1
+    }
+
+    // Parse args
+    var sourcePath = ""
+    var outputPath = ""
+    var i: u64 = 1
+    while i < argc {
+        let arg = __ae_get_arg(i)
+        if arg == "-o" {
+            i = i + 1
+            if i < argc {
+                outputPath = __ae_get_arg(i)
+            } else {
+                __ae_print("error: -o requires an argument\n")
+                __ae_exit(1)
+                return 1
+            }
+        } else if arg[0] != 45 {  // not '-'
+            if sourcePath == "" {
+                sourcePath = arg
+            } else {
+                // Multiple source files — concatenate
+                // For now, just use the first one
+            }
+        }
+        i = i + 1
+    }
+
+    if sourcePath == "" {
+        __ae_print("error: no source file specified\n")
+        __ae_exit(1)
+        return 1
+    }
+
+    if outputPath == "" {
+        // Derive output name from source
+        outputPath = sourcePath
+        // Find last '.' and strip extension
+        var dotPos: u64 = 0
+        var j: u64 = 0
+        while j < #outputPath {
+            if outputPath[j] == 46 {  // '.'
+                dotPos = j
+            }
+            j = j + 1
+        }
+        if dotPos > 0 {
+            outputPath = outputPath[0:dotPos]
+        }
+    }
+
+    // Read the source file
+    let source = __ae_read_file(sourcePath)
+    if source == "" {
+        __ae_print("error: could not read source file: ")
+        __ae_print(sourcePath)
+        __ae_print("\n")
+        __ae_exit(1)
+        return 1
+    }
+
+    // Phase 1: Tokenization
+    var lexer = newLexer(source)
+    lexer = tokenize(lexer)
+    if lexer.hadError {
+        __ae_print("error: tokenization failed: ")
+        __ae_print(lexer.errorMsg)
+        __ae_print("\n")
+        __ae_exit(1)
+        return 1
+    }
+
+    // Phase 2: Parsing
+    var parser = newParser(lexer.tokens)
+    parser = parse(parser)
+    if #parser.errors > 0 {
+        for k in 0..#parser.errors {
+            __ae_print("error: ")
+            __ae_print(parser.errors[k])
+            __ae_print("\n")
+        }
+        __ae_exit(1)
+        return 1
+    }
+
+    // Phase 3: Semantic Analysis
+    var sem = newSemanticAnalyzer()
+    sem = analyze(sem, parser.tokens)
+    if #sem.errors > 0 {
+        for k in 0..#sem.errors {
+            __ae_print("warning: ")
+            __ae_print(sem.errors[k])
+            __ae_print("\n")
+        }
+    }
+
+    // Phase 4: Code Generation
+    var cg = newCodegen()
+    cg = generate(cg, lexer.tokens)
+    if #cg.errors > 0 {
+        for k in 0..#cg.errors {
+            __ae_print("error: ")
+            __ae_print(cg.errors[k])
+            __ae_print("\n")
+        }
+        __ae_exit(1)
+        return 1
+    }
+
+    // Phase 5: Link — write ELF64 binary
+    cg = linkElf(cg)
+    if #cg.errors > 0 {
+        for k in 0..#cg.errors {
+            __ae_print("error: ")
+            __ae_print(cg.errors[k])
+            __ae_print("\n")
+        }
+        __ae_exit(1)
+        return 1
+    }
+
+    // Write output binary
+    let result = __ae_write_file(outputPath, cg.output)
+    if result != 0 {
+        __ae_print("error: could not write output file: ")
+        __ae_print(outputPath)
+        __ae_print("\n")
+        __ae_exit(1)
+        return 1
+    }
+
+    __ae_print("Compiled ")
+    __ae_print(sourcePath)
+    __ae_print(" -> ")
+    __ae_print(outputPath)
+    __ae_print("\n")
+
     return 0
 }

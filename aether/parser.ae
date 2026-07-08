@@ -27,7 +27,11 @@ struct Parser {
 }
 
 func newParser(tokens: [Token]): Parser {
-    return Parser{tokens, 0, []}
+    var p: Parser
+    p.tokens = tokens
+    p.current = 0
+    p.errors = []
+    return p
 }
 
 func isAtEnd(p: Parser): bool {

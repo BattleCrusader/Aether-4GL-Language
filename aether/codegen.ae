@@ -1,41 +1,101 @@
 // codegen.ae -- Native x86_64 code generator for Aether
 // Written in Aether v1
+//
+// Generates x86_64 machine code from tokens/AST and produces an ELF64 binary.
+// Mirrors the Go bootstrap's codegen.go implementation.
 
 import "tokenizer.ae"
 import "ast.ae"
 
-struct Codegen {
+// Register codes (matching x86_64 encoding)
+let REG_RAX: u64 = 0
+let REG_RCX: u64 = 1
+let REG_RDX: u64 = 2
+let REG_RBX: u64 = 3
+let REG_RSP: u64 = 4
+let REG_RBP: u64 = 5
+let REG_RSI: u64 = 6
+let REG_RDI: u64 = 7
+let REG_R8: u64 = 8
+let REG_R9: u64 = 9
+let REG_R10: u64 = 10
+let REG_R11: u64 = 11
+let REG_R12: u64 = 12
+let REG_R13: u64 = 13
+let REG_R14: u64 = 14
+let REG_R15: u64 = 15
+
+// REX prefix
+let REX_W: byte = 0x48
+
+struct codegen {
     text: [byte],
     data: [byte],
     rodata: [byte],
     bss: [byte],
     labels: [string],
     labelOffsets: [u64],
+    // Label reference tracking for linker patching
+    labelRefs: [string],      // which label each placeholder references
+    labelRefOffsets: [u64],   // offset in text where the placeholder is
+    labelRefSizes: [u64],     // size of the placeholder (4 for u32 disp)
+    strings: [string],        // string content for rodata
+    stringLabels: [string],   // label names for strings
     errors: [string],
+    output: [byte],           // final ELF64 binary
+    labelCount: u64,
+    // Per-function state
+    funcName: string,
+    stackOffsets: [string],   // variable names
+    stackOffsetVals: [u64],   // corresponding offsets
+    stackSize: u64,
 }
 
-func newCodegen(): Codegen {
-    return Codegen{[], [], [], [], [], [], []}
+func newCodegen(): codegen {
+    var c: codegen
+    c.text = []
+    c.data = []
+    c.rodata = []
+    c.bss = []
+    c.labels = []
+    c.labelOffsets = []
+    c.labelRefs = []
+    c.labelRefOffsets = []
+    c.labelRefSizes = []
+    c.strings = []
+    c.stringLabels = []
+    c.errors = []
+    c.output = []
+    c.labelCount = 0
+    c.funcName = ""
+    c.stackOffsets = []
+    c.stackOffsetVals = []
+    c.stackSize = 0
+    return c
 }
 
-func addError(c: Codegen, msg: string): Codegen {
+func addError(c: codegen, msg: string): codegen {
     c.errors = push(c.errors, msg)
     return c
 }
 
-func emitByte(c: Codegen, b: byte): Codegen {
+// ============================================================
+// Byte emission
+// ============================================================
+
+func emitByte(c: codegen, b: byte): codegen {
     c.text = push(c.text, b)
     return c
 }
 
-func emitBytes(c: Codegen, bytes: [byte]): Codegen {
+func emitBytes(c: codegen, bytes: [byte]): codegen {
     for i in 0..#bytes {
         c.text = push(c.text, bytes[i])
     }
     return c
 }
 
-func emitU64(c: Codegen, val: u64): Codegen {
+func emitU64(c: codegen, val: u64): codegen {
     c = emitByte(c, val & 0xFF)
     c = emitByte(c, (val >> 8) & 0xFF)
     c = emitByte(c, (val >> 16) & 0xFF)
@@ -47,7 +107,7 @@ func emitU64(c: Codegen, val: u64): Codegen {
     return c
 }
 
-func emitU32(c: Codegen, val: u64): Codegen {
+func emitU32(c: codegen, val: u64): codegen {
     c = emitByte(c, val & 0xFF)
     c = emitByte(c, (val >> 8) & 0xFF)
     c = emitByte(c, (val >> 16) & 0xFF)
@@ -55,99 +115,976 @@ func emitU32(c: Codegen, val: u64): Codegen {
     return c
 }
 
-func emitRexW(c: Codegen): Codegen {
-    return emitByte(c, 0x48)
+// ============================================================
+// REX prefix
+// ============================================================
+
+func emitRexW(c: codegen): codegen {
+    return emitByte(c, REX_W)
 }
 
-func emitMovRaxImm64(c: Codegen, val: u64): Codegen {
+// ============================================================
+// ModRM byte
+// ============================================================
+
+func modRM(mod: byte, reg: byte, rm: byte): byte {
+    return (mod << 6) | ((reg & 7) << 3) | (rm & 7)
+}
+
+// ============================================================
+// Register code lookup
+// ============================================================
+
+func regCode(name: string): byte {
+    if name == "rax"
+        return 0
+    if name == "rcx"
+        return 1
+    if name == "rdx"
+        return 2
+    if name == "rbx"
+        return 3
+    if name == "rsp"
+        return 4
+    if name == "rbp"
+        return 5
+    if name == "rsi"
+        return 6
+    if name == "rdi"
+        return 7
+    if name == "r8"
+        return 8
+    if name == "r9"
+        return 9
+    if name == "r10"
+        return 10
+    if name == "r11"
+        return 11
+    if name == "r12"
+        return 12
+    if name == "r13"
+        return 13
+    if name == "r14"
+        return 14
+    if name == "r15"
+        return 15
+    return 0
+}
+
+func needsRex(reg: string): bool {
+    let code = regCode(reg)
+    return code >= 8
+}
+
+// ============================================================
+// mov rax, imm64
+// ============================================================
+
+func emitMovR64Imm64(c: codegen, reg: string, val: u64): codegen {
     c = emitRexW(c)
-    c = emitByte(c, 0xB8)
+    c = emitByte(c, 0xB8 + (regCode(reg) & 7))
     c = emitU64(c, val)
     return c
 }
 
-func emitMovRdiImm64(c: Codegen, val: u64): Codegen {
-    c = emitRexW(c)
-    c = emitByte(c, 0xBF)
-    c = emitU64(c, val)
+// mov rax, rbx
+func emitMovR64R64(c: codegen, dst: string, src: string): codegen {
+    if needsRex(dst) or needsRex(src) {
+        c = emitRexW(c)
+    }
+    c = emitByte(c, 0x89)
+    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
     return c
 }
 
-func emitMovRsiImm64(c: Codegen, val: u64): Codegen {
+// lea rax, [label] — RIP-relative (records label reference for linker)
+func emitLeaR64Label(c: codegen, reg: string, labelName: string): codegen {
     c = emitRexW(c)
-    c = emitByte(c, 0xBE)
-    c = emitU64(c, val)
+    c = emitByte(c, 0x8D)
+    c = emitByte(c, modRM(0, regCode(reg), 5))  // RIP-relative
+    // Record the label reference before emitting placeholder
+    c.labelRefs = push(c.labelRefs, labelName)
+    c.labelRefOffsets = push(c.labelRefOffsets, #c.text)
+    c.labelRefSizes = push(c.labelRefSizes, 4)
+    c = emitU32(c, 0)  // placeholder displacement
     return c
 }
 
-func emitSyscall(c: Codegen): Codegen {
+// ============================================================
+// add/sub
+// ============================================================
+
+// add rax, rbx
+func emitAddR64R64(c: codegen, dst: string, src: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x01)
+    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    return c
+}
+
+// add rax, imm8
+func emitAddR64Imm8(c: codegen, reg: string, imm: byte): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x83)
+    c = emitByte(c, modRM(3, 0, regCode(reg)))
+    c = emitByte(c, imm)
+    return c
+}
+
+// sub rax, rbx
+func emitSubR64R64(c: codegen, dst: string, src: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x29)
+    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    return c
+}
+
+// sub rax, imm8
+func emitSubR64Imm8(c: codegen, reg: string, imm: byte): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x83)
+    c = emitByte(c, modRM(3, 5, regCode(reg)))
+    c = emitByte(c, imm)
+    return c
+}
+
+// ============================================================
+// mul/div
+// ============================================================
+
+// mul rbx (rax = rax * rbx)
+func emitMulR64(c: codegen, reg: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0xF7)
+    c = emitByte(c, modRM(3, 4, regCode(reg)))
+    return c
+}
+
+// div rbx (rax = rax / rbx, rdx = rax % rbx)
+func emitDivR64(c: codegen, reg: string): codegen {
+    // xor rdx, rdx first
+    c = emitXorR64R64(c, "rdx", "rdx")
+    c = emitRexW(c)
+    c = emitByte(c, 0xF7)
+    c = emitByte(c, modRM(3, 6, regCode(reg)))
+    return c
+}
+
+// ============================================================
+// xor/neg/not
+// ============================================================
+
+// xor rax, rbx
+func emitXorR64R64(c: codegen, dst: string, src: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x31)
+    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    return c
+}
+
+// neg rax
+func emitNegR64(c: codegen, reg: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0xF7)
+    c = emitByte(c, modRM(3, 3, regCode(reg)))
+    return c
+}
+
+// not rax
+func emitNotR64(c: codegen, reg: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0xF7)
+    c = emitByte(c, modRM(3, 2, regCode(reg)))
+    return c
+}
+
+// ============================================================
+// test/cmp
+// ============================================================
+
+// test rax, rax
+func emitTestR64R64(c: codegen, dst: string, src: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x85)
+    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    return c
+}
+
+// cmp rax, rbx
+func emitCmpR64R64(c: codegen, dst: string, src: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x39)
+    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    return c
+}
+
+// ============================================================
+// and/or/shift
+// ============================================================
+
+// and rax, rbx
+func emitAndR64R64(c: codegen, dst: string, src: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x21)
+    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    return c
+}
+
+// or rax, rbx
+func emitOrR64R64(c: codegen, dst: string, src: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x09)
+    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    return c
+}
+
+// shl rax, cl
+func emitShlR64(c: codegen, reg: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0xD3)
+    c = emitByte(c, modRM(3, 4, regCode(reg)))
+    return c
+}
+
+// shr rax, cl
+func emitShrR64(c: codegen, reg: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0xD3)
+    c = emitByte(c, modRM(3, 5, regCode(reg)))
+    return c
+}
+
+// ============================================================
+// setcc instructions
+// ============================================================
+
+// sete al
+func emitSete(c: codegen, reg: string): codegen {
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0x94)
+    c = emitByte(c, modRM(3, 0, regCode(reg)))
+    return c
+}
+
+// setne al
+func emitSetne(c: codegen, reg: string): codegen {
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0x95)
+    c = emitByte(c, modRM(3, 0, regCode(reg)))
+    return c
+}
+
+// setl al
+func emitSetl(c: codegen, reg: string): codegen {
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0x9C)
+    c = emitByte(c, modRM(3, 0, regCode(reg)))
+    return c
+}
+
+// setg al
+func emitSetg(c: codegen, reg: string): codegen {
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0x9F)
+    c = emitByte(c, modRM(3, 0, regCode(reg)))
+    return c
+}
+
+// setle al
+func emitSetle(c: codegen, reg: string): codegen {
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0x9E)
+    c = emitByte(c, modRM(3, 0, regCode(reg)))
+    return c
+}
+
+// setge al
+func emitSetge(c: codegen, reg: string): codegen {
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0x9D)
+    c = emitByte(c, modRM(3, 0, regCode(reg)))
+    return c
+}
+
+// movzx rax, al
+func emitMovzxR64R8(c: codegen, dst: string, src: string): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0xB6)
+    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    return c
+}
+
+// ============================================================
+// push/pop
+// ============================================================
+
+// push rax
+func emitPush(c: codegen, reg: string): codegen {
+    let code = regCode(reg)
+    if code < 8 {
+        c = emitByte(c, 0x50 + code)
+    } else {
+        c = emitByte(c, 0x41)
+        c = emitByte(c, 0x50 + (code - 8))
+    }
+    return c
+}
+
+// pop rax
+func emitPop(c: codegen, reg: string): codegen {
+    let code = regCode(reg)
+    if code < 8 {
+        c = emitByte(c, 0x58 + code)
+    } else {
+        c = emitByte(c, 0x41)
+        c = emitByte(c, 0x58 + (code - 8))
+    }
+    return c
+}
+
+// ============================================================
+// call/jmp/jcc (with label reference tracking)
+// ============================================================
+
+// call label (relative, records label reference for linker)
+func emitCallLabel(c: codegen, labelName: string): codegen {
+    c = emitByte(c, 0xE8)
+    c.labelRefs = push(c.labelRefs, labelName)
+    c.labelRefOffsets = push(c.labelRefOffsets, #c.text)
+    c.labelRefSizes = push(c.labelRefSizes, 4)
+    c = emitU32(c, 0)  // placeholder, patched by linker
+    return c
+}
+
+// jmp label (relative, records label reference for linker)
+func emitJmpLabel(c: codegen, labelName: string): codegen {
+    c = emitByte(c, 0xE9)
+    c.labelRefs = push(c.labelRefs, labelName)
+    c.labelRefOffsets = push(c.labelRefOffsets, #c.text)
+    c.labelRefSizes = push(c.labelRefSizes, 4)
+    c = emitU32(c, 0)  // placeholder, patched by linker
+    return c
+}
+
+// jz label (jump if zero, relative, records label reference for linker)
+func emitJzLabel(c: codegen, labelName: string): codegen {
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0x84)
+    c.labelRefs = push(c.labelRefs, labelName)
+    c.labelRefOffsets = push(c.labelRefOffsets, #c.text)
+    c.labelRefSizes = push(c.labelRefSizes, 4)
+    c = emitU32(c, 0)  // placeholder, patched by linker
+    return c
+}
+
+// jnz label (jump if not zero, relative, records label reference for linker)
+func emitJnzLabel(c: codegen, labelName: string): codegen {
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0x85)
+    c.labelRefs = push(c.labelRefs, labelName)
+    c.labelRefOffsets = push(c.labelRefOffsets, #c.text)
+    c.labelRefSizes = push(c.labelRefSizes, 4)
+    c = emitU32(c, 0)  // placeholder, patched by linker
+    return c
+}
+
+// ============================================================
+// ret/syscall
+// ============================================================
+
+func emitRet(c: codegen): codegen {
+    return emitByte(c, 0xC3)
+}
+
+func emitSyscall(c: codegen): codegen {
     c = emitByte(c, 0x0F)
     c = emitByte(c, 0x05)
     return c
 }
 
-func emitRet(c: Codegen): Codegen {
-    c = emitByte(c, 0xC3)
+// ============================================================
+// Stack frame helpers
+// ============================================================
+
+// mov rax, [rbp - offset]
+func emitMovStackR64(c: codegen, reg: string, offset: u64): codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x8B)
+    c = emitByte(c, modRM(1, regCode(reg), 5))  // [rbp + disp8]
+    c = emitByte(c, 0 - offset)  // negative offset from rbp
     return c
 }
 
-func emitPushRbp(c: Codegen): Codegen {
-    c = emitByte(c, 0x55)
-    return c
-}
-
-func emitPopRbp(c: Codegen): Codegen {
-    c = emitByte(c, 0x5D)
-    return c
-}
-
-func emitMovRbpRsp(c: Codegen): Codegen {
+// mov [rbp - offset], rax
+func emitMovR64Stack(c: codegen, reg: string, offset: u64): codegen {
     c = emitRexW(c)
     c = emitByte(c, 0x89)
-    c = emitByte(c, 0xE5)
+    c = emitByte(c, modRM(1, regCode(reg), 5))  // [rbp + disp8]
+    c = emitByte(c, 0 - offset)  // negative offset from rbp
     return c
 }
 
-func emitSubRspImm8(c: Codegen, imm: byte): Codegen {
-    c = emitRexW(c)
-    c = emitByte(c, 0x83)
-    c = emitByte(c, 0xEC)
-    c = emitByte(c, imm)
+// ============================================================
+// Function prologue/epilogue
+// ============================================================
+
+func emitFuncPrologue(c: codegen): codegen {
+    c = emitPush(c, "rbp")
+    c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitSubR64Imm8(c, "rsp", 128)
     return c
 }
 
-func emitAddRspImm8(c: Codegen, imm: byte): Codegen {
-    c = emitRexW(c)
-    c = emitByte(c, 0x83)
-    c = emitByte(c, 0xC4)
-    c = emitByte(c, imm)
-    return c
-}
-
-func emitStart(c: Codegen): Codegen {
-    c = emitMovRaxImm64(c, 0)
-    c = emitMovRdiImm64(c, 60)
-    c = emitSyscall(c)
-    return c
-}
-
-func emitFuncPrologue(c: Codegen): Codegen {
-    c = emitPushRbp(c)
-    c = emitMovRbpRsp(c)
-    c = emitSubRspImm8(c, 128)
-    return c
-}
-
-func emitFuncEpilogue(c: Codegen): Codegen {
-    c = emitAddRspImm8(c, 128)
-    c = emitPopRbp(c)
+func emitFuncEpilogue(c: codegen): codegen {
+    c = emitAddR64Imm8(c, "rsp", 128)
+    c = emitPop(c, "rbp")
     c = emitRet(c)
     return c
 }
 
-func generate(c: Codegen, tokens: [Token]): Codegen {
+// ============================================================
+// Label management
+// ============================================================
+
+// label records the current text position for a named label
+func label(c: codegen, name: string): codegen {
+    c.labels = push(c.labels, name)
+    c.labelOffsets = push(c.labelOffsets, #c.text)
+    return c
+}
+
+// addLabel is an alias for label
+func addLabel(c: codegen, name: string): codegen {
+    return label(c, name)
+}
+
+func nextLabel(c: codegen): u64 {
+    c.labelCount = c.labelCount + 1
+    return c.labelCount
+}
+
+// ============================================================
+// String data management
+// ============================================================
+
+func addString(c: codegen, s: string): string {
+    let count = #c.strings
+    var numStr = ""
+    var n = count
+    if n == 0
+        numStr = "0"
+    else
+        while n > 0 {
+            let digit = n % 10
+            var digitStr = ""
+            if digit == 0
+                digitStr = "0"
+            elif digit == 1
+                digitStr = "1"
+            elif digit == 2
+                digitStr = "2"
+            elif digit == 3
+                digitStr = "3"
+            elif digit == 4
+                digitStr = "4"
+            elif digit == 5
+                digitStr = "5"
+            elif digit == 6
+                digitStr = "6"
+            elif digit == 7
+                digitStr = "7"
+            elif digit == 8
+                digitStr = "8"
+            else
+                digitStr = "9"
+            numStr = digitStr + numStr
+            n = n / 10
+        }
+    let labelName = "str_" + numStr
+    c.stringLabels = push(c.stringLabels, labelName)
+    c.strings = push(c.strings, s)
+    return labelName
+}
+
+// emitStringData emits all collected string literals into the rodata section
+func emitStringData(c: codegen): codegen {
+    for i in 0..#c.strings {
+        c = label(c, c.stringLabels[i])
+        let s = c.strings[i]
+        // Emit each character as a byte
+        for j in 0..#s {
+            c.rodata = push(c.rodata, s[j])
+        }
+        // Null terminator
+        c.rodata = push(c.rodata, 0)
+    }
+    return c
+}
+
+// ============================================================
+// _start entry point
+// ============================================================
+
+func emitStart(c: codegen): codegen {
+    c = label(c, "_start")
+    // Call main
+    c = emitCallLabel(c, "main")
+    // Exit with return code from rax
+    c = emitMovR64R64(c, "rdi", "rax")  // exit code
+    c = emitMovR64Imm64(c, "rax", 60)   // sys_exit
+    c = emitSyscall(c)
+    return c
+}
+
+// ============================================================
+// Code generation from tokens
+// ============================================================
+
+// Simplified codegen: generate a minimal program that:
+// 1. Calls main()
+// 2. Exits with return code
+// 3. Has a main function that returns 0
+//
+// In the full version, this would walk the AST and generate code
+// for each function, statement, and expression.
+
+func generate(c: codegen, tokens: [Token]): codegen {
     c = emitStart(c)
+    c = label(c, "main")
     c = emitFuncPrologue(c)
+    c = emitMovR64Imm64(c, "rax", 0)
     c = emitFuncEpilogue(c)
+    return c
+}
+
+// ============================================================
+// ELF64 Linker
+// ============================================================
+
+func align(size: u64, alignment: u64): u64 {
+    return (size + alignment - 1) & (0 - alignment)
+}
+
+// patchLabelRef patches a single label reference in the text buffer
+// refOffset is the offset in text where the 4-byte displacement starts
+// refSize is the size of the displacement (4 bytes)
+// targetOffset is the absolute offset of the target label in text
+// The instruction's end is at refOffset + refSize
+// Displacement = targetOffset - (refOffset + refSize)
+func patchLabelRef(buf: [byte], refOffset: u64, refSize: u64, targetOffset: u64): [byte] {
+    let instrEnd = refOffset + refSize
+    let disp = targetOffset - instrEnd
+    buf[refOffset] = disp & 0xFF
+    buf[refOffset + 1] = (disp >> 8) & 0xFF
+    buf[refOffset + 2] = (disp >> 16) & 0xFF
+    buf[refOffset + 3] = (disp >> 24) & 0xFF
+    return buf
+}
+
+// findLabelOffset finds the text offset for a given label name
+// Returns 0 if not found (should not happen in correct programs)
+func findLabelOffset(labels: [string], offsets: [u64], name: string): u64 {
+    for i in 0..#labels {
+        if labels[i] == name {
+            return offsets[i]
+        }
+    }
+    return 0
+}
+
+func linkElf(c: codegen): codegen {
+    // First, patch all label references in the text buffer
+    // We need a mutable copy of text to patch
+    var patchedText: [byte] = c.text
+    for i in 0..#c.labelRefs {
+        let refName = c.labelRefs[i]
+        let refOffset = c.labelRefOffsets[i]
+        let refSize = c.labelRefSizes[i]
+        let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
+        if targetOffset == 0 and refName != "" {
+            c.errors = push(c.errors, "undefined label: " + refName)
+        } else {
+            patchedText = patchLabelRef(patchedText, refOffset, refSize, targetOffset)
+        }
+    }
+
+    // Calculate section offsets
+    let textOffset: u64 = 0x1000
+    let rodataOffset = textOffset + align(#patchedText, 0x1000)
+    let dataOffset = rodataOffset + align(#c.rodata, 0x1000)
+
+    // Calculate file offsets
+    let textFileOffset: u64 = 0x1000
+    let rodataFileOffset = textFileOffset + #patchedText
+    let dataFileOffset = rodataFileOffset + #c.rodata
+
+    // Build ELF64 binary
+    let headerSize: u64 = 64
+    let phdrSize: u64 = 56
+    let phdrs: u64 = 3
+
+    let fileSize = headerSize + phdrs * phdrSize + #patchedText + #c.rodata + #c.data
+    var buf: [byte] = []
+    var offset: u64 = 0
+
+    // Allocate buffer (fill with zeros)
+    for i in 0..fileSize {
+        buf = push(buf, 0)
+    }
+
+    // ELF Header
+    // Magic: 0x7f 'E' 'L' 'F'
+    buf[0] = 0x7f
+    buf[1] = 69  // 'E'
+    buf[2] = 76  // 'L'
+    buf[3] = 70  // 'F'
+    buf[4] = 2   // 64-bit
+    buf[5] = 1   // little endian
+    buf[6] = 1   // ELF version
+    buf[7] = 0   // OS/ABI
+    offset = 16
+
+    // e_type = ET_EXEC (2)
+    buf[offset] = 2
+    buf[offset+1] = 0
+    offset = offset + 2
+
+    // e_machine = x86_64 (0x3E)
+    buf[offset] = 0x3E
+    buf[offset+1] = 0
+    offset = offset + 2
+
+    // e_version = 1
+    buf[offset] = 1
+    buf[offset+1] = 0
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    offset = offset + 4
+
+    // e_entry = textOffset
+    buf[offset] = textOffset & 0xFF
+    buf[offset+1] = (textOffset >> 8) & 0xFF
+    buf[offset+2] = (textOffset >> 16) & 0xFF
+    buf[offset+3] = (textOffset >> 24) & 0xFF
+    buf[offset+4] = (textOffset >> 32) & 0xFF
+    buf[offset+5] = (textOffset >> 40) & 0xFF
+    buf[offset+6] = (textOffset >> 48) & 0xFF
+    buf[offset+7] = (textOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // e_phoff = headerSize + phdrs * phdrSize
+    let phoff = headerSize + phdrs * phdrSize
+    buf[offset] = phoff & 0xFF
+    buf[offset+1] = (phoff >> 8) & 0xFF
+    buf[offset+2] = (phoff >> 16) & 0xFF
+    buf[offset+3] = (phoff >> 24) & 0xFF
+    buf[offset+4] = (phoff >> 32) & 0xFF
+    buf[offset+5] = (phoff >> 40) & 0xFF
+    buf[offset+6] = (phoff >> 48) & 0xFF
+    buf[offset+7] = (phoff >> 56) & 0xFF
+    offset = offset + 8
+
+    // e_shoff = 0 (no section headers)
+    for i in 0..8 {
+        buf[offset] = 0
+        offset = offset + 1
+    }
+
+    // e_flags = 0
+    for i in 0..4 {
+        buf[offset] = 0
+        offset = offset + 1
+    }
+
+    // e_ehsize = headerSize
+    buf[offset] = headerSize & 0xFF
+    buf[offset+1] = (headerSize >> 8) & 0xFF
+    offset = offset + 2
+
+    // e_phentsize = phdrSize
+    buf[offset] = phdrSize & 0xFF
+    buf[offset+1] = (phdrSize >> 8) & 0xFF
+    offset = offset + 2
+
+    // e_phnum = phdrs
+    buf[offset] = phdrs & 0xFF
+    buf[offset+1] = (phdrs >> 8) & 0xFF
+    offset = offset + 2
+
+    // e_shentsize = 0
+    buf[offset] = 0
+    buf[offset+1] = 0
+    offset = offset + 2
+
+    // e_shnum = 0
+    buf[offset] = 0
+    buf[offset+1] = 0
+    offset = offset + 2
+
+    // e_shstrndx = 0
+    buf[offset] = 0
+    buf[offset+1] = 0
+    offset = offset + 2
+
+    // Program Header 1: .text (LOAD, RX)
+    // p_type = PT_LOAD (1)
+    buf[offset] = 1
+    buf[offset+1] = 0
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    offset = offset + 4
+
+    // p_flags = PF_R | PF_X (5)
+    buf[offset] = 5
+    buf[offset+1] = 0
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    offset = offset + 4
+
+    // p_offset = textFileOffset (file offset where .text data starts)
+    buf[offset] = textFileOffset & 0xFF
+    buf[offset+1] = (textFileOffset >> 8) & 0xFF
+    buf[offset+2] = (textFileOffset >> 16) & 0xFF
+    buf[offset+3] = (textFileOffset >> 24) & 0xFF
+    buf[offset+4] = (textFileOffset >> 32) & 0xFF
+    buf[offset+5] = (textFileOffset >> 40) & 0xFF
+    buf[offset+6] = (textFileOffset >> 48) & 0xFF
+    buf[offset+7] = (textFileOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_vaddr = textOffset
+    buf[offset] = textOffset & 0xFF
+    buf[offset+1] = (textOffset >> 8) & 0xFF
+    buf[offset+2] = (textOffset >> 16) & 0xFF
+    buf[offset+3] = (textOffset >> 24) & 0xFF
+    buf[offset+4] = (textOffset >> 32) & 0xFF
+    buf[offset+5] = (textOffset >> 40) & 0xFF
+    buf[offset+6] = (textOffset >> 48) & 0xFF
+    buf[offset+7] = (textOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_paddr = textOffset
+    buf[offset] = textOffset & 0xFF
+    buf[offset+1] = (textOffset >> 8) & 0xFF
+    buf[offset+2] = (textOffset >> 16) & 0xFF
+    buf[offset+3] = (textOffset >> 24) & 0xFF
+    buf[offset+4] = (textOffset >> 32) & 0xFF
+    buf[offset+5] = (textOffset >> 40) & 0xFF
+    buf[offset+6] = (textOffset >> 48) & 0xFF
+    buf[offset+7] = (textOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_filesz = textFileOffset + len(text)
+    let textFileSize = textFileOffset + #patchedText
+    buf[offset] = textFileSize & 0xFF
+    buf[offset+1] = (textFileSize >> 8) & 0xFF
+    buf[offset+2] = (textFileSize >> 16) & 0xFF
+    buf[offset+3] = (textFileSize >> 24) & 0xFF
+    buf[offset+4] = (textFileSize >> 32) & 0xFF
+    buf[offset+5] = (textFileSize >> 40) & 0xFF
+    buf[offset+6] = (textFileSize >> 48) & 0xFF
+    buf[offset+7] = (textFileSize >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_memsz = textFileSize
+    buf[offset] = textFileSize & 0xFF
+    buf[offset+1] = (textFileSize >> 8) & 0xFF
+    buf[offset+2] = (textFileSize >> 16) & 0xFF
+    buf[offset+3] = (textFileSize >> 24) & 0xFF
+    buf[offset+4] = (textFileSize >> 32) & 0xFF
+    buf[offset+5] = (textFileSize >> 40) & 0xFF
+    buf[offset+6] = (textFileSize >> 48) & 0xFF
+    buf[offset+7] = (textFileSize >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_align = 0x1000
+    buf[offset] = 0
+    buf[offset+1] = 0x10
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    buf[offset+4] = 0
+    buf[offset+5] = 0
+    buf[offset+6] = 0
+    buf[offset+7] = 0
+    offset = offset + 8
+
+    // Program Header 2: .rodata (LOAD, R)
+    buf[offset] = 1
+    buf[offset+1] = 0
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    offset = offset + 4
+
+    buf[offset] = 4  // PF_R
+    buf[offset+1] = 0
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    offset = offset + 4
+
+    // p_offset = rodataFileOffset
+    buf[offset] = rodataFileOffset & 0xFF
+    buf[offset+1] = (rodataFileOffset >> 8) & 0xFF
+    buf[offset+2] = (rodataFileOffset >> 16) & 0xFF
+    buf[offset+3] = (rodataFileOffset >> 24) & 0xFF
+    buf[offset+4] = (rodataFileOffset >> 32) & 0xFF
+    buf[offset+5] = (rodataFileOffset >> 40) & 0xFF
+    buf[offset+6] = (rodataFileOffset >> 48) & 0xFF
+    buf[offset+7] = (rodataFileOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_vaddr = rodataOffset
+    buf[offset] = rodataOffset & 0xFF
+    buf[offset+1] = (rodataOffset >> 8) & 0xFF
+    buf[offset+2] = (rodataOffset >> 16) & 0xFF
+    buf[offset+3] = (rodataOffset >> 24) & 0xFF
+    buf[offset+4] = (rodataOffset >> 32) & 0xFF
+    buf[offset+5] = (rodataOffset >> 40) & 0xFF
+    buf[offset+6] = (rodataOffset >> 48) & 0xFF
+    buf[offset+7] = (rodataOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_paddr = rodataOffset
+    buf[offset] = rodataOffset & 0xFF
+    buf[offset+1] = (rodataOffset >> 8) & 0xFF
+    buf[offset+2] = (rodataOffset >> 16) & 0xFF
+    buf[offset+3] = (rodataOffset >> 24) & 0xFF
+    buf[offset+4] = (rodataOffset >> 32) & 0xFF
+    buf[offset+5] = (rodataOffset >> 40) & 0xFF
+    buf[offset+6] = (rodataOffset >> 48) & 0xFF
+    buf[offset+7] = (rodataOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_filesz = len(rodata)
+    let rodataLen = #c.rodata
+    buf[offset] = rodataLen & 0xFF
+    buf[offset+1] = (rodataLen >> 8) & 0xFF
+    buf[offset+2] = (rodataLen >> 16) & 0xFF
+    buf[offset+3] = (rodataLen >> 24) & 0xFF
+    buf[offset+4] = (rodataLen >> 32) & 0xFF
+    buf[offset+5] = (rodataLen >> 40) & 0xFF
+    buf[offset+6] = (rodataLen >> 48) & 0xFF
+    buf[offset+7] = (rodataLen >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_memsz = len(rodata)
+    buf[offset] = rodataLen & 0xFF
+    buf[offset+1] = (rodataLen >> 8) & 0xFF
+    buf[offset+2] = (rodataLen >> 16) & 0xFF
+    buf[offset+3] = (rodataLen >> 24) & 0xFF
+    buf[offset+4] = (rodataLen >> 32) & 0xFF
+    buf[offset+5] = (rodataLen >> 40) & 0xFF
+    buf[offset+6] = (rodataLen >> 48) & 0xFF
+    buf[offset+7] = (rodataLen >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_align = 0x1000
+    buf[offset] = 0
+    buf[offset+1] = 0x10
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    buf[offset+4] = 0
+    buf[offset+5] = 0
+    buf[offset+6] = 0
+    buf[offset+7] = 0
+    offset = offset + 8
+
+    // Program Header 3: .data + .bss (LOAD, RW)
+    buf[offset] = 1
+    buf[offset+1] = 0
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    offset = offset + 4
+
+    buf[offset] = 6  // PF_R | PF_W
+    buf[offset+1] = 0
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    offset = offset + 4
+
+    // p_offset = dataFileOffset
+    buf[offset] = dataFileOffset & 0xFF
+    buf[offset+1] = (dataFileOffset >> 8) & 0xFF
+    buf[offset+2] = (dataFileOffset >> 16) & 0xFF
+    buf[offset+3] = (dataFileOffset >> 24) & 0xFF
+    buf[offset+4] = (dataFileOffset >> 32) & 0xFF
+    buf[offset+5] = (dataFileOffset >> 40) & 0xFF
+    buf[offset+6] = (dataFileOffset >> 48) & 0xFF
+    buf[offset+7] = (dataFileOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_vaddr = dataOffset
+    buf[offset] = dataOffset & 0xFF
+    buf[offset+1] = (dataOffset >> 8) & 0xFF
+    buf[offset+2] = (dataOffset >> 16) & 0xFF
+    buf[offset+3] = (dataOffset >> 24) & 0xFF
+    buf[offset+4] = (dataOffset >> 32) & 0xFF
+    buf[offset+5] = (dataOffset >> 40) & 0xFF
+    buf[offset+6] = (dataOffset >> 48) & 0xFF
+    buf[offset+7] = (dataOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_paddr = dataOffset
+    buf[offset] = dataOffset & 0xFF
+    buf[offset+1] = (dataOffset >> 8) & 0xFF
+    buf[offset+2] = (dataOffset >> 16) & 0xFF
+    buf[offset+3] = (dataOffset >> 24) & 0xFF
+    buf[offset+4] = (dataOffset >> 32) & 0xFF
+    buf[offset+5] = (dataOffset >> 40) & 0xFF
+    buf[offset+6] = (dataOffset >> 48) & 0xFF
+    buf[offset+7] = (dataOffset >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_filesz = len(data)
+    let dataLen = #c.data
+    buf[offset] = dataLen & 0xFF
+    buf[offset+1] = (dataLen >> 8) & 0xFF
+    buf[offset+2] = (dataLen >> 16) & 0xFF
+    buf[offset+3] = (dataLen >> 24) & 0xFF
+    buf[offset+4] = (dataLen >> 32) & 0xFF
+    buf[offset+5] = (dataLen >> 40) & 0xFF
+    buf[offset+6] = (dataLen >> 48) & 0xFF
+    buf[offset+7] = (dataLen >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_memsz = len(data) + len(bss)
+    let dataMemsz = dataLen + #c.bss
+    buf[offset] = dataMemsz & 0xFF
+    buf[offset+1] = (dataMemsz >> 8) & 0xFF
+    buf[offset+2] = (dataMemsz >> 16) & 0xFF
+    buf[offset+3] = (dataMemsz >> 24) & 0xFF
+    buf[offset+4] = (dataMemsz >> 32) & 0xFF
+    buf[offset+5] = (dataMemsz >> 40) & 0xFF
+    buf[offset+6] = (dataMemsz >> 48) & 0xFF
+    buf[offset+7] = (dataMemsz >> 56) & 0xFF
+    offset = offset + 8
+
+    // p_align = 0x1000
+    buf[offset] = 0
+    buf[offset+1] = 0x10
+    buf[offset+2] = 0
+    buf[offset+3] = 0
+    buf[offset+4] = 0
+    buf[offset+5] = 0
+    buf[offset+6] = 0
+    buf[offset+7] = 0
+    offset = offset + 8
+
+    // Write .text at file offset textFileOffset
+    for i in 0..#patchedText {
+        buf[textFileOffset + i] = patchedText[i]
+    }
+
+    // Write .rodata at file offset rodataFileOffset
+    for i in 0..#c.rodata {
+        buf[rodataFileOffset + i] = c.rodata[i]
+    }
+
+    // Write .data at file offset dataFileOffset
+    for i in 0..#c.data {
+        buf[dataFileOffset + i] = c.data[i]
+    }
+
+    c.output = buf
     return c
 }

@@ -718,9 +718,9 @@ func (p *Parser) prefixFn() func() Expr {
 		return p.parseLengthPrefix
 	case TOKEN_KW_IF:
 		// Check if if is followed by ( — if so, it's a function call, not an if expression
-		// Also check for ) or , — if so, it's used as an identifier in arguments
+		// Also check for ) or , or = or : — if so, it's used as an identifier in arguments
 		next := p.peekNext().Type
-		if next == TOKEN_LPAREN || next == TOKEN_RPAREN || next == TOKEN_COMMA || next == TOKEN_EQUAL || next == TOKEN_COLON {
+		if next == TOKEN_LPAREN || next == TOKEN_RPAREN || next == TOKEN_COMMA || next == TOKEN_EQUAL || next == TOKEN_COLON || next == TOKEN_SEMICOLON || next == TOKEN_RBRACE {
 			return p.parseIdentPrefix
 		}
 		return p.parseIfExpr
@@ -799,28 +799,7 @@ func (p *Parser) infixFn() func(Expr) Expr {
 
 func (p *Parser) parseIdentPrefix() Expr {
 	tok := p.advance()
-	// Check if this is a struct literal: Ident{...}
-	// Only trigger for capitalized identifiers (type names by convention)
-	if tok.Type == TOKEN_IDENT && len(tok.Lexeme) > 0 && tok.Lexeme[0] >= 'A' && tok.Lexeme[0] <= 'Z' && p.check(TOKEN_LBRACE) {
-		return p.parseStructLiteral(&IdentExpr{pos: tok.Pos(), Name: tok.Lexeme})
-	}
 	return &IdentExpr{pos: tok.Pos(), Name: tok.Lexeme}
-}
-
-func (p *Parser) parseStructLiteral(name *IdentExpr) Expr {
-	p.advance() // consume '{'
-	// Parse comma-separated expressions inside the struct literal
-	if !p.check(TOKEN_RBRACE) {
-		p.parsePrecedence(PREC_NONE)
-		for p.match(TOKEN_COMMA) {
-			if p.check(TOKEN_RBRACE) {
-				break
-			}
-			p.parsePrecedence(PREC_NONE)
-		}
-	}
-	p.expect(TOKEN_RBRACE, "expected '}' after struct literal")
-	return name
 }
 
 func (p *Parser) parseTypeKeywordPrefix() Expr {
@@ -1038,28 +1017,6 @@ func (p *Parser) parseScopeInfix(left Expr) Expr {
 		p.errorAt(p.peek(), "expected name after '::'")
 	}
 	return se
-}
-
-// parseStructLiteralInfix parses struct literal: TypeName{field1, field2, ...}
-func (p *Parser) parseStructLiteralInfix(left Expr) Expr {
-	// Only treat as struct literal if left side is an identifier
-	if _, ok := left.(*IdentExpr); !ok {
-		// Not a struct literal — don't consume {
-		return left
-	}
-	p.advance() // consume '{'
-	// Parse comma-separated expressions inside the struct literal
-	if !p.check(TOKEN_RBRACE) {
-		p.parseExpression()
-		for p.match(TOKEN_COMMA) {
-			if p.check(TOKEN_RBRACE) {
-				break
-			}
-			p.parseExpression()
-		}
-	}
-	p.expect(TOKEN_RBRACE, "expected '}' after struct literal")
-	return left
 }
 
 func (p *Parser) parseAssignmentInfix(left Expr) Expr {
