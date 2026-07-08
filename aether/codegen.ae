@@ -628,11 +628,9 @@ func emitStringData(c: codegen): codegen {
 }
 func emitStart(c: codegen): codegen {
     c = label(c, "_start")
-    // Save argc and argv for __ae_argc / __ae_get_arg
-    c = emitLeaR64Label(c, "rcx", "__ae_saved_argc")
-    c = emitMovR64ToAddr(c, "rdi", "rcx", 0)
-    c = emitLeaR64Label(c, "rcx", "__ae_saved_argv")
-    c = emitMovR64ToAddr(c, "rsi", "rcx", 0)
+    // Save argc and argv on stack (stack is always writable)
+    c = emitPush(c, "rdi")  // save argc
+    c = emitPush(c, "rsi")  // save argv
     // Call main
     c = emitCallLabel(c, "main")
     // Exit with return code from rax
@@ -1192,16 +1190,16 @@ func emitRuntimeHelpers(c: codegen): codegen {
 }
 
 func emitRuntimeData(c: codegen): codegen {
-    c = labelData(c, "__ae_saved_argc")
-    for i in 0..8 { c.data = push(c.data, 0) }
-    c = labelData(c, "__ae_saved_argv")
-    for i in 0..8 { c.data = push(c.data, 0) }
-    c = labelData(c, "__ae_read_buf")
-    for i in 0..4096 { c.data = push(c.data, 0) }
-    c = labelData(c, "__ae_empty_str")
-    c.data = push(c.data, 0)
-    c = labelData(c, "__ae_heap_start")
-    for i in 0..65536 { c.data = push(c.data, 0) }
+    c = label(c, "__ae_saved_argc")
+    for i in 0..8 { c.text = push(c.text, 0) }
+    c = label(c, "__ae_saved_argv")
+    for i in 0..8 { c.text = push(c.text, 0) }
+    c = label(c, "__ae_read_buf")
+    for i in 0..4096 { c.text = push(c.text, 0) }
+    c = label(c, "__ae_empty_str")
+    c.text = push(c.text, 0)
+    c = label(c, "__ae_heap_start")
+    for i in 0..65536 { c.text = push(c.text, 0) }
     return c
 }
 
