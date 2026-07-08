@@ -163,7 +163,7 @@ func main(): u64 {
     }
 
     // Phase 5: Link — write ELF64 binary
-    cg = linkElf(cg)
+    cg = linkMachO(cg)
     if #cg.errors > 0 {
         for k in 0..#cg.errors {
             __ae_print("error: ")

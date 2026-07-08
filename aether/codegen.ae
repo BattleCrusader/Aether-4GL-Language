@@ -42,15 +42,16 @@ struct codegen {
     strings: [string],        // string content for rodata
     stringLabels: [string],   // label names for strings
     errors: [string],
-    output: [byte],           // final ELF64 binary
+    output: [byte],           // final binary
     labelCount: u64,
+    lastStringLabel: string,  // last string label name (set by addString)
+    lastCallee: string,      // last function callee name (set by genPrimary)
     // Per-function state
     funcName: string,
     stackOffsets: [string],   // variable names
     stackOffsetVals: [u64],   // corresponding offsets
     stackSize: u64,
 }
-
 func newCodegen(): codegen {
     var c: codegen
     c.text = []
@@ -70,7 +71,8 @@ func newCodegen(): codegen {
     c.funcName = ""
     c.stackOffsets = []
     c.stackOffsetVals = []
-    c.stackSize = 0
+    c.lastStringLabel = ""
+    c.lastCallee = ""
     return c
 }
 
@@ -78,7 +80,6 @@ func addError(c: codegen, msg: string): codegen {
     c.errors = push(c.errors, msg)
     return c
 }
-
 // ============================================================
 // Byte emission
 // ============================================================
@@ -554,7 +555,12 @@ func label(c: codegen, name: string): codegen {
     return c
 }
 
-// addLabel is an alias for label
+func labelData(c: codegen, name: string): codegen {
+    c.labels = push(c.labels, name)
+    c.labelOffsets = push(c.labelOffsets, #c.text + #c.rodata + #c.data)
+    return c
+}
+
 func addLabel(c: codegen, name: string): codegen {
     return label(c, name)
 }
@@ -563,12 +569,7 @@ func nextLabel(c: codegen): u64 {
     c.labelCount = c.labelCount + 1
     return c.labelCount
 }
-
-// ============================================================
-// String data management
-// ============================================================
-
-func addString(c: codegen, s: string): string {
+func addString(c: codegen, s: string): codegen {
     let count = #c.strings
     var numStr = ""
     var n = count
@@ -604,35 +605,33 @@ func addString(c: codegen, s: string): string {
     let labelName = "str_" + numStr
     c.stringLabels = push(c.stringLabels, labelName)
     c.strings = push(c.strings, s)
-    return labelName
+    c.lastStringLabel = labelName
+    return c
 }
 
-// emitStringData emits all collected string literals into the rodata section
 func emitStringData(c: codegen): codegen {
     for i in 0..#c.strings {
         c = label(c, c.stringLabels[i])
         let s = c.strings[i]
-        // Emit each character as a byte
         for j in 0..#s {
             c.rodata = push(c.rodata, s[j])
         }
-        // Null terminator
         c.rodata = push(c.rodata, 0)
     }
     return c
 }
-
-// ============================================================
-// _start entry point
-// ============================================================
-
 func emitStart(c: codegen): codegen {
     c = label(c, "_start")
+    // Save argc and argv for __ae_argc / __ae_get_arg
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argc")
+    c = emitMovR64ToAddr(c, "rdi", "rcx", 0)
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argv")
+    c = emitMovR64ToAddr(c, "rsi", "rcx", 0)
     // Call main
     c = emitCallLabel(c, "main")
     // Exit with return code from rax
-    c = emitMovR64R64(c, "rdi", "rax")  // exit code
-    c = emitMovR64Imm64(c, "rax", 60)   // sys_exit
+    c = emitMovR64R64(c, "rdi", "rax")
+    c = emitMovR64Imm64(c, "rax", 0x2000001)
     c = emitSyscall(c)
     return c
 }
@@ -641,37 +640,821 @@ func emitStart(c: codegen): codegen {
 // Code generation from tokens
 // ============================================================
 
-// Simplified codegen: generate a minimal program that:
-// 1. Calls main()
-// 2. Exits with return code
-// 3. Has a main function that returns 0
-//
-// In the full version, this would walk the AST and generate code
-// for each function, statement, and expression.
+struct genCtx {
+    c: codegen,
+    pos: u64,
+}
+
+func ctxPeek(ctx: genCtx, tokens: [Token]): Token {
+    return tokens[ctx.pos]
+}
+
+func ctxIsAtEnd(ctx: genCtx, tokens: [Token]): bool {
+    return ctx.pos >= #tokens or tokens[ctx.pos].typ == TOKEN_EOF
+}
+
+func ctxAdvance(ctx: genCtx, tokens: [Token]): genCtx {
+    if ctx.pos < #tokens {
+        ctx.pos = ctx.pos + 1
+    }
+    return ctx
+}
+
+func ctxCheck(ctx: genCtx, tokens: [Token], typ: u64): bool {
+    if ctxIsAtEnd(ctx, tokens) { return false }
+    return tokens[ctx.pos].typ == typ
+}
+
+func ctxMatch(ctx: genCtx, tokens: [Token], typ: u64): genCtx {
+    if ctxCheck(ctx, tokens, typ) { return ctxAdvance(ctx, tokens) }
+    return ctx
+}
+
+func ctxExpect(ctx: genCtx, tokens: [Token], typ: u64, msg: string): genCtx {
+    if ctxCheck(ctx, tokens, typ) { return ctxAdvance(ctx, tokens) }
+    ctx.c = addError(ctx.c, msg)
+    return ctx
+}
 
 func generate(c: codegen, tokens: [Token]): codegen {
-    c = emitStart(c)
-    c = label(c, "main")
-    c = emitFuncPrologue(c)
-    c = emitMovR64Imm64(c, "rax", 0)
-    c = emitFuncEpilogue(c)
+    var ctx: genCtx
+    ctx.c = c
+    ctx.pos = 0
+    ctx.c = emitRuntimeData(ctx.c)
+    ctx.c = emitStart(ctx.c)
+    while not ctxIsAtEnd(ctx, tokens) {
+        while ctxCheck(ctx, tokens, TOKEN_AT) {
+            ctx = ctxAdvance(ctx, tokens)
+            if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+        }
+        if ctxCheck(ctx, tokens, TOKEN_KW_FUNC) { ctx = genFunc(ctx, tokens) }
+        elif ctxCheck(ctx, tokens, TOKEN_KW_STRUCT) { ctx = skipStructDecl(ctx, tokens) }
+        elif ctxCheck(ctx, tokens, TOKEN_KW_ENUM) { ctx = skipEnumDecl(ctx, tokens) }
+        elif ctxCheck(ctx, tokens, TOKEN_KW_IMPORT) { ctx = skipImportDecl(ctx, tokens) }
+        elif ctxCheck(ctx, tokens, TOKEN_KW_CONST) { ctx = skipConstDecl(ctx, tokens) }
+        else { ctx = ctxAdvance(ctx, tokens) }
+    }
+    ctx.c = emitStringData(ctx.c)
+    ctx.c = emitRuntimeHelpers(ctx.c)
+    return ctx.c
+}
+
+func skipStructDecl(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+    if ctxCheck(ctx, tokens, TOKEN_LBRACE) {
+        ctx = ctxAdvance(ctx, tokens)
+        var depth: u64 = 1
+        while depth > 0 and not ctxIsAtEnd(ctx, tokens) {
+            if ctxCheck(ctx, tokens, TOKEN_LBRACE) { depth = depth + 1 }
+            elif ctxCheck(ctx, tokens, TOKEN_RBRACE) { depth = depth - 1 }
+            ctx = ctxAdvance(ctx, tokens)
+        }
+    }
+    return ctx
+}
+
+func skipEnumDecl(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+    if ctxCheck(ctx, tokens, TOKEN_LBRACE) {
+        ctx = ctxAdvance(ctx, tokens)
+        var depth: u64 = 1
+        while depth > 0 and not ctxIsAtEnd(ctx, tokens) {
+            if ctxCheck(ctx, tokens, TOKEN_LBRACE) { depth = depth + 1 }
+            elif ctxCheck(ctx, tokens, TOKEN_RBRACE) { depth = depth - 1 }
+            ctx = ctxAdvance(ctx, tokens)
+        }
+    }
+    return ctx
+}
+
+func skipImportDecl(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    if ctxCheck(ctx, tokens, TOKEN_STRING) { ctx = ctxAdvance(ctx, tokens) }
+    return ctx
+}
+
+func skipConstDecl(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+    if ctxCheck(ctx, tokens, TOKEN_COLON) {
+        ctx = ctxAdvance(ctx, tokens)
+        if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+    }
+    if ctxCheck(ctx, tokens, TOKEN_EQUAL) {
+        ctx = ctxAdvance(ctx, tokens)
+        ctx = skipExpr(ctx, tokens)
+    }
+    return ctx
+}
+
+func skipExpr(ctx: genCtx, tokens: [Token]): genCtx {
+    while not ctxIsAtEnd(ctx, tokens) {
+        let t = tokens[ctx.pos].typ
+        if t == TOKEN_SEMICOLON or t == TOKEN_RBRACE or t == TOKEN_RPAREN or t == TOKEN_COMMA or t == TOKEN_COLON { break }
+        ctx = ctxAdvance(ctx, tokens)
+    }
+    return ctx
+}
+
+func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    if ctxIsAtEnd(ctx, tokens) {
+        ctx.c = addError(ctx.c, "expected function name")
+        return ctx
+    }
+    let funcName = tokens[ctx.pos].lexeme
+    ctx = ctxAdvance(ctx, tokens)
+    if ctxCheck(ctx, tokens, TOKEN_LPAREN) {
+        ctx = ctxAdvance(ctx, tokens)
+        var parenDepth: u64 = 1
+        while parenDepth > 0 and not ctxIsAtEnd(ctx, tokens) {
+            if ctxCheck(ctx, tokens, TOKEN_LPAREN) { parenDepth = parenDepth + 1 }
+            elif ctxCheck(ctx, tokens, TOKEN_RPAREN) { parenDepth = parenDepth - 1 }
+            ctx = ctxAdvance(ctx, tokens)
+        }
+    }
+    if ctxCheck(ctx, tokens, TOKEN_COLON) {
+        ctx = ctxAdvance(ctx, tokens)
+        if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+    }
+    if not ctxCheck(ctx, tokens, TOKEN_LBRACE) { return ctx }
+    ctx.c.funcName = funcName
+    ctx.c.stackOffsets = []
+    ctx.c.stackOffsetVals = []
+    ctx.c.stackSize = 0
+    ctx.c.labelCount = 0
+    ctx.c = label(ctx.c, funcName)
+    ctx.c = emitPush(ctx.c, "rbp")
+    ctx.c = emitMovR64R64(ctx.c, "rbp", "rsp")
+    ctx = collectLocals(ctx, tokens)
+    var stackAlloc: u64 = ctx.c.stackSize
+    if stackAlloc < 128 { stackAlloc = 128 }
+    stackAlloc = (stackAlloc + 15) & (0 - 16)
+    if stackAlloc <= 127 {
+        ctx.c = emitSubR64Imm8(ctx.c, "rsp", stackAlloc)
+    } else {
+        ctx.c = emitRexW(ctx.c)
+        ctx.c = emitByte(ctx.c, 0x81)
+        ctx.c = emitByte(ctx.c, modRM(3, 5, 4))
+        ctx.c = emitU32(ctx.c, stackAlloc)
+    }
+    ctx = genBlock(ctx, tokens)
+    ctx.c = label(ctx.c, funcName + "_epilogue")
+    if stackAlloc > 0 {
+        if stackAlloc <= 127 {
+            ctx.c = emitAddR64Imm8(ctx.c, "rsp", stackAlloc)
+        } else {
+            ctx.c = emitRexW(ctx.c)
+            ctx.c = emitByte(ctx.c, 0x81)
+            ctx.c = emitByte(ctx.c, modRM(3, 0, 4))
+            ctx.c = emitU32(ctx.c, stackAlloc)
+        }
+    }
+    ctx.c = emitPop(ctx.c, "rbp")
+    ctx.c = emitRet(ctx.c)
+    return ctx
+}
+
+func collectLocals(ctx: genCtx, tokens: [Token]): genCtx {
+    let savedPos = ctx.pos
+    ctx = collectLocalsWalk(ctx, tokens)
+    ctx.pos = savedPos
+    return ctx
+}
+
+func collectLocalsWalk(ctx: genCtx, tokens: [Token]): genCtx {
+    while not ctxIsAtEnd(ctx, tokens) {
+        if ctxCheck(ctx, tokens, TOKEN_KW_LET) or ctxCheck(ctx, tokens, TOKEN_KW_VAR) {
+            ctx = ctxAdvance(ctx, tokens)
+            if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+                let varName = tokens[ctx.pos].lexeme
+                var found = false
+                for j in 0..#ctx.c.stackOffsets {
+                    if ctx.c.stackOffsets[j] == varName { found = true }
+                }
+                if not found {
+                    ctx.c.stackOffsets = push(ctx.c.stackOffsets, varName)
+                    ctx.c.stackOffsetVals = push(ctx.c.stackOffsetVals, ctx.c.stackSize)
+                    ctx.c.stackSize = ctx.c.stackSize + 8
+                }
+                ctx = ctxAdvance(ctx, tokens)
+            }
+        } elif ctxCheck(ctx, tokens, TOKEN_LBRACE) {
+            ctx = ctxAdvance(ctx, tokens)
+            ctx = collectLocalsWalk(ctx, tokens)
+        } elif ctxCheck(ctx, tokens, TOKEN_RBRACE) {
+            ctx = ctxAdvance(ctx, tokens)
+            return ctx
+        } else { ctx = ctxAdvance(ctx, tokens) }
+    }
+    return ctx
+}
+
+func findStackOffset(c: codegen, name: string): u64 {
+    for i in 0..#c.stackOffsets {
+        if c.stackOffsets[i] == name { return c.stackOffsetVals[i] }
+    }
+    return 0
+}
+
+func isStackVar(c: codegen, name: string): bool {
+    for i in 0..#c.stackOffsets {
+        if c.stackOffsets[i] == name { return true }
+    }
+    return false
+}
+
+func genBlock(ctx: genCtx, tokens: [Token]): genCtx {
+    if ctxCheck(ctx, tokens, TOKEN_LBRACE) { ctx = ctxAdvance(ctx, tokens) }
+    while not ctxCheck(ctx, tokens, TOKEN_RBRACE) and not ctxIsAtEnd(ctx, tokens) {
+        ctx = genStmt(ctx, tokens)
+    }
+    if ctxCheck(ctx, tokens, TOKEN_RBRACE) { ctx = ctxAdvance(ctx, tokens) }
+    return ctx
+}
+
+func genStmt(ctx: genCtx, tokens: [Token]): genCtx {
+    if ctxCheck(ctx, tokens, TOKEN_KW_LET) or ctxCheck(ctx, tokens, TOKEN_KW_VAR) { return genVarDecl(ctx, tokens) }
+    if ctxCheck(ctx, tokens, TOKEN_KW_RETURN) { return genReturnStmt(ctx, tokens) }
+    if ctxCheck(ctx, tokens, TOKEN_KW_IF) { return genIfStmt(ctx, tokens) }
+    if ctxCheck(ctx, tokens, TOKEN_KW_WHILE) { return genWhileStmt(ctx, tokens) }
+    if ctxCheck(ctx, tokens, TOKEN_KW_FOR) { return genForStmt(ctx, tokens) }
+    if ctxCheck(ctx, tokens, TOKEN_KW_MATCH) { return genMatchStmt(ctx, tokens) }
+    if ctxCheck(ctx, tokens, TOKEN_KW_BREAK) {
+        ctx = ctxAdvance(ctx, tokens)
+        ctx.c = emitJmpLabel(ctx.c, ctx.c.funcName + "_break")
+        return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_KW_CONTINUE) {
+        ctx = ctxAdvance(ctx, tokens)
+        ctx.c = emitJmpLabel(ctx.c, ctx.c.funcName + "_continue")
+        return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_LBRACE) { return genBlock(ctx, tokens) }
+    ctx = genExpr(ctx, tokens)
+    return ctx
+}
+
+func genVarDecl(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+        let varName = tokens[ctx.pos].lexeme
+        ctx = ctxAdvance(ctx, tokens)
+        if ctxCheck(ctx, tokens, TOKEN_COLON) {
+            ctx = ctxAdvance(ctx, tokens)
+            if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+        }
+        if ctxCheck(ctx, tokens, TOKEN_EQUAL) {
+            ctx = ctxAdvance(ctx, tokens)
+            ctx = genExpr(ctx, tokens)
+            let offset = findStackOffset(ctx.c, varName)
+            ctx.c = emitMovR64Stack(ctx.c, "rax", offset)
+        }
+    }
+    return ctx
+}
+
+func genReturnStmt(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    if not ctxCheck(ctx, tokens, TOKEN_RBRACE) and not ctxCheck(ctx, tokens, TOKEN_SEMICOLON) {
+        ctx = genExpr(ctx, tokens)
+    }
+    ctx.c = emitJmpLabel(ctx.c, ctx.c.funcName + "_epilogue")
+    return ctx
+}
+
+func genIfStmt(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    ctx = genExpr(ctx, tokens)
+    ctx.c = emitTestR64R64(ctx.c, "rax", "rax")
+    let elseLabel = ctx.c.funcName + "_else_" + u64ToString(nextLabel(ctx.c))
+    ctx.c = emitJzLabel(ctx.c, elseLabel)
+    ctx = genStmt(ctx, tokens)
+    if ctxCheck(ctx, tokens, TOKEN_KW_ELIF) {
+        let endLabel = ctx.c.funcName + "_end_" + u64ToString(nextLabel(ctx.c))
+        ctx.c = emitJmpLabel(ctx.c, endLabel)
+        ctx.c = label(ctx.c, elseLabel)
+        ctx = genIfStmt(ctx, tokens)
+        ctx.c = label(ctx.c, endLabel)
+        return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_KW_ELSE) {
+        ctx = ctxAdvance(ctx, tokens)
+        let endLabel = ctx.c.funcName + "_end_" + u64ToString(nextLabel(ctx.c))
+        ctx.c = emitJmpLabel(ctx.c, endLabel)
+        ctx.c = label(ctx.c, elseLabel)
+        ctx = genStmt(ctx, tokens)
+        ctx.c = label(ctx.c, endLabel)
+        return ctx
+    }
+    ctx.c = label(ctx.c, elseLabel)
+    return ctx
+}
+
+func genWhileStmt(ctx: genCtx, tokens: [Token]): genCtx {
+    let startLabel = ctx.c.funcName + "_start_" + u64ToString(nextLabel(ctx.c))
+    let endLabel = ctx.c.funcName + "_end_" + u64ToString(nextLabel(ctx.c))
+    ctx.c = label(ctx.c, startLabel)
+    ctx = ctxAdvance(ctx, tokens)
+    ctx = genExpr(ctx, tokens)
+    ctx.c = emitTestR64R64(ctx.c, "rax", "rax")
+    ctx.c = emitJzLabel(ctx.c, endLabel)
+    ctx = genStmt(ctx, tokens)
+    ctx.c = emitJmpLabel(ctx.c, startLabel)
+    ctx.c = label(ctx.c, endLabel)
+    return ctx
+}
+
+func genForStmt(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    ctx = skipExpr(ctx, tokens)
+    if ctxCheck(ctx, tokens, TOKEN_LBRACE) { ctx = genBlock(ctx, tokens) }
+    return ctx
+}
+
+func genMatchStmt(ctx: genCtx, tokens: [Token]): genCtx {
+    ctx = ctxAdvance(ctx, tokens)
+    ctx = genExpr(ctx, tokens)
+    ctx.c = emitPush(ctx.c, "rax")
+    if ctxCheck(ctx, tokens, TOKEN_LBRACE) { ctx = ctxAdvance(ctx, tokens) }
+    let endLabel = ctx.c.funcName + "_match_end_" + u64ToString(nextLabel(ctx.c))
+    while not ctxCheck(ctx, tokens, TOKEN_RBRACE) and not ctxIsAtEnd(ctx, tokens) {
+        if ctxCheck(ctx, tokens, TOKEN_KW_CASE) {
+            ctx = ctxAdvance(ctx, tokens)
+            while not ctxCheck(ctx, tokens, TOKEN_ARROW) and not ctxIsAtEnd(ctx, tokens) { ctx = ctxAdvance(ctx, tokens) }
+            if ctxCheck(ctx, tokens, TOKEN_ARROW) { ctx = ctxAdvance(ctx, tokens) }
+            ctx = genStmt(ctx, tokens)
+            ctx.c = emitJmpLabel(ctx.c, endLabel)
+        } elif ctxCheck(ctx, tokens, TOKEN_KW_ELSE) {
+            ctx = ctxAdvance(ctx, tokens)
+            if ctxCheck(ctx, tokens, TOKEN_ARROW) { ctx = ctxAdvance(ctx, tokens) }
+            ctx = genStmt(ctx, tokens)
+        } else { ctx = ctxAdvance(ctx, tokens) }
+    }
+    if ctxCheck(ctx, tokens, TOKEN_RBRACE) { ctx = ctxAdvance(ctx, tokens) }
+    ctx.c = emitPop(ctx.c, "rax")
+    ctx.c = label(ctx.c, endLabel)
+    return ctx
+}
+
+func genExpr(ctx: genCtx, tokens: [Token]): genCtx {
+    if ctxCheck(ctx, tokens, TOKEN_MINUS) {
+        ctx = ctxAdvance(ctx, tokens); ctx = genExpr(ctx, tokens)
+        ctx.c = emitNegR64(ctx.c, "rax"); return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_EXCLAIM) {
+        ctx = ctxAdvance(ctx, tokens); ctx = genExpr(ctx, tokens)
+        ctx.c = emitTestR64R64(ctx.c, "rax", "rax")
+        ctx.c = emitSete(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al"); return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_TILDE) {
+        ctx = ctxAdvance(ctx, tokens); ctx = genExpr(ctx, tokens)
+        ctx.c = emitNotR64(ctx.c, "rax"); return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_HASH) {
+        ctx = ctxAdvance(ctx, tokens); ctx = genExpr(ctx, tokens)
+        ctx.c = emitPush(ctx.c, "rax"); ctx.c = emitPop(ctx.c, "rdi")
+        ctx.c = emitCallLabel(ctx.c, "__ae_len"); return ctx
+    }
+    ctx = genPrimary(ctx, tokens)
+    while true {
+        if ctxCheck(ctx, tokens, TOKEN_LPAREN) { ctx = genCallArgs(ctx, tokens) }
+        elif ctxCheck(ctx, tokens, TOKEN_LBRACKET) {
+            ctx = ctxAdvance(ctx, tokens); ctx = genExpr(ctx, tokens)
+            ctx.c = emitPop(ctx.c, "rdi"); ctx.c = emitMovR64R64(ctx.c, "rsi", "rax")
+            ctx.c = emitCallLabel(ctx.c, "__ae_index")
+            if ctxCheck(ctx, tokens, TOKEN_RBRACKET) { ctx = ctxAdvance(ctx, tokens) }
+        }
+        elif ctxCheck(ctx, tokens, TOKEN_DOT) {
+            ctx = ctxAdvance(ctx, tokens)
+            if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+                let fieldName = tokens[ctx.pos].lexeme; ctx = ctxAdvance(ctx, tokens)
+                ctx.c = emitPush(ctx.c, "rax"); ctx.c = emitPop(ctx.c, "rdi")
+                ctx.c = emitCallLabel(ctx.c, "__ae_field_" + fieldName)
+            }
+        }
+        elif ctxCheck(ctx, tokens, TOKEN_PLUS_PLUS) { ctx = ctxAdvance(ctx, tokens); ctx.c = emitAddR64Imm8(ctx.c, "rax", 1) }
+        elif ctxCheck(ctx, tokens, TOKEN_MINUS_MINUS) { ctx = ctxAdvance(ctx, tokens); ctx.c = emitSubR64Imm8(ctx.c, "rax", 1) }
+        else { break }
+    }
+    if isBinaryOp(tokens[ctx.pos].typ) { ctx = genBinaryOp(ctx, tokens) }
+    return ctx
+}
+
+func isBinaryOp(typ: u64): bool {
+    if typ == TOKEN_PLUS or typ == TOKEN_MINUS or typ == TOKEN_STAR or typ == TOKEN_SLASH or typ == TOKEN_PERCENT { return true }
+    if typ == TOKEN_EQUAL_EQUAL or typ == TOKEN_EXCLAIM_EQUAL or typ == TOKEN_LESS or typ == TOKEN_GREATER { return true }
+    if typ == TOKEN_LESS_EQUAL or typ == TOKEN_GREATER_EQUAL { return true }
+    if typ == TOKEN_AMPERSAND_AMPERSAND or typ == TOKEN_PIPE_PIPE { return true }
+    if typ == TOKEN_AMPERSAND or typ == TOKEN_PIPE or typ == TOKEN_CARET { return true }
+    if typ == TOKEN_LESS_LESS or typ == TOKEN_GREATER_GREATER { return true }
+    return false
+}
+
+func genBinaryOp(ctx: genCtx, tokens: [Token]): genCtx {
+    let op = tokens[ctx.pos].typ; ctx = ctxAdvance(ctx, tokens)
+    ctx.c = emitPush(ctx.c, "rax")
+    ctx = genExpr(ctx, tokens)
+    ctx.c = emitPop(ctx.c, "rbx")
+    if op == TOKEN_PLUS { ctx.c = emitAddR64R64(ctx.c, "rax", "rbx") }
+    elif op == TOKEN_MINUS { ctx.c = emitSubR64R64(ctx.c, "rbx", "rax"); ctx.c = emitMovR64R64(ctx.c, "rax", "rbx") }
+    elif op == TOKEN_STAR { ctx.c = emitMulR64(ctx.c, "rax") }
+    elif op == TOKEN_SLASH { ctx.c = emitMovR64R64(ctx.c, "rax", "rbx"); ctx.c = emitDivR64(ctx.c, "rax") }
+    elif op == TOKEN_EQUAL_EQUAL { ctx.c = emitCmpR64R64(ctx.c, "rbx", "rax"); ctx.c = emitSete(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al") }
+    elif op == TOKEN_EXCLAIM_EQUAL { ctx.c = emitCmpR64R64(ctx.c, "rbx", "rax"); ctx.c = emitSetne(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al") }
+    elif op == TOKEN_LESS { ctx.c = emitCmpR64R64(ctx.c, "rbx", "rax"); ctx.c = emitSetl(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al") }
+    elif op == TOKEN_GREATER { ctx.c = emitCmpR64R64(ctx.c, "rbx", "rax"); ctx.c = emitSetg(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al") }
+    elif op == TOKEN_LESS_EQUAL { ctx.c = emitCmpR64R64(ctx.c, "rbx", "rax"); ctx.c = emitSetle(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al") }
+    elif op == TOKEN_GREATER_EQUAL { ctx.c = emitCmpR64R64(ctx.c, "rbx", "rax"); ctx.c = emitSetge(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al") }
+    elif op == TOKEN_AMPERSAND { ctx.c = emitAndR64R64(ctx.c, "rax", "rbx") }
+    elif op == TOKEN_PIPE { ctx.c = emitOrR64R64(ctx.c, "rax", "rbx") }
+    elif op == TOKEN_CARET { ctx.c = emitXorR64R64(ctx.c, "rax", "rbx") }
+    else { ctx.c = emitMovR64R64(ctx.c, "rax", "rbx") }
+    return ctx
+}
+
+func genPrimary(ctx: genCtx, tokens: [Token]): genCtx {
+    if ctxCheck(ctx, tokens, TOKEN_INTEGER) {
+        let val = parseU64(tokens[ctx.pos].lexeme)
+        ctx.c = emitMovR64Imm64(ctx.c, "rax", val); ctx = ctxAdvance(ctx, tokens); return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_STRING) {
+        let s = tokens[ctx.pos].literal
+        if s == "" { s = tokens[ctx.pos].lexeme }
+        ctx.c = addString(ctx.c, s)
+        ctx.c = emitLeaR64Label(ctx.c, ctx.c.lastStringLabel)
+        ctx = ctxAdvance(ctx, tokens); return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_CHAR) {
+        let ch = tokens[ctx.pos].lexeme
+        var val: u64 = 0
+        if #ch > 0 { val = ch[0] }
+        ctx.c = emitMovR64Imm64(ctx.c, "rax", val); ctx = ctxAdvance(ctx, tokens); return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_KW_TRUE) { ctx.c = emitMovR64Imm64(ctx.c, "rax", 1); ctx = ctxAdvance(ctx, tokens); return ctx }
+    if ctxCheck(ctx, tokens, TOKEN_KW_FALSE) { ctx.c = emitMovR64Imm64(ctx.c, "rax", 0); ctx = ctxAdvance(ctx, tokens); return ctx }
+    if ctxCheck(ctx, tokens, TOKEN_KW_NONE) { ctx.c = emitXorR64R64(ctx.c, "rax", "rax"); ctx = ctxAdvance(ctx, tokens); return ctx }
+    if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+        let name = tokens[ctx.pos].lexeme; ctx = ctxAdvance(ctx, tokens)
+        if isStackVar(ctx.c, name) {
+            let offset = findStackOffset(ctx.c, name)
+            ctx.c = emitMovStackR64(ctx.c, "rax", offset)
+        } else { ctx.c.lastCallee = name }
+        return ctx
+    }
+    if ctxCheck(ctx, tokens, TOKEN_LPAREN) {
+        ctx = ctxAdvance(ctx, tokens); ctx = genExpr(ctx, tokens)
+        if ctxCheck(ctx, tokens, TOKEN_RPAREN) { ctx = ctxAdvance(ctx, tokens) }
+        return ctx
+    }
+    ctx = ctxAdvance(ctx, tokens)
+    return ctx
+}
+
+func genCallArgs(ctx: genCtx, tokens: [Token]): genCtx {
+    var calleeName = ctx.c.lastCallee; ctx.c.lastCallee = ""
+    ctx = ctxAdvance(ctx, tokens)
+    var argCount: u64 = 0
+    while not ctxCheck(ctx, tokens, TOKEN_RPAREN) and not ctxIsAtEnd(ctx, tokens) {
+        if argCount > 0 {
+            if ctxCheck(ctx, tokens, TOKEN_COMMA) { ctx = ctxAdvance(ctx, tokens) }
+        }
+        ctx = genExpr(ctx, tokens)
+        ctx.c = emitPush(ctx.c, "rax")
+        argCount = argCount + 1
+    }
+    if ctxCheck(ctx, tokens, TOKEN_RPAREN) { ctx = ctxAdvance(ctx, tokens) }
+    if argCount > 0 { ctx.c = emitPop(ctx.c, "rdi") }
+    if argCount > 1 { ctx.c = emitPop(ctx.c, "rsi") }
+    if argCount > 2 { ctx.c = emitPop(ctx.c, "rdx") }
+    if argCount > 3 { ctx.c = emitPop(ctx.c, "rcx") }
+    if argCount > 4 { ctx.c = emitPop(ctx.c, "r8") }
+    if argCount > 5 { ctx.c = emitPop(ctx.c, "r9") }
+    if calleeName == "" { calleeName = "_unknown_call" }
+    ctx.c = emitCallLabel(ctx.c, calleeName)
+    return ctx
+}
+
+func parseU64(s: string): u64 {
+    var result: u64 = 0
+    for i in 0..#s {
+        let c = s[i]
+        if c >= 48 and c <= 57 { result = result * 10 + (c - 48) }
+    }
+    return result
+}
+
+func u64ToString(val: u64): string {
+    if val == 0 { return "0" }
+    var result = ""; var n = val
+    while n > 0 {
+        let digit = n % 10; var digitStr = ""
+        if digit == 0 { digitStr = "0" }
+        elif digit == 1 { digitStr = "1" }
+        elif digit == 2 { digitStr = "2" }
+        elif digit == 3 { digitStr = "3" }
+        elif digit == 4 { digitStr = "4" }
+        elif digit == 5 { digitStr = "5" }
+        elif digit == 6 { digitStr = "6" }
+        elif digit == 7 { digitStr = "7" }
+        elif digit == 8 { digitStr = "8" }
+        else { digitStr = "9" }
+        result = digitStr + result; n = n / 10
+    }
+    return result
+}
+
+// ============================================================
+// Runtime helpers
+// ============================================================
+
+func emitRuntimeHelpers(c: codegen): codegen {
+    c = emitAePrint(c); c = emitAeExit(c); c = emitAeWriteFile(c)
+    c = emitAeReadFile(c); c = emitAeGetArg(c); c = emitAeArgc(c)
+    c = emitAeLen(c); c = emitAeIndex(c); c = emitAeIndexSet(c)
+    c = emitAeArrayNew(c); c = emitAeStrConcat(c); c = emitAeStrEq(c)
+    c = emitAePush(c); c = emitAePop(c); c = emitPushBuiltin(c)
+    c = emitLogicalHelpers(c); c = emitStructFieldHelpers(c)
+    return c
+}
+
+func emitRuntimeData(c: codegen): codegen {
+    c = label(c, "__ae_saved_argc")
+    for i in 0..8 { c.text = push(c.text, 0) }
+    c = label(c, "__ae_saved_argv")
+    for i in 0..8 { c.text = push(c.text, 0) }
+    c = label(c, "__ae_read_buf")
+    for i in 0..4096 { c.text = push(c.text, 0) }
+    c = label(c, "__ae_empty_str")
+    c.text = push(c.text, 0)
+    c = label(c, "__ae_heap_start")
+    for i in 0..65536 { c.text = push(c.text, 0) }
+    return c
+}
+
+func emitAePrint(c: codegen): codegen {
+    c = label(c, "__ae_print")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPush(c, "rdi"); c = emitPush(c, "rsi"); c = emitPush(c, "rdx")
+    c = emitPush(c, "rcx"); c = emitPush(c, "r8"); c = emitPush(c, "r9")
+    c = emitMovR64R64(c, "rsi", "rdi"); c = emitXorR64R64(c, "rdx", "rdx")
+    c = label(c, "__ae_print_strlen")
+    c = emitByte(c, 0x80); c = emitByte(c, 0x3C); c = emitByte(c, 0x16); c = emitByte(c, 0x00)
+    c = emitJzLabel(c, "__ae_print_done")
+    c = emitAddR64Imm8(c, "rdx", 1)
+    c = emitJmpLabel(c, "__ae_print_strlen")
+    c = label(c, "__ae_print_done")
+    c = emitMovR64Imm64(c, "rax", 0x2000004)
+    c = emitMovR64Imm64(c, "rdi", 1)
+    c = emitSyscall(c)
+    c = emitPop(c, "r9"); c = emitPop(c, "r8"); c = emitPop(c, "rcx")
+    c = emitPop(c, "rdx"); c = emitPop(c, "rsi"); c = emitPop(c, "rdi")
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeExit(c: codegen): codegen {
+    c = label(c, "__ae_exit")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitMovR64Imm64(c, "rax", 0x2000001)
+    c = emitSyscall(c)
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeWriteFile(c: codegen): codegen {
+    c = label(c, "__ae_write_file")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPush(c, "rbx"); c = emitPush(c, "r12"); c = emitPush(c, "r13")
+    c = emitMovR64R64(c, "rbx", "rdi"); c = emitMovR64R64(c, "r12", "rsi"); c = emitMovR64R64(c, "r13", "rdx")
+    c = emitMovR64R64(c, "rdi", "rbx")
+    c = emitMovR64Imm64(c, "rsi", 0x601); c = emitMovR64Imm64(c, "rdx", 0x1A4)
+    c = emitMovR64Imm64(c, "rax", 0x2000005); c = emitSyscall(c)
+    c = emitTestR64R64(c, "rax", "rax"); c = emitJnsLabel(c, "__ae_write_open_ok")
+    c = emitMovR64Imm64(c, "rax", 1)
+    c = emitPop(c, "r13"); c = emitPop(c, "r12"); c = emitPop(c, "rbx")
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    c = label(c, "__ae_write_open_ok")
+    c = emitMovR64R64(c, "rdi", "rax"); c = emitPush(c, "rdi")
+    c = emitMovR64R64(c, "rsi", "r12"); c = emitMovR64R64(c, "rdx", "r13")
+    c = emitMovR64Imm64(c, "rax", 0x2000004); c = emitSyscall(c)
+    c = emitPop(c, "rdi")
+    c = emitMovR64Imm64(c, "rax", 0x2000006); c = emitSyscall(c)
+    c = emitXorR64R64(c, "rax", "rax")
+    c = emitPop(c, "r13"); c = emitPop(c, "r12"); c = emitPop(c, "rbx")
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeReadFile(c: codegen): codegen {
+    c = label(c, "__ae_read_file")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPush(c, "rbx"); c = emitPush(c, "r12")
+    c = emitMovR64R64(c, "rbx", "rdi")
+    c = emitMovR64R64(c, "rdi", "rbx")
+    c = emitXorR64R64(c, "rsi", "rsi"); c = emitXorR64R64(c, "rdx", "rdx")
+    c = emitMovR64Imm64(c, "rax", 0x2000005); c = emitSyscall(c)
+    c = emitTestR64R64(c, "rax", "rax"); c = emitJnsLabel(c, "__ae_read_open_ok")
+    c = emitLeaR64Label(c, "rax", "__ae_empty_str")
+    c = emitPop(c, "r12"); c = emitPop(c, "rbx"); c = emitPop(c, "rbp"); c = emitRet(c)
+    c = label(c, "__ae_read_open_ok")
+    c = emitMovR64R64(c, "r12", "rax")
+    c = emitMovR64R64(c, "rdi", "r12")
+    c = emitLeaR64Label(c, "rsi", "__ae_read_buf")
+    c = emitMovR64Imm64(c, "rdx", 4096)
+    c = emitMovR64Imm64(c, "rax", 0x2000003); c = emitSyscall(c)
+    c = emitTestR64R64(c, "rax", "rax"); c = emitJnsLabel(c, "__ae_read_ok")
+    c = emitMovR64R64(c, "rdi", "r12")
+    c = emitMovR64Imm64(c, "rax", 0x2000006); c = emitSyscall(c)
+    c = emitLeaR64Label(c, "rax", "__ae_empty_str")
+    c = emitPop(c, "r12"); c = emitPop(c, "rbx"); c = emitPop(c, "rbp"); c = emitRet(c)
+    c = label(c, "__ae_read_ok")
+    c = emitMovR64R64(c, "rdi", "r12")
+    c = emitMovR64Imm64(c, "rax", 0x2000006); c = emitSyscall(c)
+    c = emitLeaR64Label(c, "rax", "__ae_read_buf")
+    c = emitPop(c, "r12"); c = emitPop(c, "rbx"); c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeGetArg(c: codegen): codegen {
+    c = label(c, "__ae_get_arg")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPush(c, "rbx")
+    c = emitMovR64R64(c, "rbx", "rdi")
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argc")
+    c = emitMovFromAddr(c, "rdx", "rcx", 0)
+    c = emitCmpR64R64(c, "rbx", "rdx")
+    c = emitJbLabel(c, "__ae_get_arg_ok")
+    c = emitLeaR64Label(c, "rax", "__ae_empty_str")
+    c = emitPop(c, "rbx"); c = emitPop(c, "rbp"); c = emitRet(c)
+    c = label(c, "__ae_get_arg_ok")
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argv")
+    c = emitMovFromAddr(c, "rcx", "rcx", 0)
+    c = emitMovR64R64(c, "rax", "rbx")
+    c = emitShlR64Imm8(c, "rax", 3)
+    c = emitAddR64R64(c, "rax", "rcx")
+    c = emitMovFromAddr(c, "rax", "rax", 0)
+    c = emitPop(c, "rbx"); c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeArgc(c: codegen): codegen {
+    c = label(c, "__ae_argc")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argc")
+    c = emitMovFromAddr(c, "rax", "rcx", 0)
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeLen(c: codegen): codegen {
+    c = label(c, "__ae_len")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPush(c, "rdi"); c = emitPush(c, "rsi")
+    c = emitMovR64R64(c, "rsi", "rdi"); c = emitXorR64R64(c, "rax", "rax")
+    c = label(c, "__ae_len_loop")
+    c = emitByte(c, 0x80); c = emitByte(c, 0x3C); c = emitByte(c, 0x06); c = emitByte(c, 0x00)
+    c = emitJzLabel(c, "__ae_len_done")
+    c = emitAddR64Imm8(c, "rax", 1)
+    c = emitJmpLabel(c, "__ae_len_loop")
+    c = label(c, "__ae_len_done")
+    c = emitPop(c, "rsi"); c = emitPop(c, "rdi"); c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeIndex(c: codegen): codegen {
+    c = label(c, "__ae_index")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPush(c, "rdi"); c = emitPush(c, "rsi")
+    c = emitAddR64R64(c, "rdi", "rsi")
+    c = emitRexW(c); c = emitByte(c, 0x0F); c = emitByte(c, 0xB6); c = emitByte(c, 0x07)
+    c = emitPop(c, "rsi"); c = emitPop(c, "rdi"); c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeIndexSet(c: codegen): codegen {
+    c = label(c, "__ae_index_set")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeArrayNew(c: codegen): codegen {
+    c = label(c, "__ae_array_new")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitLeaR64Label(c, "rax", "__ae_heap_start")
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeStrConcat(c: codegen): codegen {
+    c = label(c, "__ae_str_concat")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeStrEq(c: codegen): codegen {
+    c = label(c, "__ae_str_eq")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPush(c, "rbx"); c = emitPush(c, "r12")
+    c = emitMovR64R64(c, "rbx", "rdi"); c = emitMovR64R64(c, "r12", "rsi")
+    c = label(c, "__ae_str_eq_loop")
+    c = emitByte(c, 0x8A); c = emitByte(c, 0x03)
+    c = emitByte(c, 0x8A); c = emitByte(c, 0x1C); c = emitByte(c, 0x24); c = emitByte(c, 0x0C); c = emitByte(c, 0x12)
+    c = emitCmpR64R64(c, "rax", "rbx")
+    c = emitJnzLabel(c, "__ae_str_eq_done")
+    c = emitTestR64R64(c, "rax", "rax")
+    c = emitJzLabel(c, "__ae_str_eq_done")
+    c = emitAddR64Imm8(c, "rbx", 1); c = emitAddR64Imm8(c, "r12", 1)
+    c = emitJmpLabel(c, "__ae_str_eq_loop")
+    c = label(c, "__ae_str_eq_done")
+    c = emitSete(c, "al"); c = emitMovzxR64R8(c, "rax", "al")
+    c = emitPop(c, "r12"); c = emitPop(c, "rbx"); c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAePush(c: codegen): codegen {
+    c = label(c, "__ae_push")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAePop(c: codegen): codegen {
+    c = label(c, "__ae_pop")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitPushBuiltin(c: codegen): codegen {
+    c = label(c, "push")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitLogicalHelpers(c: codegen): codegen {
+    c = label(c, "_logical_true")
+    c = emitMovR64Imm64(c, "rax", 1); c = emitRet(c)
+    c = label(c, "_logical_false")
+    c = emitXorR64R64(c, "rax", "rax"); c = emitRet(c)
+    return c
+}
+
+func emitStructFieldHelpers(c: codegen): codegen {
     return c
 }
 
 // ============================================================
-// ELF64 Linker
+// emitMovR64ToAddr / emitMovFromAddr / emitJnsLabel / emitJbLabel / emitShlR64Imm8
 // ============================================================
 
+func emitMovR64ToAddr(c: codegen, src: string, addrReg: string, offset: byte): codegen {
+    c = emitRexW(c); c = emitByte(c, 0x89)
+    if offset == 0 { c = emitByte(c, modRM(0, regCode(src), regCode(addrReg))) }
+    else { c = emitByte(c, modRM(1, regCode(src), regCode(addrReg))); c = emitByte(c, offset) }
+    return c
+}
+
+func emitMovFromAddr(c: codegen, dst: string, addrReg: string, offset: byte): codegen {
+    c = emitRexW(c); c = emitByte(c, 0x8B)
+    if offset == 0 { c = emitByte(c, modRM(0, regCode(dst), regCode(addrReg))) }
+    else { c = emitByte(c, modRM(1, regCode(dst), regCode(addrReg))); c = emitByte(c, offset) }
+    return c
+}
+
+func emitJnsLabel(c: codegen, labelName: string): codegen {
+    c = emitByte(c, 0x0F); c = emitByte(c, 0x89)
+    c.labelRefs = push(c.labelRefs, labelName)
+    c.labelRefOffsets = push(c.labelRefOffsets, #c.text)
+    c.labelRefSizes = push(c.labelRefSizes, 4)
+    c = emitU32(c, 0)
+    return c
+}
+
+func emitJbLabel(c: codegen, labelName: string): codegen {
+    c = emitByte(c, 0x0F); c = emitByte(c, 0x82)
+    c.labelRefs = push(c.labelRefs, labelName)
+    c.labelRefOffsets = push(c.labelRefOffsets, #c.text)
+    c.labelRefSizes = push(c.labelRefSizes, 4)
+    c = emitU32(c, 0)
+    return c
+}
+
+func emitShlR64Imm8(c: codegen, reg: string, imm: byte): codegen {
+    c = emitRexW(c); c = emitByte(c, 0xC1)
+    c = emitByte(c, modRM(3, 4, regCode(reg)))
+    c = emitByte(c, imm)
+    return c
+}
 func align(size: u64, alignment: u64): u64 {
     return (size + alignment - 1) & (0 - alignment)
 }
 
-// patchLabelRef patches a single label reference in the text buffer
-// refOffset is the offset in text where the 4-byte displacement starts
-// refSize is the size of the displacement (4 bytes)
-// targetOffset is the absolute offset of the target label in text
-// The instruction's end is at refOffset + refSize
-// Displacement = targetOffset - (refOffset + refSize)
 func patchLabelRef(buf: [byte], refOffset: u64, refSize: u64, targetOffset: u64): [byte] {
     let instrEnd = refOffset + refSize
     let disp = targetOffset - instrEnd
@@ -682,8 +1465,6 @@ func patchLabelRef(buf: [byte], refOffset: u64, refSize: u64, targetOffset: u64)
     return buf
 }
 
-// findLabelOffset finds the text offset for a given label name
-// Returns 0 if not found (should not happen in correct programs)
 func findLabelOffset(labels: [string], offsets: [u64], name: string): u64 {
     for i in 0..#labels {
         if labels[i] == name {
@@ -693,6 +1474,14 @@ func findLabelOffset(labels: [string], offsets: [u64], name: string): u64 {
     return 0
 }
 
+func hasLabel(labels: [string], name: string): bool {
+    for i in 0..#labels {
+        if labels[i] == name {
+            return true
+        }
+    }
+    return false
+}
 func linkElf(c: codegen): codegen {
     // First, patch all label references in the text buffer
     // We need a mutable copy of text to patch
@@ -702,7 +1491,7 @@ func linkElf(c: codegen): codegen {
         let refOffset = c.labelRefOffsets[i]
         let refSize = c.labelRefSizes[i]
         let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
-        if targetOffset == 0 and refName != "" {
+        if not hasLabel(c.labels, refName) and refName != "" {
             c.errors = push(c.errors, "undefined label: " + refName)
         } else {
             patchedText = patchLabelRef(patchedText, refOffset, refSize, targetOffset)
@@ -835,8 +1624,8 @@ func linkElf(c: codegen): codegen {
     buf[offset+3] = 0
     offset = offset + 4
 
-    // p_flags = PF_R | PF_X (5)
-    buf[offset] = 5
+    // p_flags = PF_R | PF_W | PF_X (7) — RWX for runtime data writes
+    buf[offset] = 7
     buf[offset+1] = 0
     buf[offset+2] = 0
     buf[offset+3] = 0
@@ -1083,6 +1872,312 @@ func linkElf(c: codegen): codegen {
     // Write .data at file offset dataFileOffset
     for i in 0..#c.data {
         buf[dataFileOffset + i] = c.data[i]
+    }
+
+    c.output = buf
+    return c
+}
+
+// ============================================================
+// Mach-O 64 Linker
+// ============================================================
+
+func linkMachO(c: codegen): codegen {
+    // First, patch all label references in the text buffer
+    var patchedText: [byte] = c.text
+    for i in 0..#c.labelRefs {
+        let refName = c.labelRefs[i]
+        let refOffset = c.labelRefOffsets[i]
+        let refSize = c.labelRefSizes[i]
+        let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
+        if not hasLabel(c.labels, refName) and refName != "" {
+            c.errors = push(c.errors, "undefined label: " + refName)
+        } else {
+            patchedText = patchLabelRef(patchedText, refOffset, refSize, targetOffset)
+        }
+    }
+
+    // Combine text and rodata into one __text section
+    var textSection: [byte] = patchedText
+    for i in 0..#c.rodata {
+        textSection = push(textSection, c.rodata[i])
+    }
+
+    let textSize = #textSection
+    let dataSize = #c.data
+
+    // Mach-O header + load commands = 624 bytes
+    let headerSize: u64 = 32
+    let pagezeroSize: u64 = 72
+    let textSegSize: u64 = 144
+    let dataSegSize: u64 = 144
+    let threadSize: u64 = 184
+    let dyldSize: u64 = 48
+    let loadCommandsSize = pagezeroSize + textSegSize + dataSegSize + threadSize + dyldSize
+    let totalHeaderSize = headerSize + loadCommandsSize
+
+    // File offsets
+    let textFileOff: u64 = totalHeaderSize
+    let dataFileOff = textFileOff + textSize
+
+    // Virtual addresses (base at 0x100000000)
+    let textVMAddr: u64 = 0x100000000
+    let dataVMAddr = textVMAddr + textSize
+
+    let totalFileSize = totalHeaderSize + textSize + dataSize
+    var buf: [byte] = []
+    for i in 0..totalFileSize {
+        buf = push(buf, 0)
+    }
+
+    var off: u64 = 0
+
+    // Mach-O Header (32 bytes)
+    buf[off] = 0xCF; off = off + 1
+    buf[off] = 0xFA; off = off + 1
+    buf[off] = 0xED; off = off + 1
+    buf[off] = 0xFE; off = off + 1
+    buf[off] = 0x07; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x01; off = off + 1
+    buf[off] = 0x03; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x02; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x05; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = loadCommandsSize & 0xFF; off = off + 1
+    buf[off] = (loadCommandsSize >> 8) & 0xFF; off = off + 1
+    buf[off] = (loadCommandsSize >> 16) & 0xFF; off = off + 1
+    buf[off] = (loadCommandsSize >> 24) & 0xFF; off = off + 1
+    buf[off] = 0x85; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x20; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+
+    // LC_SEGMENT_64 __PAGEZERO (72 bytes)
+    buf[off] = 0x19; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x48; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    // segname = "__PAGEZERO"
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x50; off = off + 1
+    buf[off] = 0x41; off = off + 1
+    buf[off] = 0x47; off = off + 1
+    buf[off] = 0x45; off = off + 1
+    buf[off] = 0x5A; off = off + 1
+    buf[off] = 0x45; off = off + 1
+    buf[off] = 0x52; off = off + 1
+    buf[off] = 0x4F; off = off + 1
+    for i in 0..6 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x01; off = off + 1
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+
+    // LC_SEGMENT_64 __TEXT (144 bytes)
+    buf[off] = 0x19; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x90; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    // segname = "__TEXT"
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x54; off = off + 1
+    buf[off] = 0x45; off = off + 1
+    buf[off] = 0x58; off = off + 1
+    buf[off] = 0x54; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
+    buf[off] = 0x07; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x07; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x01; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    // Section __text (72 bytes)
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x74; off = off + 1
+    buf[off] = 0x65; off = off + 1
+    buf[off] = 0x78; off = off + 1
+    buf[off] = 0x74; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x54; off = off + 1
+    buf[off] = 0x45; off = off + 1
+    buf[off] = 0x58; off = off + 1
+    buf[off] = 0x54; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x04; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x80; off = off + 1
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+
+    // LC_SEGMENT_64 __DATA (144 bytes)
+    buf[off] = 0x19; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x90; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    // segname = "__DATA"
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x44; off = off + 1
+    buf[off] = 0x41; off = off + 1
+    buf[off] = 0x54; off = off + 1
+    buf[off] = 0x41; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
+    buf[off] = 0x07; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x03; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x01; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    // Section __data (72 bytes)
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x64; off = off + 1
+    buf[off] = 0x61; off = off + 1
+    buf[off] = 0x74; off = off + 1
+    buf[off] = 0x61; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x44; off = off + 1
+    buf[off] = 0x41; off = off + 1
+    buf[off] = 0x54; off = off + 1
+    buf[off] = 0x41; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    buf[off] = 0x01; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+
+    // LC_UNIXTHREAD (184 bytes)
+    buf[off] = 0x05; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0xB8; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x04; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x2A; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+
+    // LC_DYLD_INFO_ONLY (48 bytes)
+    buf[off] = 0x1B; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x80; off = off + 1
+    buf[off] = 0x30; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..40 { buf[off] = 0; off = off + 1 }
+
+    // Write section data
+    for i in 0..#textSection {
+        buf[textFileOff + i] = textSection[i]
+    }
+    for i in 0..#c.data {
+        buf[dataFileOff + i] = c.data[i]
     }
 
     c.output = buf
