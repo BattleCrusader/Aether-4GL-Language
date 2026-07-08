@@ -237,7 +237,7 @@ Since the bootstrap tool emits native code, it can use:
 **Deliverable:** Self-hosting Aether compiler.
 
 **Bootstrap enhancements during Phase 4:**
-- Mach-O x86_64 output via system `as`/`ld` toolchain
+- Mach-O x86_64 output via system `as`/`ld` toolchain (temporary workaround for macOS hardened runtime)
 - Runtime helper functions: `__ae_print`, `__ae_exit`, `__ae_write_file`, `__ae_read_file`, `__ae_get_arg`, `__ae_argc`
 - String operations: `__ae_str_concat`, `__ae_str_eq`, `__ae_len`
 - Array operations: `__ae_array_new`, `__ae_index`, `__ae_index_set`, `__ae_push`, `__ae_pop`
@@ -247,6 +247,8 @@ Since the bootstrap tool emits native code, it can use:
 - Fixed stack allocation (sign-extension bug with imm8)
 - Text section mapped RWX via `-segprot __TEXT rwx rwx`
 - All 82 tests pass
+
+**Future work:** Move away from system `as`/`ld` toolchain — have Aether compiler produce Mach-O directly.
 
 ### Phase 5: Bootstrap Tool is Retired
 **Goal:** Delete the Go bootstrap tool.
