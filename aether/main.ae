@@ -1,0 +1,16 @@
+// main.ae — Aether compiler entry point
+// Written in Aether v1
+
+import "tokenizer.ae"
+import "lexer.ae"
+import "parser.ae"
+import "semantic.ae"
+import "codegen.ae"
+
+// Entry point for the Aether compiler
+@entry
+func main(): u64 {
+    // The Go bootstrap compiler handles CLI args and file I/O
+    // This function is called after the bootstrap sets up the pipeline
+    return 0
+}

@@ -1,0 +1,153 @@
+// codegen.ae -- Native x86_64 code generator for Aether
+// Written in Aether v1
+
+import "tokenizer.ae"
+import "ast.ae"
+
+struct Codegen {
+    text: [byte],
+    data: [byte],
+    rodata: [byte],
+    bss: [byte],
+    labels: [string],
+    labelOffsets: [u64],
+    errors: [string],
+}
+
+func newCodegen(): Codegen {
+    return Codegen{[], [], [], [], [], [], []}
+}
+
+func addError(c: Codegen, msg: string): Codegen {
+    c.errors = push(c.errors, msg)
+    return c
+}
+
+func emitByte(c: Codegen, b: byte): Codegen {
+    c.text = push(c.text, b)
+    return c
+}
+
+func emitBytes(c: Codegen, bytes: [byte]): Codegen {
+    for i in 0..#bytes {
+        c.text = push(c.text, bytes[i])
+    }
+    return c
+}
+
+func emitU64(c: Codegen, val: u64): Codegen {
+    c = emitByte(c, val & 0xFF)
+    c = emitByte(c, (val >> 8) & 0xFF)
+    c = emitByte(c, (val >> 16) & 0xFF)
+    c = emitByte(c, (val >> 24) & 0xFF)
+    c = emitByte(c, (val >> 32) & 0xFF)
+    c = emitByte(c, (val >> 40) & 0xFF)
+    c = emitByte(c, (val >> 48) & 0xFF)
+    c = emitByte(c, (val >> 56) & 0xFF)
+    return c
+}
+
+func emitU32(c: Codegen, val: u64): Codegen {
+    c = emitByte(c, val & 0xFF)
+    c = emitByte(c, (val >> 8) & 0xFF)
+    c = emitByte(c, (val >> 16) & 0xFF)
+    c = emitByte(c, (val >> 24) & 0xFF)
+    return c
+}
+
+func emitRexW(c: Codegen): Codegen {
+    return emitByte(c, 0x48)
+}
+
+func emitMovRaxImm64(c: Codegen, val: u64): Codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0xB8)
+    c = emitU64(c, val)
+    return c
+}
+
+func emitMovRdiImm64(c: Codegen, val: u64): Codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0xBF)
+    c = emitU64(c, val)
+    return c
+}
+
+func emitMovRsiImm64(c: Codegen, val: u64): Codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0xBE)
+    c = emitU64(c, val)
+    return c
+}
+
+func emitSyscall(c: Codegen): Codegen {
+    c = emitByte(c, 0x0F)
+    c = emitByte(c, 0x05)
+    return c
+}
+
+func emitRet(c: Codegen): Codegen {
+    c = emitByte(c, 0xC3)
+    return c
+}
+
+func emitPushRbp(c: Codegen): Codegen {
+    c = emitByte(c, 0x55)
+    return c
+}
+
+func emitPopRbp(c: Codegen): Codegen {
+    c = emitByte(c, 0x5D)
+    return c
+}
+
+func emitMovRbpRsp(c: Codegen): Codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x89)
+    c = emitByte(c, 0xE5)
+    return c
+}
+
+func emitSubRspImm8(c: Codegen, imm: byte): Codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x83)
+    c = emitByte(c, 0xEC)
+    c = emitByte(c, imm)
+    return c
+}
+
+func emitAddRspImm8(c: Codegen, imm: byte): Codegen {
+    c = emitRexW(c)
+    c = emitByte(c, 0x83)
+    c = emitByte(c, 0xC4)
+    c = emitByte(c, imm)
+    return c
+}
+
+func emitStart(c: Codegen): Codegen {
+    c = emitMovRaxImm64(c, 0)
+    c = emitMovRdiImm64(c, 60)
+    c = emitSyscall(c)
+    return c
+}
+
+func emitFuncPrologue(c: Codegen): Codegen {
+    c = emitPushRbp(c)
+    c = emitMovRbpRsp(c)
+    c = emitSubRspImm8(c, 128)
+    return c
+}
+
+func emitFuncEpilogue(c: Codegen): Codegen {
+    c = emitAddRspImm8(c, 128)
+    c = emitPopRbp(c)
+    c = emitRet(c)
+    return c
+}
+
+func generate(c: Codegen, tokens: [Token]): Codegen {
+    c = emitStart(c)
+    c = emitFuncPrologue(c)
+    c = emitFuncEpilogue(c)
+    return c
+}

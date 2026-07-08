@@ -59,6 +59,13 @@ func (p *Parser) peek() Token {
 	return p.tokens[p.current]
 }
 
+func (p *Parser) peekNext() Token {
+	if p.current+1 >= len(p.tokens) {
+		return Token{Type: TOKEN_EOF}
+	}
+	return p.tokens[p.current+1]
+}
+
 func (p *Parser) previous() Token {
 	return p.tokens[p.current-1]
 }
@@ -99,6 +106,10 @@ func (p *Parser) errorAt(tok Token, msg string) {
 	p.errors = append(p.errors, fmt.Sprintf("line %d:%d: %s", tok.Line, tok.Column, msg))
 }
 
+func isKeywordToken(typ TokenType) bool {
+	return typ >= TOKEN_KW_AND && typ <= TOKEN_KW_CASE
+}
+
 func (p *Parser) synchronize() {
 	for !p.isAtEnd() {
 		switch p.peek().Type {
@@ -124,7 +135,7 @@ func (p *Parser) parseDecl() Decl {
 	for p.check(TOKEN_AT) {
 		p.advance()
 		attr := &Attribute{pos: p.previous().Pos()}
-		if p.check(TOKEN_IDENT) {
+		if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 			attr.Name = p.advance().Lexeme
 		}
 		attrs = append(attrs, attr)
@@ -167,14 +178,14 @@ func (p *Parser) parseFuncDecl() *FuncDecl {
 	for p.check(TOKEN_AT) {
 		p.advance()
 		attr := &Attribute{pos: p.previous().Pos()}
-		if p.check(TOKEN_IDENT) {
+		if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 			attr.Name = p.advance().Lexeme
 		}
 		fd.Attrs = append(fd.Attrs, attr)
 	}
 
 	// Function name
-	if p.check(TOKEN_IDENT) {
+	if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 		fd.Name = p.advance().Lexeme
 	} else {
 		p.errorAt(p.peek(), "expected function name")
@@ -212,7 +223,7 @@ func (p *Parser) parseParamList() []*Param {
 			break
 		}
 		param := &Param{pos: p.peek().Pos()}
-		if p.check(TOKEN_IDENT) {
+		if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 			param.Name = p.advance().Lexeme
 		} else {
 			p.errorAt(p.peek(), "expected parameter name")
@@ -236,12 +247,12 @@ func (p *Parser) parseParamList() []*Param {
 func (p *Parser) parseClassDecl() Decl {
 	p.advance() // consume 'class'
 	cd := &ClassDecl{pos: p.previous().Pos()}
-	if p.check(TOKEN_IDENT) {
+	if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 		cd.Name = p.advance().Lexeme
 	}
 	if p.match(TOKEN_COLON) {
 		// Superclass
-		if p.check(TOKEN_IDENT) {
+		if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 			cd.SuperClass = p.advance().Lexeme
 		}
 	}
@@ -254,7 +265,7 @@ func (p *Parser) parseClassDecl() Decl {
 func (p *Parser) parseStructDecl() Decl {
 	p.advance() // consume 'struct'
 	sd := &StructDecl{pos: p.previous().Pos()}
-	if p.check(TOKEN_IDENT) {
+	if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 		sd.Name = p.advance().Lexeme
 	}
 	if p.check(TOKEN_LBRACE) {
@@ -268,7 +279,7 @@ func (p *Parser) parseStructFields() []*StructField {
 	p.advance() // consume '{'
 	for !p.check(TOKEN_RBRACE) && !p.isAtEnd() {
 		sf := &StructField{pos: p.peek().Pos()}
-		if p.check(TOKEN_IDENT) {
+		if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 			sf.Name = p.advance().Lexeme
 		}
 		if p.match(TOKEN_COLON) {
@@ -287,7 +298,7 @@ func (p *Parser) parseStructFields() []*StructField {
 func (p *Parser) parseEnumDecl() Decl {
 	p.advance() // consume 'enum'
 	ed := &EnumDecl{pos: p.previous().Pos()}
-	if p.check(TOKEN_IDENT) {
+	if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 		ed.Name = p.advance().Lexeme
 	}
 	if p.check(TOKEN_LBRACE) {
@@ -301,7 +312,7 @@ func (p *Parser) parseEnumVariants() []*EnumVariant {
 	p.advance() // consume '{'
 	for !p.check(TOKEN_RBRACE) && !p.isAtEnd() {
 		ev := &EnumVariant{pos: p.peek().Pos()}
-		if p.check(TOKEN_IDENT) {
+		if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 			ev.Name = p.advance().Lexeme
 		}
 		// Optional tuple payload
@@ -325,7 +336,7 @@ func (p *Parser) parseImportDecl() Decl {
 	imp := &ImportDecl{pos: p.previous().Pos()}
 	if p.check(TOKEN_STRING) {
 		imp.Path = p.advance().Literal.(string)
-	} else if p.check(TOKEN_IDENT) {
+	} else if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 		imp.Path = p.advance().Lexeme
 	}
 	p.match(TOKEN_SEMICOLON) // optional semicolon
@@ -335,7 +346,7 @@ func (p *Parser) parseImportDecl() Decl {
 func (p *Parser) parseConstDecl() Decl {
 	p.advance() // consume 'const'
 	cd := &ConstDecl{pos: p.previous().Pos()}
-	if p.check(TOKEN_IDENT) {
+	if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 		cd.Name = p.advance().Lexeme
 	}
 	if p.match(TOKEN_COLON) {
@@ -352,7 +363,7 @@ func (p *Parser) parseVarDecl() Decl {
 	isLet := p.check(TOKEN_KW_LET)
 	p.advance()
 	vd := &VarDecl{pos: p.previous().Pos(), IsLet: isLet}
-	if p.check(TOKEN_IDENT) {
+	if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 		vd.Name = p.advance().Lexeme
 	}
 	if p.match(TOKEN_COLON) {
@@ -374,6 +385,17 @@ func (p *Parser) parseStatement() Stmt {
 		return nil
 	}
 	if p.match(TOKEN_KW_IF) {
+		// Check if this is a function call if(...) or an if statement
+		if p.check(TOKEN_LPAREN) {
+			// It's a function call — put back if and treat as expression
+			p.current--
+			expr := p.parseExpression()
+			if expr == nil {
+				return nil
+			}
+			p.match(TOKEN_SEMICOLON)
+			return &ExprStmt{pos: expr.Pos(), Expr: expr}
+		}
 		return p.parseIfStmt()
 	}
 	if p.match(TOKEN_KW_WHILE) {
@@ -383,6 +405,17 @@ func (p *Parser) parseStatement() Stmt {
 		return p.parseForStmt()
 	}
 	if p.match(TOKEN_KW_MATCH) {
+		// Check if this is a function call match(...) or a match statement
+		if p.check(TOKEN_LPAREN) {
+			// It's a function call — put back match and treat as expression
+			p.current--
+			expr := p.parseExpression()
+			if expr == nil {
+				return nil
+			}
+			p.match(TOKEN_SEMICOLON)
+			return &ExprStmt{pos: expr.Pos(), Expr: expr}
+		}
 		return p.parseMatchStmt()
 	}
 	if p.match(TOKEN_KW_DEFER) {
@@ -399,7 +432,7 @@ func (p *Parser) parseStatement() Stmt {
 	}
 	if p.match(TOKEN_KW_BREAK) {
 		bs := &BreakStmt{pos: p.previous().Pos()}
-		if p.check(TOKEN_IDENT) {
+		if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 			bs.Label = p.advance().Lexeme
 		}
 		p.match(TOKEN_SEMICOLON) // optional semicolon
@@ -407,7 +440,7 @@ func (p *Parser) parseStatement() Stmt {
 	}
 	if p.match(TOKEN_KW_CONTINUE) {
 		cs := &ContinueStmt{pos: p.previous().Pos()}
-		if p.check(TOKEN_IDENT) {
+		if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 			cs.Label = p.advance().Lexeme
 		}
 		p.match(TOKEN_SEMICOLON) // optional semicolon
@@ -416,7 +449,7 @@ func (p *Parser) parseStatement() Stmt {
 	if p.match(TOKEN_KW_LET) || p.match(TOKEN_KW_VAR) {
 		isLet := p.previous().Type == TOKEN_KW_LET
 		vd := &VarDecl{pos: p.previous().Pos(), IsLet: isLet}
-		if p.check(TOKEN_IDENT) {
+		if p.check(TOKEN_IDENT) || isKeywordToken(p.peek().Type) {
 			vd.Name = p.advance().Lexeme
 		}
 		if p.match(TOKEN_COLON) {
@@ -519,6 +552,10 @@ func (p *Parser) parseMatchStmt() Stmt {
 		if p.match(TOKEN_KW_CASE) {
 			mc := &MatchCase{pos: p.previous().Pos()}
 			mc.Pattern = p.parseExpression()
+			// Handle comma-separated patterns: case 32, 13, 9 ->
+			for p.match(TOKEN_COMMA) {
+				p.parseExpression()
+			}
 			if p.match(TOKEN_ARROW) {
 				mc.Body = p.parseBlockOrStmt()
 			} else {
@@ -661,6 +698,11 @@ func (p *Parser) prefixFn() func() Expr {
 		TOKEN_KW_INT, TOKEN_KW_FLOAT, TOKEN_KW_DOUBLE,
 		TOKEN_KW_U8, TOKEN_KW_U16, TOKEN_KW_U32, TOKEN_KW_U64, TOKEN_KW_U128,
 		TOKEN_KW_I8, TOKEN_KW_I16, TOKEN_KW_I32, TOKEN_KW_I64:
+		// Check if followed by ( — if so, it's a function call, not a type keyword
+		next := p.peekNext().Type
+		if next == TOKEN_LPAREN {
+			return p.parseIdentPrefix
+		}
 		return p.parseTypeKeywordPrefix
 	case TOKEN_INTEGER, TOKEN_FLOAT, TOKEN_STRING, TOKEN_CHAR, TOKEN_KW_TRUE, TOKEN_KW_FALSE, TOKEN_KW_NONE:
 		return p.parseLiteral
@@ -675,8 +717,19 @@ func (p *Parser) prefixFn() func() Expr {
 	case TOKEN_HASH:
 		return p.parseLengthPrefix
 	case TOKEN_KW_IF:
+		// Check if if is followed by ( — if so, it's a function call, not an if expression
+		// Also check for ) or , — if so, it's used as an identifier in arguments
+		next := p.peekNext().Type
+		if next == TOKEN_LPAREN || next == TOKEN_RPAREN || next == TOKEN_COMMA || next == TOKEN_EQUAL || next == TOKEN_COLON {
+			return p.parseIdentPrefix
+		}
 		return p.parseIfExpr
 	case TOKEN_KW_MATCH:
+		// Check if match is followed by ( or = — if so, it's a function call or identifier, not a match expression
+		next := p.peekNext().Type
+		if next == TOKEN_LPAREN || next == TOKEN_EQUAL || next == TOKEN_COLON {
+			return p.parseIdentPrefix
+		}
 		return p.parseMatchExpr
 	case TOKEN_KW_SELF:
 		return p.parseSelfPrefix
@@ -687,8 +740,18 @@ func (p *Parser) prefixFn() func() Expr {
 	case TOKEN_KW_NOT:
 		return p.parseNotPrefix
 	default:
+		// Any keyword token can be used as an identifier
+		if isKeywordToken(p.peek().Type) {
+			return p.parseIdentPrefix
+		}
 		return nil
 	}
+}
+
+func (p *Parser) parseBoolLiteral() Expr {
+	tok := p.advance()
+	val := tok.Type == TOKEN_KW_TRUE
+	return &LiteralExpr{pos: tok.Pos(), Value: val}
 }
 
 func (p *Parser) parseNotPrefix() Expr {
@@ -736,7 +799,28 @@ func (p *Parser) infixFn() func(Expr) Expr {
 
 func (p *Parser) parseIdentPrefix() Expr {
 	tok := p.advance()
+	// Check if this is a struct literal: Ident{...}
+	// Only trigger for capitalized identifiers (type names by convention)
+	if tok.Type == TOKEN_IDENT && len(tok.Lexeme) > 0 && tok.Lexeme[0] >= 'A' && tok.Lexeme[0] <= 'Z' && p.check(TOKEN_LBRACE) {
+		return p.parseStructLiteral(&IdentExpr{pos: tok.Pos(), Name: tok.Lexeme})
+	}
 	return &IdentExpr{pos: tok.Pos(), Name: tok.Lexeme}
+}
+
+func (p *Parser) parseStructLiteral(name *IdentExpr) Expr {
+	p.advance() // consume '{'
+	// Parse comma-separated expressions inside the struct literal
+	if !p.check(TOKEN_RBRACE) {
+		p.parsePrecedence(PREC_NONE)
+		for p.match(TOKEN_COMMA) {
+			if p.check(TOKEN_RBRACE) {
+				break
+			}
+			p.parsePrecedence(PREC_NONE)
+		}
+	}
+	p.expect(TOKEN_RBRACE, "expected '}' after struct literal")
+	return name
 }
 
 func (p *Parser) parseTypeKeywordPrefix() Expr {
@@ -807,6 +891,9 @@ func (p *Parser) parseArrayLiteral() Expr {
 	if !p.check(TOKEN_RBRACKET) {
 		al.Elements = append(al.Elements, p.parseExpression())
 		for p.match(TOKEN_COMMA) {
+			if p.check(TOKEN_RBRACKET) {
+				break
+			}
 			al.Elements = append(al.Elements, p.parseExpression())
 		}
 	}
@@ -858,10 +945,14 @@ func (p *Parser) parseMatchExpr() Expr {
 		if p.match(TOKEN_KW_CASE) {
 			mc := &MatchCase{pos: p.previous().Pos()}
 			mc.Pattern = p.parseExpression()
+			// Handle comma-separated patterns: case 32, 13, 9 ->
+			for p.match(TOKEN_COMMA) {
+				p.parseExpression()
+			}
 			if p.match(TOKEN_ARROW) {
-				mc.Body = p.parseStatement()
+				mc.Body = p.parseBlockOrStmt()
 			} else {
-				mc.Body = p.parseBlock()
+				mc.Body = p.parseBlockOrStmt()
 			}
 			me.Cases = append(me.Cases, mc)
 		} else if p.match(TOKEN_KW_ELSE) {
@@ -928,6 +1019,12 @@ func (p *Parser) parseIndexInfix(left Expr) Expr {
 	p.advance() // consume '['
 	ie := &IndexExpr{pos: left.Pos(), Object: left}
 	ie.Index = p.parseExpression()
+	// Check for slice: str[start:end]
+	if p.match(TOKEN_COLON) {
+		// It's a slice — create a binary expression with ":" operator
+		right := p.parseExpression()
+		ie.Index = &BinaryExpr{pos: left.Pos(), Op: ":", Left: ie.Index, Right: right}
+	}
 	p.expect(TOKEN_RBRACKET, "expected ']' after index")
 	return ie
 }
@@ -941,6 +1038,28 @@ func (p *Parser) parseScopeInfix(left Expr) Expr {
 		p.errorAt(p.peek(), "expected name after '::'")
 	}
 	return se
+}
+
+// parseStructLiteralInfix parses struct literal: TypeName{field1, field2, ...}
+func (p *Parser) parseStructLiteralInfix(left Expr) Expr {
+	// Only treat as struct literal if left side is an identifier
+	if _, ok := left.(*IdentExpr); !ok {
+		// Not a struct literal — don't consume {
+		return left
+	}
+	p.advance() // consume '{'
+	// Parse comma-separated expressions inside the struct literal
+	if !p.check(TOKEN_RBRACE) {
+		p.parseExpression()
+		for p.match(TOKEN_COMMA) {
+			if p.check(TOKEN_RBRACE) {
+				break
+			}
+			p.parseExpression()
+		}
+	}
+	p.expect(TOKEN_RBRACE, "expected '}' after struct literal")
+	return left
 }
 
 func (p *Parser) parseAssignmentInfix(left Expr) Expr {

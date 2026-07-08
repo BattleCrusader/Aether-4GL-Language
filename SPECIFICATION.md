@@ -376,6 +376,23 @@ func example(): u64 {
 }
 ```
 
+**Braces are optional for single-statement bodies.** When a control flow construct (`if`, `elif`, `else`, `while`, `for`, `defer`, `try`, `catch`, `match case`) has only a single statement in its body, the braces can be omitted:
+
+```aether
+if a == b return a
+if a == b return a else return b
+while x < 10 x = x + 1
+for i in 0..10 print(i)
+defer cleanup()
+try risky() catch e print(e)
+```
+
+This also works with braces on one line:
+```aether
+if a == b { return a }
+while x < 10 { x = x + 1 }
+```
+
 ---
 
 ## 4. Types
@@ -956,7 +973,13 @@ let status = if x > 0 { "positive" } else { "non-positive" }
 - `elif` and `else` are optional
 - As an expression, all branches must evaluate to the same type
 - The condition must be a boolean expression
-- Blocks are required — no single-line `if x > 0: print("x")` syntax
+- **Blocks are optional for single statements** — if the body is a single statement, braces can be omitted:
+  ```aether
+  if a == b return a
+  if a == b return a else return b
+  if a == b { return a }                    // braces on one line
+  ```
+- If-let pattern matching still requires braces
 
 **If-let pattern matching:**
 ```aether
@@ -980,6 +1003,12 @@ while true {
 ```
 
 The `while` loop evaluates the condition before each iteration. If the condition is false initially, the body never executes.
+
+**Braces are optional for single statements:**
+```aether
+while x < 10 x = x + 1
+while x < 10 { x = x + 1 }    // one line with braces
+```
 
 ### 7.3 For Loops
 
@@ -1018,6 +1047,11 @@ for i, val in arr {
 - Iterating over an array yields elements by value (copy)
 - `for i, val` yields the index (u64) and the element value
 - The loop variable is scoped to the loop body
+- **Braces are optional for single statements:**
+  ```aether
+  for i in 0..10 print(i)
+  for i in 0..10 { print(i) }    // one line with braces
+  ```
 
 ### 7.4 Break and Continue
 
@@ -1081,10 +1115,16 @@ func process_file(path: string) {
 
 ```aether
 func example() {
-    defer { print("first defer") }   // runs second
-    defer { print("second defer") }  // runs first
+    defer { print("first") }
+    defer { print("second") }
+    // Output: second, first
 }
-// Output: "second defer" then "first defer"
+```
+
+**Braces are optional for single statements:**
+```aether
+defer cleanup()
+defer { cleanup() }    // equivalent with braces
 ```
 
 **Defer in try/catch:** Deferred blocks inside a try body execute before the catch handler runs. This ensures resources are cleaned up before error handling:

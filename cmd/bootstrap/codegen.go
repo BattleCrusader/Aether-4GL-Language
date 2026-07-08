@@ -11,15 +11,21 @@ type Codegen struct {
 	rodata  []byte
 	bss     []byte
 	labels  map[string]int
-	strings map[string]int
+	strings map[string]string // label -> actual string content
 	prog    *Program
 	errors  []string
+
+	// Per-function state
+	funcName    string
+	stackOffsets map[string]int // variable name -> stack offset (negative from rbp)
+	stackSize   int
+	labelCount  int
 }
 
 func NewCodegen(prog *Program) *Codegen {
 	return &Codegen{
 		labels:  make(map[string]int),
-		strings: make(map[string]int),
+		strings: make(map[string]string),
 		prog:    prog,
 	}
 }
@@ -83,32 +89,91 @@ func (c *Codegen) emitFunc(fd *FuncDecl) {
 		return
 	}
 
+	c.funcName = fd.Name
+	c.stackOffsets = make(map[string]int)
+	c.stackSize = 0
+	c.labelCount = 0
+
 	c.label(fd.Name)
 
 	// Function prologue
 	c.emitPush("rbp")
 	c.emitMovR64R64("rbp", "rsp")
 
-	// Allocate stack space (simplified: 128 bytes)
-	c.emitSubR64Imm8("rsp", 128)
+	// Calculate stack size needed
+	// First pass: collect all local variables
+	c.collectLocals(fd.Body)
+
+	// Allocate stack space (aligned to 16 bytes)
+	stackAlloc := c.stackSize
+	if stackAlloc < 128 {
+		stackAlloc = 128
+	}
+	// Align to 16 bytes
+	stackAlloc = (stackAlloc + 15) & ^15
+
+	if stackAlloc > 0 {
+		c.emitSubR64Imm8("rsp", byte(stackAlloc))
+	}
 
 	// Emit function body
-	c.emitBlock(fd.Body, fd.Name)
+	c.emitBlock(fd.Body)
 
 	// Function epilogue
 	c.label(fd.Name + "_epilogue")
-	c.emitAddR64Imm8("rsp", 128)
+	if stackAlloc > 0 {
+		c.emitAddR64Imm8("rsp", byte(stackAlloc))
+	}
 	c.emitPop("rbp")
 	c.emitRet()
 }
 
-func (c *Codegen) emitBlock(b *Block, funcName string) {
+func (c *Codegen) collectLocals(b *Block) {
 	for _, stmt := range b.Stmts {
-		c.emitStmt(stmt, funcName)
+		switch s := stmt.(type) {
+		case *VarDecl:
+			if _, exists := c.stackOffsets[s.Name]; !exists {
+				c.stackOffsets[s.Name] = c.stackSize
+				c.stackSize += 8
+			}
+		case *Block:
+			c.collectLocals(s)
+		case *IfStmt:
+			c.collectLocals(s.ThenBlock)
+			for _, eb := range s.ElifBlocks {
+				c.collectLocals(eb.Block)
+			}
+			if s.ElseBlock != nil {
+				c.collectLocals(s.ElseBlock)
+			}
+		case *WhileStmt:
+			c.collectLocals(s.Body)
+		case *ForStmt:
+			c.collectLocals(s.Body)
+		case *MatchStmt:
+			for _, mc := range s.Cases {
+				if b, ok := mc.Body.(*Block); ok {
+					c.collectLocals(b)
+				}
+			}
+		case *DeferStmt:
+			c.collectLocals(s.Body)
+		case *TryStmt:
+			c.collectLocals(s.Body)
+			if s.CatchBody != nil {
+				c.collectLocals(s.CatchBody)
+			}
+		}
 	}
 }
 
-func (c *Codegen) emitStmt(stmt Stmt, funcName string) {
+func (c *Codegen) emitBlock(b *Block) {
+	for _, stmt := range b.Stmts {
+		c.emitStmt(stmt)
+	}
+}
+
+func (c *Codegen) emitStmt(stmt Stmt) {
 	switch s := stmt.(type) {
 	case *ExprStmt:
 		c.emitExpr(s.Expr)
@@ -116,6 +181,10 @@ func (c *Codegen) emitStmt(stmt Stmt, funcName string) {
 	case *VarDecl:
 		if s.Initializer != nil {
 			c.emitExpr(s.Initializer)
+			// Store to stack
+			if offset, ok := c.stackOffsets[s.Name]; ok {
+				c.emitMovR64Stack("rax", offset)
+			}
 		}
 
 	case *ReturnStmt:
@@ -123,25 +192,35 @@ func (c *Codegen) emitStmt(stmt Stmt, funcName string) {
 			c.emitExpr(s.Expr)
 		}
 		// Jump to epilogue
-		c.emitJmp(funcName + "_epilogue")
+		c.emitJmp(c.funcName + "_epilogue")
 
 	case *IfStmt:
-		c.emitIf(s, funcName)
+		c.emitIf(s)
 
 	case *WhileStmt:
-		c.emitWhile(s, funcName)
+		c.emitWhile(s)
 
 	case *ForStmt:
-		c.emitFor(s, funcName)
+		c.emitFor(s)
+
+	case *MatchStmt:
+		c.emitMatchStmt(s)
 
 	case *Block:
-		c.emitBlock(s, funcName)
+		c.emitBlock(s)
+
+	case *BreakStmt:
+		// For now, just jump to end of current loop
+		c.emitJmp(c.funcName + "_break")
+
+	case *ContinueStmt:
+		c.emitJmp(c.funcName + "_continue")
 	}
 }
 
-func (c *Codegen) emitIf(is *IfStmt, funcName string) {
-	elseLabel := fmt.Sprintf("else_%d", len(c.labels))
-	endLabel := fmt.Sprintf("endif_%d", len(c.labels))
+func (c *Codegen) emitIf(is *IfStmt) {
+	elseLabel := fmt.Sprintf("else_%d", c.nextLabel())
+	endLabel := fmt.Sprintf("endif_%d", c.nextLabel())
 
 	// Condition
 	c.emitExpr(is.Cond)
@@ -149,35 +228,50 @@ func (c *Codegen) emitIf(is *IfStmt, funcName string) {
 	c.emitJz(elseLabel)
 
 	// Then block
-	c.emitBlock(is.ThenBlock, funcName)
+	c.emitBlock(is.ThenBlock)
 	c.emitJmp(endLabel)
+
+	// Elif blocks
+	for _, eb := range is.ElifBlocks {
+		c.label(elseLabel)
+		elseLabel = fmt.Sprintf("else_%d", c.nextLabel())
+
+		c.emitExpr(eb.Cond)
+		c.emitTestR64R64("rax", "rax")
+		c.emitJz(elseLabel)
+
+		c.emitBlock(eb.Block)
+		c.emitJmp(endLabel)
+	}
 
 	// Else block
 	c.label(elseLabel)
 	if is.ElseBlock != nil {
-		c.emitBlock(is.ElseBlock, funcName)
+		c.emitBlock(is.ElseBlock)
 	}
 
 	c.label(endLabel)
 }
 
-func (c *Codegen) emitWhile(ws *WhileStmt, funcName string) {
-	startLabel := fmt.Sprintf("while_%d", len(c.labels))
-	endLabel := fmt.Sprintf("endwhile_%d", len(c.labels))
+func (c *Codegen) emitWhile(ws *WhileStmt) {
+	startLabel := fmt.Sprintf("while_%d", c.nextLabel())
+	endLabel := fmt.Sprintf("endwhile_%d", c.nextLabel())
+	continueLabel := fmt.Sprintf("continue_%d", c.nextLabel())
 
 	c.label(startLabel)
 	c.emitExpr(ws.Cond)
 	c.emitTestR64R64("rax", "rax")
 	c.emitJz(endLabel)
 
-	c.emitBlock(ws.Body, funcName)
+	c.emitBlock(ws.Body)
+	c.label(continueLabel)
 	c.emitJmp(startLabel)
 	c.label(endLabel)
 }
 
-func (c *Codegen) emitFor(fs *ForStmt, funcName string) {
-	startLabel := fmt.Sprintf("for_%d", len(c.labels))
-	endLabel := fmt.Sprintf("endfor_%d", len(c.labels))
+func (c *Codegen) emitFor(fs *ForStmt) {
+	startLabel := fmt.Sprintf("for_%d", c.nextLabel())
+	endLabel := fmt.Sprintf("endfor_%d", c.nextLabel())
 
 	// Initialize loop variable
 	c.emitExpr(fs.Iterable)
@@ -187,8 +281,47 @@ func (c *Codegen) emitFor(fs *ForStmt, funcName string) {
 	c.emitTestR64R64("rax", "rax")
 	c.emitJz(endLabel)
 
-	c.emitBlock(fs.Body, funcName)
+	c.emitBlock(fs.Body)
 	c.emitJmp(startLabel)
+	c.label(endLabel)
+}
+
+func (c *Codegen) emitMatchStmt(ms *MatchStmt) {
+	endLabel := fmt.Sprintf("match_end_%d", c.nextLabel())
+
+	// Evaluate the match value
+	c.emitExpr(ms.Value)
+	c.emitPush("rax") // save match value on stack
+
+	for _, mc := range ms.Cases {
+		nextLabel := fmt.Sprintf("match_next_%d", c.nextLabel())
+
+		// Pop match value
+		c.emitPop("rbx")
+		c.emitPush("rbx") // keep a copy for next case
+
+		// Evaluate pattern
+		c.emitExpr(mc.Pattern)
+
+		// Compare: rax (pattern) == rbx (value)
+		c.emitCmpR64R64("rax", "rbx")
+		c.emitJnz(nextLabel)
+
+		// Match! Pop the saved value and execute body
+		c.emitPop("rax") // discard saved value
+		if b, ok := mc.Body.(*Block); ok {
+			c.emitBlock(b)
+		} else {
+			c.emitStmt(mc.Body)
+		}
+		c.emitJmp(endLabel)
+
+		c.label(nextLabel)
+	}
+
+	// No match — pop the saved value
+	c.emitPop("rax")
+
 	c.label(endLabel)
 }
 
@@ -198,8 +331,7 @@ func (c *Codegen) emitExpr(expr Expr) {
 		c.emitLiteral(e)
 
 	case *IdentExpr:
-		// For now, just load 0 (placeholder)
-		c.emitXorR64R64("rax", "rax")
+		c.emitIdent(e)
 
 	case *BinaryExpr:
 		c.emitBinary(e)
@@ -210,8 +342,37 @@ func (c *Codegen) emitExpr(expr Expr) {
 	case *CallExpr:
 		c.emitCallExpr(e)
 
+	case *MethodCallExpr:
+		c.emitMethodCallExpr(e)
+
+	case *MemberExpr:
+		c.emitMemberExpr(e)
+
+	case *IndexExpr:
+		c.emitIndexExpr(e)
+
+	case *AssignmentExpr:
+		c.emitAssignmentExpr(e)
+
+	case *ArrayLiteralExpr:
+		c.emitArrayLiteral(e)
+
 	case *StringInterpolationExpr:
 		c.emitStringInterpolation(e)
+
+	case *MatchExpr:
+		c.emitMatchExpr(e)
+
+	case *IfExpr:
+		c.emitIfExpr(e)
+
+	case *TupleExpr:
+		// For now, just emit first element
+		if len(e.Elements) > 0 {
+			c.emitExpr(e.Elements[0])
+		} else {
+			c.emitXorR64R64("rax", "rax")
+		}
 	}
 }
 
@@ -229,10 +390,60 @@ func (c *Codegen) emitLiteral(lit *LiteralExpr) {
 		// Store string in rodata, load address
 		label := c.addString(v)
 		c.emitLeaR64Label("rax", label)
+	case nil:
+		c.emitXorR64R64("rax", "rax")
 	}
 }
 
+func (c *Codegen) emitIdent(e *IdentExpr) {
+	// Check if it's a local variable
+	if offset, ok := c.stackOffsets[e.Name]; ok {
+		c.emitMovStackR64("rax", offset)
+		return
+	}
+	// Check if it's a function (load address)
+	// For now, just load 0 as placeholder
+	c.emitXorR64R64("rax", "rax")
+}
+
 func (c *Codegen) emitBinary(be *BinaryExpr) {
+	// Handle string operations specially
+	if be.Op == "+" && c.isStringExpr(be.Left) {
+		// String concatenation: emit runtime call
+		c.emitExpr(be.Left)
+		c.emitPush("rax")
+		c.emitExpr(be.Right)
+		c.emitPop("rdi")
+		c.emitMovR64R64("rsi", "rax")
+		c.emitCall("__ae_str_concat")
+		return
+	}
+
+	if be.Op == "==" && c.isStringExpr(be.Left) {
+		// String comparison
+		c.emitExpr(be.Left)
+		c.emitPush("rax")
+		c.emitExpr(be.Right)
+		c.emitPop("rdi")
+		c.emitMovR64R64("rsi", "rax")
+		c.emitCall("__ae_str_eq")
+		return
+	}
+
+	if be.Op == "!=" && c.isStringExpr(be.Left) {
+		c.emitExpr(be.Left)
+		c.emitPush("rax")
+		c.emitExpr(be.Right)
+		c.emitPop("rdi")
+		c.emitMovR64R64("rsi", "rax")
+		c.emitCall("__ae_str_eq")
+		// Negate result
+		c.emitTestR64R64("rax", "rax")
+		c.emitSete("al")
+		c.emitMovzxR64R8("rax", "al")
+		return
+	}
+
 	c.emitExpr(be.Left)
 	c.emitPush("rax")
 	c.emitExpr(be.Right)
@@ -248,6 +459,10 @@ func (c *Codegen) emitBinary(be *BinaryExpr) {
 		c.emitMulR64("rbx")
 	case "/":
 		c.emitDivR64("rbx")
+	case "%":
+		// div puts remainder in rdx
+		c.emitDivR64("rbx")
+		c.emitMovR64R64("rax", "rdx")
 	case "==":
 		c.emitCmpR64R64("rax", "rbx")
 		c.emitSete("al")
@@ -272,7 +487,46 @@ func (c *Codegen) emitBinary(be *BinaryExpr) {
 		c.emitCmpR64R64("rax", "rbx")
 		c.emitSetge("al")
 		c.emitMovzxR64R8("rax", "al")
+	case "&&":
+		c.emitTestR64R64("rax", "rax")
+		c.emitJz("_logical_false")
+		c.emitTestR64R64("rbx", "rbx")
+		c.emitSete("al")
+		c.emitMovzxR64R8("rax", "al")
+	case "||":
+		c.emitTestR64R64("rax", "rax")
+		c.emitJnz("_logical_true")
+		c.emitTestR64R64("rbx", "rbx")
+		c.emitSete("al")
+		c.emitMovzxR64R8("rax", "al")
+	case "&":
+		c.emitAndR64R64("rax", "rbx")
+	case "|":
+		c.emitOrR64R64("rax", "rbx")
+	case "^":
+		c.emitXorR64R64("rax", "rbx")
+	case "<<":
+		c.emitShlR64("rbx")
+	case ">>":
+		c.emitShrR64("rbx")
 	}
+}
+
+func (c *Codegen) isStringExpr(expr Expr) bool {
+	switch e := expr.(type) {
+	case *LiteralExpr:
+		_, ok := e.Value.(string)
+		return ok
+	case *IdentExpr:
+		// Conservative: assume strings are common
+		return false
+	case *BinaryExpr:
+		if e.Op == "+" {
+			return c.isStringExpr(e.Left) || c.isStringExpr(e.Right)
+		}
+		return false
+	}
+	return false
 }
 
 func (c *Codegen) emitUnary(ue *UnaryExpr) {
@@ -286,6 +540,19 @@ func (c *Codegen) emitUnary(ue *UnaryExpr) {
 		c.emitMovzxR64R8("rax", "al")
 	case "~":
 		c.emitNotR64("rax")
+	case "#":
+		// Length operator: call __ae_str_len or __ae_array_len
+		c.emitMovR64R64("rdi", "rax")
+		c.emitCall("__ae_len")
+	case "++":
+		// Postfix or prefix increment
+		c.emitAddR64Imm8("rax", 1)
+	case "--":
+		c.emitSubR64Imm8("rax", 1)
+	case "copy":
+		// copy forces pass-by-value — for now, just pass through
+	case "heap":
+		// heap allocate — for now, just pass through
 	}
 }
 
@@ -296,7 +563,7 @@ func (c *Codegen) emitCallExpr(ce *CallExpr) {
 		c.emitPush("rax")
 	}
 
-	// Pop into registers (simplified: first 6 args in rdi, rsi, rdx, rcx, r8, r9)
+	// Pop into registers (first 6 args in rdi, rsi, rdx, rcx, r8, r9)
 	regs := []string{"rdi", "rsi", "rdx", "rcx", "r8", "r9"}
 	for i := 0; i < len(ce.Args) && i < 6; i++ {
 		c.emitPop(regs[i])
@@ -305,14 +572,198 @@ func (c *Codegen) emitCallExpr(ce *CallExpr) {
 	// Call
 	if ident, ok := ce.Callee.(*IdentExpr); ok {
 		c.emitCall(ident.Name)
+	} else if _, ok := ce.Callee.(*MemberExpr); ok {
+		// Method call via member expression — handled by emitMemberExpr
+		// This shouldn't happen since MethodCallExpr handles it
+		c.emitExpr(ce.Callee)
+	}
+}
+
+func (c *Codegen) emitMethodCallExpr(mce *MethodCallExpr) {
+	// Push args in reverse order (including the object as first arg)
+	for i := len(mce.Args) - 1; i >= 0; i-- {
+		c.emitExpr(mce.Args[i])
+		c.emitPush("rax")
+	}
+
+	// Push the object (self)
+	c.emitExpr(mce.Object)
+	c.emitPush("rax")
+
+	// Pop into registers: rdi = self, rsi-r9 = args
+	regs := []string{"rdi", "rsi", "rdx", "rcx", "r8", "r9"}
+	totalArgs := 1 + len(mce.Args)
+	for i := 0; i < totalArgs && i < 6; i++ {
+		c.emitPop(regs[i])
+	}
+
+	// Call the method function (mangled name: Type_method)
+	// For now, just call the method name directly
+	c.emitCall(mce.Method)
+}
+
+func (c *Codegen) emitMemberExpr(me *MemberExpr) {
+	// Evaluate the object
+	c.emitExpr(me.Object)
+	// For struct field access, we need the struct pointer in rax
+	// and then load the field offset
+	// For now, just push rax and call a runtime helper
+	c.emitPush("rax")
+	c.emitMovR64Imm64("rdi", 0) // placeholder: struct pointer
+	c.emitCall("__ae_field_" + me.Member)
+}
+
+func (c *Codegen) emitIndexExpr(ie *IndexExpr) {
+	// Evaluate object (string or array pointer)
+	c.emitExpr(ie.Object)
+	c.emitPush("rax")
+
+	// Evaluate index
+	c.emitExpr(ie.Index)
+	c.emitPop("rdi") // object pointer
+	c.emitMovR64R64("rsi", "rax") // index
+
+	// Call runtime helper
+	c.emitCall("__ae_index")
+}
+
+func (c *Codegen) emitAssignmentExpr(ae *AssignmentExpr) {
+	// Evaluate the value
+	c.emitExpr(ae.Value)
+	c.emitPush("rax")
+
+	// Handle different target types
+	switch target := ae.Target.(type) {
+	case *IdentExpr:
+		// Simple variable assignment
+		c.emitPop("rax")
+		if offset, ok := c.stackOffsets[target.Name]; ok {
+			c.emitMovR64Stack("rax", offset)
+		}
+	case *IndexExpr:
+		// Array/string index assignment
+		c.emitExpr(target.Object)
+		c.emitPush("rax")
+		c.emitExpr(target.Index)
+		c.emitPop("rdi") // object
+		c.emitMovR64R64("rsi", "rax") // index
+		c.emitPop("rdx") // value
+		c.emitCall("__ae_index_set")
+	case *MemberExpr:
+		// Struct field assignment
+		c.emitExpr(target.Object)
+		c.emitPush("rax")
+		c.emitPop("rdi") // struct pointer
+		c.emitPop("rsi") // value
+		c.emitCall("__ae_field_set_" + target.Member)
+	}
+}
+
+func (c *Codegen) emitArrayLiteral(al *ArrayLiteralExpr) {
+	// Allocate array on heap and populate
+	// For now, just push elements and call runtime
+	for _, el := range al.Elements {
+		c.emitExpr(el)
+		c.emitPush("rax")
+	}
+
+	// Call __ae_array_new(count)
+	c.emitMovR64Imm64("rdi", uint64(len(al.Elements)))
+	c.emitCall("__ae_array_new")
+
+	// Pop elements and store
+	for i := len(al.Elements) - 1; i >= 0; i-- {
+		c.emitPop("rdx") // value
+		c.emitMovR64Imm64("rsi", uint64(i)) // index
+		c.emitMovR64R64("rdi", "rax") // array
+		c.emitPush("rax") // save array pointer
+		c.emitCall("__ae_index_set")
+		c.emitPop("rax") // restore array pointer
 	}
 }
 
 func (c *Codegen) emitStringInterpolation(sie *StringInterpolationExpr) {
-	// Simplified: just emit first part
-	if len(sie.Parts) > 0 {
-		c.emitExpr(sie.Parts[0])
+	// Simplified: concatenate all parts
+	if len(sie.Parts) == 0 {
+		c.emitXorR64R64("rax", "rax")
+		return
 	}
+
+	c.emitExpr(sie.Parts[0])
+	for i := 1; i < len(sie.Parts); i++ {
+		c.emitPush("rax")
+		c.emitExpr(sie.Parts[i])
+		c.emitPop("rdi")
+		c.emitMovR64R64("rsi", "rax")
+		c.emitCall("__ae_str_concat")
+	}
+}
+
+func (c *Codegen) emitMatchExpr(me *MatchExpr) {
+	endLabel := fmt.Sprintf("match_expr_end_%d", c.nextLabel())
+
+	// Evaluate the match value
+	c.emitExpr(me.Value)
+	c.emitPush("rax") // save match value on stack
+
+	for _, mc := range me.Cases {
+		nextLabel := fmt.Sprintf("match_expr_next_%d", c.nextLabel())
+
+		// Pop match value
+		c.emitPop("rbx")
+		c.emitPush("rbx") // keep a copy
+
+		// Evaluate pattern
+		c.emitExpr(mc.Pattern)
+
+		// Compare
+		c.emitCmpR64R64("rax", "rbx")
+		c.emitJnz(nextLabel)
+
+		// Match!
+		c.emitPop("rax") // discard saved value
+		if b, ok := mc.Body.(*Block); ok {
+			c.emitBlock(b)
+		} else {
+			c.emitStmt(mc.Body)
+		}
+		c.emitJmp(endLabel)
+
+		c.label(nextLabel)
+	}
+
+	// No match — pop saved value, load 0
+	c.emitPop("rax")
+	c.emitXorR64R64("rax", "rax")
+
+	c.label(endLabel)
+}
+
+func (c *Codegen) emitIfExpr(ie *IfExpr) {
+	elseLabel := fmt.Sprintf("ifexpr_else_%d", c.nextLabel())
+	endLabel := fmt.Sprintf("ifexpr_end_%d", c.nextLabel())
+
+	c.emitExpr(ie.Cond)
+	c.emitTestR64R64("rax", "rax")
+	c.emitJz(elseLabel)
+
+	if b, ok := ie.ThenExpr.(*Block); ok {
+		c.emitBlock(b)
+	} else {
+		c.emitStmt(ie.ThenExpr)
+	}
+	c.emitJmp(endLabel)
+
+	c.label(elseLabel)
+	if ie.ElseExpr != nil {
+		if b, ok := ie.ElseExpr.(*Block); ok {
+			c.emitBlock(b)
+		} else {
+			c.emitStmt(ie.ElseExpr)
+		}
+	}
+
+	c.label(endLabel)
 }
 
 // ============================================================
@@ -321,15 +772,16 @@ func (c *Codegen) emitStringInterpolation(sie *StringInterpolationExpr) {
 
 func (c *Codegen) addString(s string) string {
 	label := fmt.Sprintf("str_%d", len(c.strings))
-	c.strings[label] = len(s) + 1
+	c.strings[label] = s
 	return label
 }
 
 func (c *Codegen) emitStringData() {
-	for label, _ := range c.strings {
+	for label, content := range c.strings {
 		c.label(label)
-		// Placeholder: emit "hello" string
-		c.rodata = append(c.rodata, []byte("hello\000")...)
+		// Emit string content + null terminator
+		c.rodata = append(c.rodata, []byte(content)...)
+		c.rodata = append(c.rodata, 0)
 	}
 }
 
@@ -339,6 +791,33 @@ func (c *Codegen) emitStringData() {
 
 func (c *Codegen) label(name string) {
 	c.labels[name] = len(c.text)
+}
+
+func (c *Codegen) nextLabel() int {
+	c.labelCount++
+	return c.labelCount
+}
+
+// ============================================================
+// Stack frame helpers
+// ============================================================
+
+// mov rax, [rbp - offset]
+func (c *Codegen) emitMovStackR64(reg string, offset int) {
+	// REX.W + 8B + modrm(01, reg, rbp) + disp8
+	c.emitRexW()
+	c.emitByte(0x8B)
+	c.emitByte(c.modRM(1, regCodes[reg], 5)) // [rbp + disp8]
+	c.emitByte(byte(-offset)) // negative offset from rbp
+}
+
+// mov [rbp - offset], rax
+func (c *Codegen) emitMovR64Stack(reg string, offset int) {
+	// REX.W + 89 + modrm(01, reg, rbp) + disp8
+	c.emitRexW()
+	c.emitByte(0x89)
+	c.emitByte(c.modRM(1, regCodes[reg], 5)) // [rbp + disp8]
+	c.emitByte(byte(-offset))
 }
 
 // ============================================================
@@ -494,6 +973,34 @@ func (c *Codegen) emitCmpR64R64(dst, src string) {
 	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
 }
 
+// and rax, rbx
+func (c *Codegen) emitAndR64R64(dst, src string) {
+	c.emitRexW()
+	c.emitByte(0x21)
+	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
+}
+
+// or rax, rbx
+func (c *Codegen) emitOrR64R64(dst, src string) {
+	c.emitRexW()
+	c.emitByte(0x09)
+	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
+}
+
+// shl rax, cl (shift left by cl)
+func (c *Codegen) emitShlR64(reg string) {
+	c.emitRexW()
+	c.emitByte(0xD3)
+	c.emitByte(c.modRM(3, 4, regCodes[reg]))
+}
+
+// shr rax, cl (shift right by cl)
+func (c *Codegen) emitShrR64(reg string) {
+	c.emitRexW()
+	c.emitByte(0xD3)
+	c.emitByte(c.modRM(3, 5, regCodes[reg]))
+}
+
 // sete al
 func (c *Codegen) emitSete(reg string) {
 	c.emitByte(0x0F)
@@ -580,6 +1087,13 @@ func (c *Codegen) emitJmp(label string) {
 func (c *Codegen) emitJz(label string) {
 	c.emitByte(0x0F)
 	c.emitByte(0x84)
+	c.emitU32(0) // placeholder, patched by linker
+}
+
+// jnz label (jump if not zero)
+func (c *Codegen) emitJnz(label string) {
+	c.emitByte(0x0F)
+	c.emitByte(0x85)
 	c.emitU32(0) // placeholder, patched by linker
 }
 

@@ -1,0 +1,68 @@
+// semantic.ae — Type checker and name resolver for Aether
+// Written in Aether v1
+
+import "tokenizer.ae"
+import "ast.ae"
+
+struct Symbol {
+    name: string,
+    symType: string,
+    kind: u64,  // 0=var, 1=func, 2=type, 3=const
+    isLet: bool,
+}
+
+struct Scope {
+    symbols: [Symbol],
+}
+
+struct SemanticAnalyzer {
+    scopes: [Scope],
+    errors: [string],
+    funcs: [string],  // function names
+}
+
+func newSemanticAnalyzer(): SemanticAnalyzer {
+    return SemanticAnalyzer{[Scope{[]}], [], []}
+}
+
+func enterScope(s: SemanticAnalyzer): SemanticAnalyzer {
+    s.scopes = push(s.scopes, Scope{[]})
+    return s
+}
+
+func exitScope(s: SemanticAnalyzer): SemanticAnalyzer {
+    if #s.scopes > 1 {
+        s.scopes = s.scopes[0:#s.scopes-1]
+    }
+    return s
+}
+
+func declare(s: SemanticAnalyzer, name: string, info: Symbol): SemanticAnalyzer {
+    if name != "" {
+        let scopeIdx = #s.scopes - 1
+        s.scopes[scopeIdx].symbols = push(s.scopes[scopeIdx].symbols, info)
+    }
+    return s
+}
+
+func lookup(s: SemanticAnalyzer, name: string): Symbol {
+    for i in #s.scopes-1..0 {
+        for j in 0..#s.scopes[i].symbols {
+            if s.scopes[i].symbols[j].name == name {
+                return s.scopes[i].symbols[j]
+            }
+        }
+    }
+    return Symbol{"", "", 0, false}
+}
+
+func addError(s: SemanticAnalyzer, msg: string): SemanticAnalyzer {
+    s.errors = push(s.errors, msg)
+    return s
+}
+
+func analyze(s: SemanticAnalyzer, tokens: [Token]): SemanticAnalyzer {
+    // Simplified: just check for basic issues
+    // In the full version, this walks the AST
+    return s
+}
