@@ -354,7 +354,7 @@ func test_serial_putc(c: byte) {
 
 func test_serial_puts(s: string) {
     // Write string to serial port
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < 256 {
         let c: byte = s[i]
         if c == 0 { break }
@@ -500,7 +500,7 @@ func test_module_registry_init() {
 
 func test_module_load(name: string, init: u64, fini: u64): int {
     // Find empty slot in module registry
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < MODULE_MAX {
         let entry_addr: u64 = MODULE_REGISTRY + i * 80  // sizeof(ModuleEntry)
         let entry_ptr: ptr ModuleEntry = entry_addr as ptr ModuleEntry

@@ -4,7 +4,7 @@
 import "std/test"
 
 // Helper to track if a function was called (for short-circuit testing)
-let mut side_effect_flag: bool = false
+var side_effect_flag: bool = false
 
 func side_effect(): bool {
     side_effect_flag = true

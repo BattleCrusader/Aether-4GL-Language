@@ -6,7 +6,7 @@ import "std/test"
 @test
 func main(): void {
     // Nested indentation: if inside if inside for
-    let mut result: u64 = 0
+    var result: u64 = 0
     for i in 0..10 {
         if i < 5 {
             if i % 2 == 0 {
@@ -24,9 +24,9 @@ func main(): void {
     // total = 0+2+4+10+1+1+1+1 = 20
 
     // Nested while
-    let mut outer: u64 = 0
+    var outer: u64 = 0
     while outer < 3 {
-        let mut inner: u64 = 0
+        var inner: u64 = 0
         while inner < 3 {
             result = result + 1
             inner = inner + 1

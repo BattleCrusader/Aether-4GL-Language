@@ -119,7 +119,7 @@ func testNoErrorCatch(): u64 {
 // ============================================================
 
 func testFinallyNoError(): u64 {
-    let mut result: u64 = 0
+    var result: u64 = 0
     try {
         result = 42
     } finally {
@@ -129,7 +129,7 @@ func testFinallyNoError(): u64 {
 }
 
 func testFinallyWithError(): u64 {
-    let mut result: u64 = 0
+    var result: u64 = 0
     try {
         throw AppError::NotFound
         result = 100
@@ -190,7 +190,7 @@ func testThrowsFunction(): u64 {
 // ============================================================
 
 func testDeferInTry(): u64 {
-    let mut cleanupRan: u64 = 0
+    var cleanupRan: u64 = 0
     try {
         defer { cleanupRan = 1 }
         throw AppError::Timeout
@@ -242,7 +242,7 @@ func testEmptyTry(): u64 {
 
 // Try with only finally (no catch)
 func testTryFinallyOnly(): u64 {
-    let mut x: u64 = 0
+    var x: u64 = 0
     try {
         x = 42
     } finally {
@@ -269,7 +269,7 @@ func testMultipleThrows(): u64 {
 
 @test(expect=0)
 func main(): u64 {
-    let mut failures: u64 = 0
+    var failures: u64 = 0
 
     // §11.2: basic try/catch
     if testTryNoError() != 42 { failures += 1 }

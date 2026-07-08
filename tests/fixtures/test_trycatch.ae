@@ -3,7 +3,7 @@ import "std/test"
 
 @test
 func main(): void {
-    let mut result: u64 = 0
+    var result: u64 = 0
 
     try {
         result = 42

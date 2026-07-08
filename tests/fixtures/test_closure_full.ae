@@ -18,7 +18,7 @@ func test_basic_lambda(): u64 {
 func test_block_lambda(): u64 {
     let process = |items: [int]| {
         let total: int = 0
-        let mut i: u64 = 0
+        var i: u64 = 0
         while i < 3 {
             total = total + items[i]
             i = i + 1
@@ -104,9 +104,9 @@ func test_map(): u64 {
 // Filter: select elements matching predicate
 func filter_evens(arr: [int; 3]): [int; 2] {
     let result: [int; 2]
-    let mut idx: u64 = 0
+    var idx: u64 = 0
     let is_even = |x| -> x % 2 == 0
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < 3 {
         if is_even(arr[i]) {
             result[idx] = arr[i]
@@ -125,9 +125,9 @@ func test_filter(): u64 {
 
 // Reduce: accumulate values using inline lambda
 func reduce_sum(arr: [int; 3]): int {
-    let mut acc: int = 0
+    var acc: int = 0
     let add = |a: int, b: int| -> a + b
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < 3 {
         acc = add(acc, arr[i])
         i = i + 1
@@ -193,9 +193,9 @@ func test_capture_local(): u64 {
 
 // Edge case: lambda in while loop
 func test_lambda_in_loop(): u64 {
-    let mut sum: int = 0
+    var sum: int = 0
     let add = |a: int, b: int| -> a + b
-    let mut i: int = 0
+    var i: int = 0
     while i < 5 {
         sum = add(sum, i)
         i = i + 1

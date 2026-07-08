@@ -7,7 +7,7 @@ class Counter {
     value: u64
 
     func new(): Counter {
-        let mut c: Counter
+        var c: Counter
         c.value = 0
         return c
     }
@@ -30,7 +30,7 @@ class Point {
     y: i64
 
     func new(x: i64, y: i64): Point {
-        let mut p: Point
+        var p: Point
         p.x = x
         p.y = y
         return p
@@ -44,7 +44,7 @@ class Point {
 @test
 func main(): void {
     // Create and use Counter
-    let mut c: Counter = Counter::new()
+    var c: Counter = Counter::new()
     let initial: u64 = c.get()  // 0
 
     c.increment()

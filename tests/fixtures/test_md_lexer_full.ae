@@ -34,7 +34,7 @@ struct Lexer {
 }
 
 func lexerCreate(input: string): Lexer {
-    let mut l: Lexer
+    var l: Lexer
     l.input = input
     l.pos = 0
     l.line = 1
@@ -75,7 +75,7 @@ func lexerIsSpecial(c: byte): bool {
 }
 
 func lexerEmitToken(l: ref Lexer, kind: TokenType, text: string, line: u64, col: u64) {
-    let mut t: Token
+    var t: Token
     t.kind = kind
     t.text = text
     t.line = line
@@ -135,7 +135,7 @@ func lexerTokenize(l: ref Lexer): [Token] {
 
         if c == 32 or c == 9 { lexerSkipWhitespace(l); continue }
 
-        let mut text: string = ""
+        var text: string = ""
         while true {
             let ch: byte = lexerPeek(l)
             if lexerIsSpecial(ch) { break }
@@ -152,7 +152,7 @@ func lexerTokenize(l: ref Lexer): [Token] {
 
 func main(): u64 {
     let input: string = "# Hello\n\nThis is **bold** text.\n"
-    let mut lexer: Lexer = lexerCreate(input)
+    var lexer: Lexer = lexerCreate(input)
     let tokens: [Token] = lexerTokenize(ref lexer)
     print("tokens: ")
     printDecimal(#tokens)

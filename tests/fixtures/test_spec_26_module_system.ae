@@ -392,7 +392,7 @@ public func test_public_return(): PublicReturnType {
 
 func main(): u64 {
     // Run all module system tests
-    let mut result: u64 = 0
+    var result: u64 = 0
 
     result += test_file_as_module()
     result += test_source_import_syntax()

@@ -1,6 +1,6 @@
 // test_for_index.ae — test for loop with index+value iteration
 func main(): u64 {
-    let mut sum = 0
+    var sum = 0
     for i in 0..5 {
         sum = sum + i
     }

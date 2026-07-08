@@ -31,7 +31,7 @@ func main(): void {
     let nothing = none
 
     // if/elif/else keywords
-    let mut result: u64 = 0
+    var result: u64 = 0
     if a_bool {
         result = result + 1
     } elif flag {
@@ -41,14 +41,14 @@ func main(): void {
     }
 
     // while keyword
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < 5 {
         i = i + 1
     }
     result = result + i
 
     // for/in keywords
-    let mut sum: u64 = 0
+    var sum: u64 = 0
     for j in 0..3 {
         sum = sum + j
     }

@@ -7,7 +7,7 @@ func concat(firstString: string, secondString: string): string {
 }
 
 func stringLength(inputString: string): u64 {
-    let mut i: u64 = 0
+    var i: u64 = 0
     while true {
         let c: byte = inputString[i]
         if c == 0 { return i }
@@ -21,31 +21,31 @@ func stringCompare(a: string, b: string): bool {
 }
 
 func split(inputString: string, delimiter: string): [string] {
-    let mut result: [string] = []
+    var result: [string] = []
     let inputLen: u64 = stringLength(inputString)
     let delimLen: u64 = stringLength(delimiter)
     if delimLen == 0 {
-        let mut i: u64 = 0
+        var i: u64 = 0
         while i < inputLen {
-            let mut part: string = ""
+            var part: string = ""
             part = part + inputString[i]
             result = result + [part]
             i = i + 1
         }
         return result
     }
-    let mut start: u64 = 0
-    let mut pos: u64 = 0
+    var start: u64 = 0
+    var pos: u64 = 0
     while pos < inputLen {
-        let mut matches: bool = true
-        let mut di: u64 = 0
+        var matches: bool = true
+        var di: u64 = 0
         while di < delimLen {
             if inputString[pos + di] != delimiter[di] { matches = false }
             di = di + 1
         }
         if matches {
-            let mut part: string = ""
-            let mut si: u64 = start
+            var part: string = ""
+            var si: u64 = start
             while si < pos {
                 part = part + inputString[si]
                 si = si + 1
@@ -57,8 +57,8 @@ func split(inputString: string, delimiter: string): [string] {
             pos = pos + 1
         }
     }
-    let mut part: string = ""
-    let mut si: u64 = start
+    var part: string = ""
+    var si: u64 = start
     while si < inputLen {
         part = part + inputString[si]
         si = si + 1
@@ -69,21 +69,21 @@ func split(inputString: string, delimiter: string): [string] {
 
 func trim(inputString: string): string {
     let len: u64 = stringLength(inputString)
-    let mut start: u64 = 0
+    var start: u64 = 0
     while start < len {
         let c: byte = inputString[start]
         if c != 32 and c != 9 and c != 10 and c != 13 { break }
         start = start + 1
     }
     if start == len { return "" }
-    let mut end: u64 = len
+    var end: u64 = len
     while end > start {
         let c: byte = inputString[end - 1]
         if c != 32 and c != 9 and c != 10 and c != 13 { break }
         end = end - 1
     }
-    let mut result: string = ""
-    let mut i: u64 = start
+    var result: string = ""
+    var i: u64 = start
     while i < end {
         result = result + inputString[i]
         i = i + 1
@@ -92,8 +92,8 @@ func trim(inputString: string): string {
 }
 
 func toUpper(inputString: string): string {
-    let mut result: string = ""
-    let mut i: u64 = 0
+    var result: string = ""
+    var i: u64 = 0
     while true {
         let c: byte = inputString[i]
         if c == 0 { return result }
@@ -109,8 +109,8 @@ func toUpper(inputString: string): string {
 }
 
 func toLower(inputString: string): string {
-    let mut result: string = ""
-    let mut i: u64 = 0
+    var result: string = ""
+    var i: u64 = 0
     while true {
         let c: byte = inputString[i]
         if c == 0 { return result }
@@ -141,8 +141,8 @@ func strEq(a: string, b: string): bool {
 }
 
 func substring(inputString: string, startIndex: u64, endIndex: u64): string {
-    let mut result: string = ""
-    let mut i: u64 = startIndex
+    var result: string = ""
+    var i: u64 = startIndex
     while i < endIndex {
         result = result + inputString[i]
         i = i + 1
@@ -152,7 +152,7 @@ func substring(inputString: string, startIndex: u64, endIndex: u64): string {
 
 func startsWith(inputString: string, prefix: string): bool {
     let prefixLen: u64 = stringLength(prefix)
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < prefixLen {
         if inputString[i] != prefix[i] { return false }
         i = i + 1
@@ -164,7 +164,7 @@ func endsWith(inputString: string, suffix: string): bool {
     let inputLen: u64 = stringLength(inputString)
     let suffixLen: u64 = stringLength(suffix)
     if suffixLen > inputLen { return false }
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < suffixLen {
         if inputString[inputLen - suffixLen + i] != suffix[i] { return false }
         i = i + 1
@@ -177,10 +177,10 @@ func contains(haystack: string, needle: string): bool {
     let needleLen: u64 = stringLength(needle)
     if needleLen == 0 { return true }
     if needleLen > hayLen { return false }
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i <= hayLen - needleLen {
-        let mut matches: bool = true
-        let mut j: u64 = 0
+        var matches: bool = true
+        var j: u64 = 0
         while j < needleLen {
             if haystack[i + j] != needle[j] { matches = false; break }
             j = j + 1
@@ -195,18 +195,18 @@ func replace(inputString: string, searchFor: string, replaceWith: string): strin
     let inputLen: u64 = stringLength(inputString)
     let searchLen: u64 = stringLength(searchFor)
     if searchLen == 0 { return inputString }
-    let mut result: string = ""
-    let mut i: u64 = 0
+    var result: string = ""
+    var i: u64 = 0
     while i < inputLen {
-        let mut matches: bool = true
-        let mut j: u64 = 0
+        var matches: bool = true
+        var j: u64 = 0
         while j < searchLen {
             if i + j >= inputLen { matches = false; break }
             if inputString[i + j] != searchFor[j] { matches = false; break }
             j = j + 1
         }
         if matches {
-            let mut ri: u64 = 0
+            var ri: u64 = 0
             let replaceLen: u64 = stringLength(replaceWith)
             while ri < replaceLen {
                 result = result + replaceWith[ri]
@@ -222,13 +222,13 @@ func replace(inputString: string, searchFor: string, replaceWith: string): strin
 }
 
 func join(strings: [string], delimiter: string): string {
-    let mut result: string = ""
+    var result: string = ""
     let count: u64 = #strings
     if count == 0 { return result }
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < count {
         if i > 0 {
-            let mut di: u64 = 0
+            var di: u64 = 0
             let delimLen: u64 = stringLength(delimiter)
             while di < delimLen {
                 result = result + delimiter[di]
@@ -236,7 +236,7 @@ func join(strings: [string], delimiter: string): string {
             }
         }
         let itemLen: u64 = stringLength(strings[i])
-        let mut j: u64 = 0
+        var j: u64 = 0
         while j < itemLen {
             result = result + strings[i][j]
             j = j + 1
@@ -250,8 +250,8 @@ func join(strings: [string], delimiter: string): string {
 
 func reverse(inputString: string): string {
     let len: u64 = stringLength(inputString)
-    let mut result: string = ""
-    let mut i: u64 = len
+    var result: string = ""
+    var i: u64 = len
     while i > 0 {
         i = i - 1
         result = result + inputString[i]
@@ -260,8 +260,8 @@ func reverse(inputString: string): string {
 }
 
 func repeat(inputString: string, count: u64): string {
-    let mut result: string = ""
-    let mut i: u64 = 0
+    var result: string = ""
+    var i: u64 = 0
     while i < count {
         result = result + inputString
         i = i + 1
@@ -273,11 +273,11 @@ func count(haystack: string, needle: string): u64 {
     let hayLen: u64 = stringLength(haystack)
     let needleLen: u64 = stringLength(needle)
     if needleLen == 0 or needleLen > hayLen { return 0 }
-    let mut result: u64 = 0
-    let mut i: u64 = 0
+    var result: u64 = 0
+    var i: u64 = 0
     while i <= hayLen - needleLen {
-        let mut matches: bool = true
-        let mut j: u64 = 0
+        var matches: bool = true
+        var j: u64 = 0
         while j < needleLen {
             if haystack[i + j] != needle[j] { matches = false; break }
             j = j + 1
@@ -296,10 +296,10 @@ func indexOf(haystack: string, needle: string): i64 {
     let hayLen: u64 = stringLength(haystack)
     let needleLen: u64 = stringLength(needle)
     if needleLen == 0 or needleLen > hayLen { return -1 }
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i <= hayLen - needleLen {
-        let mut matches: bool = true
-        let mut j: u64 = 0
+        var matches: bool = true
+        var j: u64 = 0
         while j < needleLen {
             if haystack[i + j] != needle[j] { matches = false; break }
             j = j + 1
@@ -314,10 +314,10 @@ func lastIndexOf(haystack: string, needle: string): i64 {
     let hayLen: u64 = stringLength(haystack)
     let needleLen: u64 = stringLength(needle)
     if needleLen == 0 or needleLen > hayLen { return -1 }
-    let mut i: u64 = hayLen - needleLen
+    var i: u64 = hayLen - needleLen
     while true {
-        let mut matches: bool = true
-        let mut j: u64 = 0
+        var matches: bool = true
+        var j: u64 = 0
         while j < needleLen {
             if haystack[i + j] != needle[j] { matches = false; break }
             j = j + 1
@@ -332,8 +332,8 @@ func lastIndexOf(haystack: string, needle: string): i64 {
 func padLeft(inputString: string, totalLength: u64, padCharacter: byte): string {
     let len: u64 = stringLength(inputString)
     if len >= totalLength { return inputString }
-    let mut result: string = ""
-    let mut i: u64 = 0
+    var result: string = ""
+    var i: u64 = 0
     let padCount: u64 = totalLength - len
     while i < padCount {
         result = result + padCharacter
@@ -346,8 +346,8 @@ func padLeft(inputString: string, totalLength: u64, padCharacter: byte): string 
 func padRight(inputString: string, totalLength: u64, padCharacter: byte): string {
     let len: u64 = stringLength(inputString)
     if len >= totalLength { return inputString }
-    let mut result: string = inputString
-    let mut i: u64 = 0
+    var result: string = inputString
+    var i: u64 = 0
     let padCount: u64 = totalLength - len
     while i < padCount {
         result = result + padCharacter

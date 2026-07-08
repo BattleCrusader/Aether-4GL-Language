@@ -24,9 +24,9 @@ func main(): void {
     // true || (false && false) = true || false = true
 
     // Level 13 (=) is lowest among operators (right-associative)
-    let mut a: u64 = 0
-    let mut b: u64 = 0
-    let mut c: u64 = 0
+    var a: u64 = 0
+    var b: u64 = 0
+    var c: u64 = 0
     a = b = c = 42  // right-associative: a = (b = (c = 42))
 
     // Parentheses override precedence

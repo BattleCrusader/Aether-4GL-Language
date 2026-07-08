@@ -67,8 +67,8 @@ func newList(): List {
 }
 
 func hashString(key: string): u64 {
-    let mut hash: u64 = 5381
-    let mut i: u64 = 0
+    var hash: u64 = 5381
+    var i: u64 = 0
     while true {
         let c: byte = key[i]
         if c == 0 { return hash }
@@ -79,13 +79,13 @@ func hashString(key: string): u64 {
 }
 
 func newHashMap(capacity: u64): HashMap {
-    let mut result: HashMap
+    var result: HashMap
     result.keys = []
     result.values = []
     result.occupied = []
     result.count = 0
     result.capacity = capacity
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < capacity {
         result.keys = result.keys + [""]
         result.values = result.values + [0]
@@ -98,7 +98,7 @@ func newHashMap(capacity: u64): HashMap {
 func hashMapPut(self: ref HashMap, key: string, value: u64) {
     if self.count >= self.capacity { return }
     let hash: u64 = hashString(key)
-    let mut index: u64 = hash % self.capacity
+    var index: u64 = hash % self.capacity
     while self.occupied[index] {
         if self.keys[index] == key {
             self.values[index] = value
@@ -114,8 +114,8 @@ func hashMapPut(self: ref HashMap, key: string, value: u64) {
 
 func hashMapGet(self: ref HashMap, key: string): u64 {
     let hash: u64 = hashString(key)
-    let mut index: u64 = hash % self.capacity
-    let mut startIndex: u64 = index
+    var index: u64 = hash % self.capacity
+    var startIndex: u64 = index
     while self.occupied[index] {
         if self.keys[index] == key { return self.values[index] }
         index = (index + 1) % self.capacity
@@ -126,8 +126,8 @@ func hashMapGet(self: ref HashMap, key: string): u64 {
 
 func hashMapContainsKey(self: ref HashMap, key: string): bool {
     let hash: u64 = hashString(key)
-    let mut index: u64 = hash % self.capacity
-    let mut startIndex: u64 = index
+    var index: u64 = hash % self.capacity
+    var startIndex: u64 = index
     while self.occupied[index] {
         if self.keys[index] == key { return true }
         index = (index + 1) % self.capacity
@@ -138,8 +138,8 @@ func hashMapContainsKey(self: ref HashMap, key: string): bool {
 
 func hashMapRemove(self: ref HashMap, key: string) {
     let hash: u64 = hashString(key)
-    let mut index: u64 = hash % self.capacity
-    let mut startIndex: u64 = index
+    var index: u64 = hash % self.capacity
+    var startIndex: u64 = index
     while self.occupied[index] {
         if self.keys[index] == key {
             self.occupied[index] = false
@@ -156,12 +156,12 @@ func hashMapLen(self: ref HashMap): u64 {
 }
 
 func newSet(capacity: u64): Set {
-    let mut result: Set
+    var result: Set
     result.keys = []
     result.occupied = []
     result.count = 0
     result.capacity = capacity
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < capacity {
         result.keys = result.keys + [""]
         result.occupied = result.occupied + [false]
@@ -173,7 +173,7 @@ func newSet(capacity: u64): Set {
 func setPut(self: ref Set, key: string) {
     if self.count >= self.capacity { return }
     let hash: u64 = hashString(key)
-    let mut index: u64 = hash % self.capacity
+    var index: u64 = hash % self.capacity
     while self.occupied[index] {
         if self.keys[index] == key { return }
         index = (index + 1) % self.capacity
@@ -185,8 +185,8 @@ func setPut(self: ref Set, key: string) {
 
 func setContains(self: ref Set, key: string): bool {
     let hash: u64 = hashString(key)
-    let mut index: u64 = hash % self.capacity
-    let mut startIndex: u64 = index
+    var index: u64 = hash % self.capacity
+    var startIndex: u64 = index
     while self.occupied[index] {
         if self.keys[index] == key { return true }
         index = (index + 1) % self.capacity
@@ -197,8 +197,8 @@ func setContains(self: ref Set, key: string): bool {
 
 func setRemove(self: ref Set, key: string) {
     let hash: u64 = hashString(key)
-    let mut index: u64 = hash % self.capacity
-    let mut startIndex: u64 = index
+    var index: u64 = hash % self.capacity
+    var startIndex: u64 = index
     while self.occupied[index] {
         if self.keys[index] == key {
             self.occupied[index] = false
@@ -215,13 +215,13 @@ func setLen(self: ref Set): u64 {
 }
 
 func newQueue(capacity: u64): Queue {
-    let mut result: Queue
+    var result: Queue
     result.data = []
     result.front = 0
     result.back = 0
     result.count = 0
     result.capacity = capacity
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < capacity {
         result.data = result.data + [0]
         i = i + 1
@@ -255,11 +255,11 @@ func queueLen(self: ref Queue): u64 {
 // --- Stack (LIFO) ---
 
 func newStack(capacity: u64): Stack {
-    let mut result: Stack
+    var result: Stack
     result.data = []
     result.count = 0
     result.capacity = capacity
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < capacity {
         result.data = result.data + [0]
         i = i + 1
@@ -295,13 +295,13 @@ func stackLen(self: ref Stack): u64 {
 // --- Deque (double-ended queue) ---
 
 func newDeque(capacity: u64): Deque {
-    let mut result: Deque
+    var result: Deque
     result.data = []
     result.front = 0
     result.back = 0
     result.count = 0
     result.capacity = capacity
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < capacity {
         result.data = result.data + [0]
         i = i + 1

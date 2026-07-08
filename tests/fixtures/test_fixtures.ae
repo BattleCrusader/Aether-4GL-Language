@@ -31,15 +31,15 @@ func test_call(): i64 { return add(10, 20) }
 
 // While loop
 func test_while(n: i64): i64 {
-    let mut i: i64 = 0
-    let mut s: i64 = 0
+    var i: i64 = 0
+    var s: i64 = 0
     while i < n { s = s + i; i = i + 1 }
     return s
 }
 
 // For loop
 func test_for(): i64 {
-    let mut s: i64 = 0
+    var s: i64 = 0
     for i in 0..10 { s = s + i }
     return s
 }
