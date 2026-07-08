@@ -1,32 +1,57 @@
 // semantic.ae — Type checker and name resolver for Aether
 // Written in Aether v1
+//
+// Walks the AST and checks types, tracks scopes, reports errors with line/column.
 
 import "tokenizer.ae"
 import "ast.ae"
 
-struct Symbol {
+// Symbol kinds
+let SYM_VAR: u64 = 0
+let SYM_FUNC: u64 = 1
+let SYM_TYPE: u64 = 2
+let SYM_CONST: u64 = 3
+
+struct symbol {
     name: string,
     symType: string,
     kind: u64,  // 0=var, 1=func, 2=type, 3=const
     isLet: bool,
+    line: u64,
+    col: u64,
 }
 
-struct Scope {
-    symbols: [Symbol],
+struct scope {
+    symbols: [symbol],
 }
 
 struct SemanticAnalyzer {
-    scopes: [Scope],
+    scopes: [scope],
     errors: [string],
     funcs: [string],  // function names
+    // Current position tracking
+    currentLine: u64,
+    currentCol: u64,
 }
 
 func newSemanticAnalyzer(): SemanticAnalyzer {
-    return SemanticAnalyzer{[Scope{[]}], [], []}
+    var s: SemanticAnalyzer
+    s.scopes = []
+    s.errors = []
+    s.funcs = []
+    s.currentLine = 1
+    s.currentCol = 1
+    // Push global scope
+    var gs: scope
+    gs.symbols = []
+    s.scopes = push(s.scopes, gs)
+    return s
 }
 
 func enterScope(s: SemanticAnalyzer): SemanticAnalyzer {
-    s.scopes = push(s.scopes, Scope{[]})
+    var ns: scope
+    ns.symbols = []
+    s.scopes = push(s.scopes, ns)
     return s
 }
 
@@ -37,15 +62,22 @@ func exitScope(s: SemanticAnalyzer): SemanticAnalyzer {
     return s
 }
 
-func declare(s: SemanticAnalyzer, name: string, info: Symbol): SemanticAnalyzer {
+func declare(s: SemanticAnalyzer, name: string, info: symbol): SemanticAnalyzer {
     if name != "" {
         let scopeIdx = #s.scopes - 1
+        // Check for duplicate declaration in current scope
+        for j in 0..#s.scopes[scopeIdx].symbols {
+            if s.scopes[scopeIdx].symbols[j].name == name {
+                s = addError(s, "duplicate declaration: " + name)
+                return s
+            }
+        }
         s.scopes[scopeIdx].symbols = push(s.scopes[scopeIdx].symbols, info)
     }
     return s
 }
 
-func lookup(s: SemanticAnalyzer, name: string): Symbol {
+func lookup(s: SemanticAnalyzer, name: string): symbol {
     for i in #s.scopes-1..0 {
         for j in 0..#s.scopes[i].symbols {
             if s.scopes[i].symbols[j].name == name {
@@ -53,7 +85,14 @@ func lookup(s: SemanticAnalyzer, name: string): Symbol {
             }
         }
     }
-    return Symbol{"", "", 0, false}
+    var empty: symbol
+    empty.name = ""
+    empty.symType = ""
+    empty.kind = 0
+    empty.isLet = false
+    empty.line = 0
+    empty.col = 0
+    return empty
 }
 
 func addError(s: SemanticAnalyzer, msg: string): SemanticAnalyzer {
@@ -61,8 +100,250 @@ func addError(s: SemanticAnalyzer, msg: string): SemanticAnalyzer {
     return s
 }
 
+func addErrorAt(s: SemanticAnalyzer, line: u64, col: u64, msg: string): SemanticAnalyzer {
+    // Format: "line X:Y: message"
+    var errMsg = "line "
+    errMsg = errMsg + u64ToString(line)
+    errMsg = errMsg + ":"
+    errMsg = errMsg + u64ToString(col)
+    errMsg = errMsg + ": "
+    errMsg = errMsg + msg
+    s.errors = push(s.errors, errMsg)
+    return s
+}
+
+func u64ToString(val: u64): string {
+    if val == 0
+        return "0"
+    var result = ""
+    var n = val
+    while n > 0 {
+        let digit = n % 10
+        var digitStr = ""
+        if digit == 0
+            digitStr = "0"
+        elif digit == 1
+            digitStr = "1"
+        elif digit == 2
+            digitStr = "2"
+        elif digit == 3
+            digitStr = "3"
+        elif digit == 4
+            digitStr = "4"
+        elif digit == 5
+            digitStr = "5"
+        elif digit == 6
+            digitStr = "6"
+        elif digit == 7
+            digitStr = "7"
+        elif digit == 8
+            digitStr = "8"
+        else
+            digitStr = "9"
+        result = digitStr + result
+        n = n / 10
+    }
+    return result
+}
+
+// Check if a token type is a type keyword
+func isTypeToken(typ: u64): bool {
+    if typ == TOKEN_KW_BOOL
+        return true
+    if typ == TOKEN_KW_BYTE
+        return true
+    if typ == TOKEN_KW_CHAR
+        return true
+    if typ == TOKEN_KW_STRING
+        return true
+    if typ == TOKEN_KW_VOID
+        return true
+    if typ == TOKEN_KW_INT
+        return true
+    if typ == TOKEN_KW_FLOAT
+        return true
+    if typ == TOKEN_KW_DOUBLE
+        return true
+    if typ == TOKEN_KW_U8
+        return true
+    if typ == TOKEN_KW_U16
+        return true
+    if typ == TOKEN_KW_U32
+        return true
+    if typ == TOKEN_KW_U64
+        return true
+    if typ == TOKEN_KW_U128
+        return true
+    if typ == TOKEN_KW_I8
+        return true
+    if typ == TOKEN_KW_I16
+        return true
+    if typ == TOKEN_KW_I32
+        return true
+    if typ == TOKEN_KW_I64
+        return true
+    return false
+}
+
+// Get the type name from a token type
+func typeNameFromToken(typ: u64): string {
+    if typ == TOKEN_KW_BOOL
+        return "bool"
+    if typ == TOKEN_KW_BYTE
+        return "byte"
+    if typ == TOKEN_KW_CHAR
+        return "char"
+    if typ == TOKEN_KW_STRING
+        return "string"
+    if typ == TOKEN_KW_VOID
+        return "void"
+    if typ == TOKEN_KW_INT
+        return "int"
+    if typ == TOKEN_KW_FLOAT
+        return "float"
+    if typ == TOKEN_KW_DOUBLE
+        return "double"
+    if typ == TOKEN_KW_U8
+        return "u8"
+    if typ == TOKEN_KW_U16
+        return "u16"
+    if typ == TOKEN_KW_U32
+        return "u32"
+    if typ == TOKEN_KW_U64
+        return "u64"
+    if typ == TOKEN_KW_U128
+        return "u128"
+    if typ == TOKEN_KW_I8
+        return "i8"
+    if typ == TOKEN_KW_I16
+        return "i16"
+    if typ == TOKEN_KW_I32
+        return "i32"
+    if typ == TOKEN_KW_I64
+        return "i64"
+    return "unknown"
+}
+
+// Helper to create a symbol
+func makeSymbol(name: string, symType: string, kind: u64, isLet: bool, line: u64, col: u64): symbol {
+    var sym: symbol
+    sym.name = name
+    sym.symType = symType
+    sym.kind = kind
+    sym.isLet = isLet
+    sym.line = line
+    sym.col = col
+    return sym
+}
+
+// analyze — walk the token stream and perform semantic analysis
 func analyze(s: SemanticAnalyzer, tokens: [Token]): SemanticAnalyzer {
-    // Simplified: just check for basic issues
-    // In the full version, this walks the AST
+    var i: u64 = 0
+    while i < #tokens {
+        let tok = tokens[i]
+        s.currentLine = tok.line
+        s.currentCol = tok.column
+
+        // Track function declarations
+        if tok.typ == TOKEN_KW_FUNC {
+            if i + 1 < #tokens {
+                let nameTok = tokens[i + 1]
+                if nameTok.typ == TOKEN_IDENT or isTypeToken(nameTok.typ) {
+                    for j in 0..#s.funcs {
+                        if s.funcs[j] == nameTok.lexeme {
+                            s = addErrorAt(s, nameTok.line, nameTok.column, "duplicate function: " + nameTok.lexeme)
+                            break
+                        }
+                    }
+                    s.funcs = push(s.funcs, nameTok.lexeme)
+                    s = declare(s, nameTok.lexeme, makeSymbol(nameTok.lexeme, "func", SYM_FUNC, false, nameTok.line, nameTok.column))
+                }
+            }
+        }
+
+        // Track variable declarations (let/var)
+        if tok.typ == TOKEN_KW_LET or tok.typ == TOKEN_KW_VAR {
+            let isLet = tok.typ == TOKEN_KW_LET
+            if i + 1 < #tokens {
+                let nameTok = tokens[i + 1]
+                if nameTok.typ == TOKEN_IDENT or isTypeToken(nameTok.typ) {
+                    var varType = "unknown"
+                    if i + 2 < #tokens and tokens[i + 2].typ == TOKEN_COLON {
+                        if i + 3 < #tokens and isTypeToken(tokens[i + 3].typ) {
+                            varType = typeNameFromToken(tokens[i + 3].typ)
+                        } else if i + 3 < #tokens and tokens[i + 3].typ == TOKEN_IDENT {
+                            varType = tokens[i + 3].lexeme
+                        }
+                    }
+                    s = declare(s, nameTok.lexeme, makeSymbol(nameTok.lexeme, varType, SYM_VAR, isLet, nameTok.line, nameTok.column))
+                }
+            }
+        }
+
+        // Track struct declarations
+        if tok.typ == TOKEN_KW_STRUCT {
+            if i + 1 < #tokens {
+                let nameTok = tokens[i + 1]
+                if nameTok.typ == TOKEN_IDENT or isTypeToken(nameTok.typ) {
+                    s = declare(s, nameTok.lexeme, makeSymbol(nameTok.lexeme, "type", SYM_TYPE, false, nameTok.line, nameTok.column))
+                }
+            }
+        }
+
+        // Track enum declarations
+        if tok.typ == TOKEN_KW_ENUM {
+            if i + 1 < #tokens {
+                let nameTok = tokens[i + 1]
+                if nameTok.typ == TOKEN_IDENT or isTypeToken(nameTok.typ) {
+                    s = declare(s, nameTok.lexeme, makeSymbol(nameTok.lexeme, "type", SYM_TYPE, false, nameTok.line, nameTok.column))
+                }
+            }
+        }
+
+        // Track const declarations
+        if tok.typ == TOKEN_KW_CONST {
+            if i + 1 < #tokens {
+                let nameTok = tokens[i + 1]
+                if nameTok.typ == TOKEN_IDENT or isTypeToken(nameTok.typ) {
+                    s = declare(s, nameTok.lexeme, makeSymbol(nameTok.lexeme, "const", SYM_CONST, true, nameTok.line, nameTok.column))
+                }
+            }
+        }
+
+        // Check identifier references
+        if tok.typ == TOKEN_IDENT {
+            let isDecl = false
+            if i > 0 {
+                let prev = tokens[i - 1]
+                if prev.typ == TOKEN_KW_FUNC or prev.typ == TOKEN_KW_LET or prev.typ == TOKEN_KW_VAR
+                    or prev.typ == TOKEN_KW_STRUCT or prev.typ == TOKEN_KW_ENUM or prev.typ == TOKEN_KW_CONST {
+                    isDecl = true
+                }
+                if prev.typ == TOKEN_COLON {
+                    isDecl = true
+                }
+                if prev.typ == TOKEN_DOT {
+                    isDecl = true
+                }
+            }
+            if not isDecl {
+                let isKeyword = isTypeToken(tok.typ)
+                if not isKeyword {
+                    let sym = lookup(s, tok.lexeme)
+                    if sym.name == "" {
+                        let isBuiltin = tok.lexeme == "push" or tok.lexeme == "pop"
+                            or tok.lexeme == "print" or tok.lexeme == "len"
+                            or tok.lexeme == "stringFromByte" or tok.lexeme == "stringFromByteHelper"
+                            or tok.lexeme == "makeSymbol"
+                        if not isBuiltin {
+                            s = addErrorAt(s, tok.line, tok.column, "undefined reference: " + tok.lexeme)
+                        }
+                    }
+                }
+            }
+        }
+
+        i = i + 1
+    }
     return s
 }
