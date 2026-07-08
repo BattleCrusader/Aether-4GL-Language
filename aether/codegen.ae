@@ -680,7 +680,11 @@ func generate(c: codegen, tokens: [Token]): codegen {
     var ctx: genCtx
     ctx.c = c
     ctx.pos = 0
+    // Emit string data first so rodata size is known for labelData
+    ctx.c = emitStringData(ctx.c)
+    // Emit runtime data (uses labelData which needs rodata size)
     ctx.c = emitRuntimeData(ctx.c)
+    // Emit _start entry point
     ctx.c = emitStart(ctx.c)
     while not ctxIsAtEnd(ctx, tokens) {
         while ctxCheck(ctx, tokens, TOKEN_AT) {
@@ -694,8 +698,9 @@ func generate(c: codegen, tokens: [Token]): codegen {
         elif ctxCheck(ctx, tokens, TOKEN_KW_CONST) { ctx = skipConstDecl(ctx, tokens) }
         else { ctx = ctxAdvance(ctx, tokens) }
     }
-    ctx.c = emitStringData(ctx.c)
+    // Emit runtime helper functions
     ctx.c = emitRuntimeHelpers(ctx.c)
+
     return ctx.c
 }
 
@@ -1181,16 +1186,16 @@ func emitRuntimeHelpers(c: codegen): codegen {
 }
 
 func emitRuntimeData(c: codegen): codegen {
-    c = label(c, "__ae_saved_argc")
-    for i in 0..8 { c.text = push(c.text, 0) }
-    c = label(c, "__ae_saved_argv")
-    for i in 0..8 { c.text = push(c.text, 0) }
-    c = label(c, "__ae_read_buf")
-    for i in 0..4096 { c.text = push(c.text, 0) }
-    c = label(c, "__ae_empty_str")
-    c.text = push(c.text, 0)
-    c = label(c, "__ae_heap_start")
-    for i in 0..65536 { c.text = push(c.text, 0) }
+    c = labelData(c, "__ae_saved_argc")
+    for i in 0..8 { c.data = push(c.data, 0) }
+    c = labelData(c, "__ae_saved_argv")
+    for i in 0..8 { c.data = push(c.data, 0) }
+    c = labelData(c, "__ae_read_buf")
+    for i in 0..4096 { c.data = push(c.data, 0) }
+    c = labelData(c, "__ae_empty_str")
+    c.data = push(c.data, 0)
+    c = labelData(c, "__ae_heap_start")
+    for i in 0..65536 { c.data = push(c.data, 0) }
     return c
 }
 
@@ -1283,17 +1288,16 @@ func emitAeGetArg(c: codegen): codegen {
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
     c = emitPush(c, "rbx")
     c = emitMovR64R64(c, "rbx", "rdi")
-    // argc is at [rbp+16] (saved by emitStart: push rdi, push rsi)
-    // Actually, emitStart pushes rdi (argc) then rsi (argv) before calling main
-    // main's prologue pushes rbp, so argc is at [rbp+24]
-    c = emitMovFromAddr(c, "rdx", "rbp", 24)  // rdx = argc
+    // Stack: _start pushed rdi(argc) then rsi(argv), called main,
+    // main pushed rbp, called __ae_get_arg which pushed rbp
+    // argc at [rbp+40], argv at [rbp+32]
+    c = emitMovFromAddr(c, "rdx", "rbp", 40)  // rdx = argc
     c = emitCmpR64R64(c, "rbx", "rdx")
     c = emitJbLabel(c, "__ae_get_arg_ok")
     c = emitLeaR64Label(c, "rax", "__ae_empty_str")
     c = emitPop(c, "rbx"); c = emitPop(c, "rbp"); c = emitRet(c)
     c = label(c, "__ae_get_arg_ok")
-    // argv is at [rbp+16]
-    c = emitMovFromAddr(c, "rcx", "rbp", 16)  // rcx = argv
+    c = emitMovFromAddr(c, "rcx", "rbp", 32)  // rcx = argv
     c = emitMovR64R64(c, "rax", "rbx")
     c = emitShlR64Imm8(c, "rax", 3)
     c = emitAddR64R64(c, "rax", "rcx")
@@ -1305,9 +1309,7 @@ func emitAeGetArg(c: codegen): codegen {
 func emitAeArgc(c: codegen): codegen {
     c = label(c, "__ae_argc")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
-    // argc is at [rbp+16] (saved by emitStart: push rdi, push rsi)
-    // main's prologue pushes rbp, so argc is at [rbp+24]
-    c = emitMovFromAddr(c, "rax", "rbp", 24)
+    c = emitMovFromAddr(c, "rax", "rbp", 40)
     c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
@@ -1887,6 +1889,8 @@ func linkElf(c: codegen): codegen {
 
 func linkMachO(c: codegen): codegen {
     // First, patch all label references in the text buffer
+    // Labels in __TEXT use text offsets, labels in __DATA use data offsets
+    // We need to convert file offsets to virtual addresses for correct RIP-relative displacement
     var patchedText: [byte] = c.text
     for i in 0..#c.labelRefs {
         let refName = c.labelRefs[i]
@@ -1900,29 +1904,67 @@ func linkMachO(c: codegen): codegen {
         }
     }
 
-    // Combine text + rodata + data into one flat buffer (all in __TEXT)
-    var allCode: [byte] = patchedText
-    for i in 0..#c.rodata { allCode = push(allCode, c.rodata[i]) }
-    for i in 0..#c.data { allCode = push(allCode, c.data[i]) }
+    // Combine text + rodata into __TEXT section
+    var textSection: [byte] = patchedText
+    for i in 0..#c.rodata { textSection = push(textSection, c.rodata[i]) }
 
-    let codeSize = #allCode
+    let textSize = #textSection
+    let dataSize = #c.data
 
-    // Mach-O header + load commands = 440 bytes (no __DATA segment)
+    // Mach-O header + load commands = 624 bytes
     let headerSize: u64 = 32
     let pagezeroSize: u64 = 72
     let textSegSize: u64 = 144
+    let dataSegSize: u64 = 144
     let threadSize: u64 = 184
     let dyldSize: u64 = 48
-    let loadCommandsSize = pagezeroSize + textSegSize + threadSize + dyldSize
+    let loadCommandsSize = pagezeroSize + textSegSize + dataSegSize + threadSize + dyldSize
     let totalHeaderSize = headerSize + loadCommandsSize
 
     // File offsets
     let textFileOff: u64 = totalHeaderSize
+    let dataFileOff = textFileOff + textSize
 
-    // Virtual address
+    // Virtual addresses (contiguous)
     let textVMAddr: u64 = 0x100000000
+    let dataVMAddr = textVMAddr + textSize
 
-    let totalFileSize = totalHeaderSize + codeSize
+    // Re-patch label references using virtual addresses instead of file offsets
+    // The displacement for a RIP-relative reference at text offset X to a target at
+    // file offset Y is: targetVMAddr - (refVMAddr + refSize)
+    // where refVMAddr = textVMAddr + refOffset (since all refs are in __TEXT)
+    // and targetVMAddr = textVMAddr + targetOffset if target is in __TEXT
+    // or targetVMAddr = dataVMAddr + (targetOffset - textSize - rodataSize) if target is in __DATA
+    let rodataSize = #c.rodata
+    var patchedText2: [byte] = textSection
+    for i in 0..#c.labelRefs {
+        let refName = c.labelRefs[i]
+        let refOffset = c.labelRefOffsets[i]
+        let refSize = c.labelRefSizes[i]
+        let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
+        if not hasLabel(c.labels, refName) and refName != "" {
+            c.errors = push(c.errors, "undefined label: " + refName)
+        } else {
+            // Convert to virtual addresses
+            let refVMAddr = textVMAddr + refOffset
+            var targetVMAddr: u64 = 0
+            if targetOffset < textSize {
+                // Target is in __TEXT
+                targetVMAddr = textVMAddr + targetOffset
+            } else {
+                // Target is in __DATA
+                let dataOffset = targetOffset - textSize
+                targetVMAddr = dataVMAddr + dataOffset
+            }
+            let disp = targetVMAddr - (refVMAddr + refSize)
+            patchedText2[refOffset] = disp & 0xFF
+            patchedText2[refOffset + 1] = (disp >> 8) & 0xFF
+            patchedText2[refOffset + 2] = (disp >> 16) & 0xFF
+            patchedText2[refOffset + 3] = (disp >> 24) & 0xFF
+        }
+    }
+
+    let totalFileSize = totalHeaderSize + textSize + dataSize
     var buf: [byte] = []
     for i in 0..totalFileSize { buf = push(buf, 0) }
 
@@ -1933,19 +1975,19 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0xFA; off = off + 1
     buf[off] = 0xED; off = off + 1
     buf[off] = 0xFE; off = off + 1
-    buf[off] = 0x07; off = off + 1  // CPU_TYPE_X86_64
+    buf[off] = 0x07; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x01; off = off + 1
-    buf[off] = 0x03; off = off + 1  // CPU_SUBTYPE_X86_64_ALL
+    buf[off] = 0x03; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x02; off = off + 1  // MH_EXECUTE
+    buf[off] = 0x02; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x04; off = off + 1  // ncmds = 4 (no __DATA)
+    buf[off] = 0x05; off = off + 1  // ncmds = 5
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -1953,7 +1995,7 @@ func linkMachO(c: codegen): codegen {
     buf[off] = (loadCommandsSize >> 8) & 0xFF; off = off + 1
     buf[off] = (loadCommandsSize >> 16) & 0xFF; off = off + 1
     buf[off] = (loadCommandsSize >> 24) & 0xFF; off = off + 1
-    buf[off] = 0x85; off = off + 1  // flags
+    buf[off] = 0x85; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x20; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -1968,7 +2010,6 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    // segname = "__PAGEZERO"
     buf[off] = 0x5F; off = off + 1
     buf[off] = 0x5F; off = off + 1
     buf[off] = 0x50; off = off + 1
@@ -1996,7 +2037,7 @@ func linkMachO(c: codegen): codegen {
     for i in 0..4 { buf[off] = 0; off = off + 1 }
     for i in 0..4 { buf[off] = 0; off = off + 1 }
 
-    // LC_SEGMENT_64 __TEXT (144 bytes)
+    // LC_SEGMENT_64 __TEXT (144 bytes) — RX
     buf[off] = 0x19; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -2005,7 +2046,6 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    // segname = "__TEXT"
     buf[off] = 0x5F; off = off + 1
     buf[off] = 0x5F; off = off + 1
     buf[off] = 0x54; off = off + 1
@@ -2014,18 +2054,18 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x54; off = off + 1
     for i in 0..10 { buf[off] = 0; off = off + 1 }
     for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (codeSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (codeSize >> (i * 8)) & 0xFF; off = off + 1 }
-    buf[off] = 0x07; off = off + 1  // maxprot = RWX
+    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
+    buf[off] = 0x05; off = off + 1  // maxprot = RX
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x07; off = off + 1  // initprot = RWX
+    buf[off] = 0x05; off = off + 1  // initprot = RX
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1  // nsects = 1
+    buf[off] = 0x01; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -2046,7 +2086,7 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x54; off = off + 1
     for i in 0..10 { buf[off] = 0; off = off + 1 }
     for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (codeSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..4 { buf[off] = 0; off = off + 1 }
     for i in 0..4 { buf[off] = 0; off = off + 1 }
@@ -2055,6 +2095,66 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x04; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x80; off = off + 1
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+
+    // LC_SEGMENT_64 __DATA (144 bytes) — RW
+    buf[off] = 0x19; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x90; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x44; off = off + 1
+    buf[off] = 0x41; off = off + 1
+    buf[off] = 0x54; off = off + 1
+    buf[off] = 0x41; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
+    buf[off] = 0x07; off = off + 1  // maxprot = RWX
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x03; off = off + 1  // initprot = RW
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x01; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    // Section __data (72 bytes)
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x64; off = off + 1
+    buf[off] = 0x61; off = off + 1
+    buf[off] = 0x74; off = off + 1
+    buf[off] = 0x61; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x5F; off = off + 1
+    buf[off] = 0x44; off = off + 1
+    buf[off] = 0x41; off = off + 1
+    buf[off] = 0x54; off = off + 1
+    buf[off] = 0x41; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    buf[off] = 0x01; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
     for i in 0..8 { buf[off] = 0; off = off + 1 }
 
     // LC_UNIXTHREAD (184 bytes)
@@ -2108,9 +2208,8 @@ func linkMachO(c: codegen): codegen {
     for i in 0..40 { buf[off] = 0; off = off + 1 }
 
     // Write section data
-    for i in 0..#allCode {
-        buf[textFileOff + i] = allCode[i]
-    }
+    for i in 0..#patchedText2 { buf[textFileOff + i] = patchedText2[i] }
+    for i in 0..#c.data { buf[dataFileOff + i] = c.data[i] }
 
     c.output = buf
     return c
