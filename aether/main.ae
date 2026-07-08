@@ -21,7 +21,7 @@ func __ae_read_file(path: string): string;
 // __ae_write_file is a runtime helper provided by the Go bootstrap
 // It writes bytes to a file and returns 0 on success
 @extern
-func __ae_write_file(path: string, data: [byte]): u64;
+func __ae_write_file(path: string, data: [byte], len: u64): u64;
 
 // __ae_exit is a runtime helper provided by the Go bootstrap
 // It exits the process with the given exit code
@@ -175,7 +175,7 @@ func main(): u64 {
     }
 
     // Write output binary
-    let result = __ae_write_file(outputPath, cg.output)
+    let result = __ae_write_file(outputPath, cg.output, #cg.output)
     if result != 0 {
         __ae_print("error: could not write output file: ")
         __ae_print(outputPath)

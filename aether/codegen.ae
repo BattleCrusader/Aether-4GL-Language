@@ -1283,15 +1283,17 @@ func emitAeGetArg(c: codegen): codegen {
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
     c = emitPush(c, "rbx")
     c = emitMovR64R64(c, "rbx", "rdi")
-    c = emitLeaR64Label(c, "rcx", "__ae_saved_argc")
-    c = emitMovFromAddr(c, "rdx", "rcx", 0)
+    // argc is at [rbp+16] (saved by emitStart: push rdi, push rsi)
+    // Actually, emitStart pushes rdi (argc) then rsi (argv) before calling main
+    // main's prologue pushes rbp, so argc is at [rbp+24]
+    c = emitMovFromAddr(c, "rdx", "rbp", 24)  // rdx = argc
     c = emitCmpR64R64(c, "rbx", "rdx")
     c = emitJbLabel(c, "__ae_get_arg_ok")
     c = emitLeaR64Label(c, "rax", "__ae_empty_str")
     c = emitPop(c, "rbx"); c = emitPop(c, "rbp"); c = emitRet(c)
     c = label(c, "__ae_get_arg_ok")
-    c = emitLeaR64Label(c, "rcx", "__ae_saved_argv")
-    c = emitMovFromAddr(c, "rcx", "rcx", 0)
+    // argv is at [rbp+16]
+    c = emitMovFromAddr(c, "rcx", "rbp", 16)  // rcx = argv
     c = emitMovR64R64(c, "rax", "rbx")
     c = emitShlR64Imm8(c, "rax", 3)
     c = emitAddR64R64(c, "rax", "rcx")
@@ -1303,8 +1305,9 @@ func emitAeGetArg(c: codegen): codegen {
 func emitAeArgc(c: codegen): codegen {
     c = label(c, "__ae_argc")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
-    c = emitLeaR64Label(c, "rcx", "__ae_saved_argc")
-    c = emitMovFromAddr(c, "rax", "rcx", 0)
+    // argc is at [rbp+16] (saved by emitStart: push rdi, push rsi)
+    // main's prologue pushes rbp, so argc is at [rbp+24]
+    c = emitMovFromAddr(c, "rax", "rbp", 24)
     c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
@@ -1897,38 +1900,31 @@ func linkMachO(c: codegen): codegen {
         }
     }
 
-    // Combine text and rodata into one __text section
-    var textSection: [byte] = patchedText
-    for i in 0..#c.rodata {
-        textSection = push(textSection, c.rodata[i])
-    }
+    // Combine text + rodata + data into one flat buffer (all in __TEXT)
+    var allCode: [byte] = patchedText
+    for i in 0..#c.rodata { allCode = push(allCode, c.rodata[i]) }
+    for i in 0..#c.data { allCode = push(allCode, c.data[i]) }
 
-    let textSize = #textSection
-    let dataSize = #c.data
+    let codeSize = #allCode
 
-    // Mach-O header + load commands = 624 bytes
+    // Mach-O header + load commands = 440 bytes (no __DATA segment)
     let headerSize: u64 = 32
     let pagezeroSize: u64 = 72
     let textSegSize: u64 = 144
-    let dataSegSize: u64 = 144
     let threadSize: u64 = 184
     let dyldSize: u64 = 48
-    let loadCommandsSize = pagezeroSize + textSegSize + dataSegSize + threadSize + dyldSize
+    let loadCommandsSize = pagezeroSize + textSegSize + threadSize + dyldSize
     let totalHeaderSize = headerSize + loadCommandsSize
 
     // File offsets
     let textFileOff: u64 = totalHeaderSize
-    let dataFileOff = textFileOff + textSize
 
-    // Virtual addresses (base at 0x100000000)
+    // Virtual address
     let textVMAddr: u64 = 0x100000000
-    let dataVMAddr = textVMAddr + textSize
 
-    let totalFileSize = totalHeaderSize + textSize + dataSize
+    let totalFileSize = totalHeaderSize + codeSize
     var buf: [byte] = []
-    for i in 0..totalFileSize {
-        buf = push(buf, 0)
-    }
+    for i in 0..totalFileSize { buf = push(buf, 0) }
 
     var off: u64 = 0
 
@@ -1937,19 +1933,19 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0xFA; off = off + 1
     buf[off] = 0xED; off = off + 1
     buf[off] = 0xFE; off = off + 1
-    buf[off] = 0x07; off = off + 1
+    buf[off] = 0x07; off = off + 1  // CPU_TYPE_X86_64
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x01; off = off + 1
-    buf[off] = 0x03; off = off + 1
+    buf[off] = 0x03; off = off + 1  // CPU_SUBTYPE_X86_64_ALL
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x02; off = off + 1
+    buf[off] = 0x02; off = off + 1  // MH_EXECUTE
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x05; off = off + 1
+    buf[off] = 0x04; off = off + 1  // ncmds = 4 (no __DATA)
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -1957,7 +1953,7 @@ func linkMachO(c: codegen): codegen {
     buf[off] = (loadCommandsSize >> 8) & 0xFF; off = off + 1
     buf[off] = (loadCommandsSize >> 16) & 0xFF; off = off + 1
     buf[off] = (loadCommandsSize >> 24) & 0xFF; off = off + 1
-    buf[off] = 0x85; off = off + 1
+    buf[off] = 0x85; off = off + 1  // flags
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x20; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -2018,18 +2014,18 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x54; off = off + 1
     for i in 0..10 { buf[off] = 0; off = off + 1 }
     for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (codeSize >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
-    buf[off] = 0x07; off = off + 1
+    for i in 0..8 { buf[off] = (codeSize >> (i * 8)) & 0xFF; off = off + 1 }
+    buf[off] = 0x07; off = off + 1  // maxprot = RWX
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x07; off = off + 1
+    buf[off] = 0x07; off = off + 1  // initprot = RWX
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1
+    buf[off] = 0x01; off = off + 1  // nsects = 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -2050,7 +2046,7 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x54; off = off + 1
     for i in 0..10 { buf[off] = 0; off = off + 1 }
     for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (codeSize >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..4 { buf[off] = 0; off = off + 1 }
     for i in 0..4 { buf[off] = 0; off = off + 1 }
@@ -2059,67 +2055,6 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x04; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x80; off = off + 1
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-
-    // LC_SEGMENT_64 __DATA (144 bytes)
-    buf[off] = 0x19; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x90; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    // segname = "__DATA"
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x44; off = off + 1
-    buf[off] = 0x41; off = off + 1
-    buf[off] = 0x54; off = off + 1
-    buf[off] = 0x41; off = off + 1
-    for i in 0..10 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
-    buf[off] = 0x07; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x03; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // Section __data (72 bytes)
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x64; off = off + 1
-    buf[off] = 0x61; off = off + 1
-    buf[off] = 0x74; off = off + 1
-    buf[off] = 0x61; off = off + 1
-    for i in 0..10 { buf[off] = 0; off = off + 1 }
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x44; off = off + 1
-    buf[off] = 0x41; off = off + 1
-    buf[off] = 0x54; off = off + 1
-    buf[off] = 0x41; off = off + 1
-    for i in 0..10 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    buf[off] = 0x01; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
     for i in 0..8 { buf[off] = 0; off = off + 1 }
 
     // LC_UNIXTHREAD (184 bytes)
@@ -2173,11 +2108,8 @@ func linkMachO(c: codegen): codegen {
     for i in 0..40 { buf[off] = 0; off = off + 1 }
 
     // Write section data
-    for i in 0..#textSection {
-        buf[textFileOff + i] = textSection[i]
-    }
-    for i in 0..#c.data {
-        buf[dataFileOff + i] = c.data[i]
+    for i in 0..#allCode {
+        buf[textFileOff + i] = allCode[i]
     }
 
     c.output = buf
