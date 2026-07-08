@@ -14,7 +14,7 @@ func do_fail(): u64 throws {
 
 @test
 func main(): void {
-    let mut result: u64 = 0
+    var result: u64 = 0
 
     try {
         result = do_fail()

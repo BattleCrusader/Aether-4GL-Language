@@ -25,7 +25,7 @@ func test_property_getter(): void {
 
 @test
 func test_property_setter(): void {
-    let mut b: Box
+    var b: Box
     b.value = 0
     b.doubled(10)
     assertTrue(b.value == 5, "setter: 10 / 2 == 5")
@@ -33,7 +33,7 @@ func test_property_setter(): void {
 
 @test
 func test_property_roundtrip(): void {
-    let mut b: Box
+    var b: Box
     b.value = 7
     let d: int = b.doubled()
     b.doubled(d)

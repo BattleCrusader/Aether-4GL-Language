@@ -42,10 +42,10 @@ impl Drawable for Square {
 @test
 func main(): void {
     // Create shapes
-    let mut c: Circle
+    var c: Circle
     c.radius = 7
 
-    let mut s: Square
+    var s: Square
     s.side = 5
 
     // Call trait methods

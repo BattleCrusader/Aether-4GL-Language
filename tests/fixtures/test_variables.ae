@@ -7,7 +7,7 @@ import "std/test"
 // Global variables (Section 5.4)
 // ============================================================
 let GLOBAL_CONFIG: string = "default_config"
-let mut global_counter: u64 = 0
+var global_counter: u64 = 0
 let GLOBAL_PI: f64 = 3.14159
 
 // ============================================================
@@ -55,7 +55,7 @@ func test_let_inferred_type(): u64 {
 // ============================================================
 @test(expect=0)
 func test_let_mutable(): u64 {
-    let mut x: u64 = 10
+    var x: u64 = 10
     assertEquals(10, x, "mutable initial value")
 
     x = 20
@@ -383,7 +383,7 @@ func test_all_primitive_types(): u64 {
 // ============================================================
 @test(expect=0)
 func test_mutable_bitwise_compound(): u64 {
-    let mut flags: u64 = 0b1010
+    var flags: u64 = 0b1010
 
     flags |= 0b0101
     assertEquals(0b1111, flags, "bitwise OR compound")

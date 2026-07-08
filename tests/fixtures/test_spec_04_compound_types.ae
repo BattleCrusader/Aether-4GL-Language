@@ -15,7 +15,7 @@ func main(): void {
     let arr_len: u64 = #arr  // should be 4
 
     // Pointer
-    let mut val: u64 = 42
+    var val: u64 = 42
     let ptr: *u64 = &val
 
     // Reference

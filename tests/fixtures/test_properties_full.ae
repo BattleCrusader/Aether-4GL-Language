@@ -130,8 +130,8 @@ func op_mul_int(a: int, b: int): int {
 
 // op_power: custom power-like operator
 func op_power(base: int, exp: int): int {
-    let mut result: int = 1
-    let mut i: int = 0
+    var result: int = 1
+    var i: int = 0
     while i < exp {
         result = result * base
         i = i + 1
@@ -220,7 +220,7 @@ func test_property_getters(): u64 {
 }
 
 func test_property_setters(): u64 {
-    let mut c: Counter
+    var c: Counter
     c.value = 0
     set_value(ref c, 10)
     increment(ref c)

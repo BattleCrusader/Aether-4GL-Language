@@ -156,7 +156,7 @@ func test_channel_buffered(): u64 {
     chan_send(ch, 4)
     chan_send(ch, 5)
     // Receive all
-    let mut sum: u64 = 0
+    var sum: u64 = 0
     sum += chan_recv(ch)
     sum += chan_recv(ch)
     sum += chan_recv(ch)
@@ -265,7 +265,7 @@ max_fibers:       dq 64
 // No preemption, no timer interrupts needed
 
 func test_cooperative_worker_a() {
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < 10 {
         // Do some work
         i += 1
@@ -275,7 +275,7 @@ func test_cooperative_worker_a() {
 }
 
 func test_cooperative_worker_b() {
-    let mut i: u64 = 0
+    var i: u64 = 0
     while i < 5 {
         // Do some work
         i += 1
@@ -306,7 +306,7 @@ func test_fiber_destroy(stack: u64) {
 
 func test_fiber_sleep(ticks: u64) {
     // Sleep for specified number of ticks
-    let mut remaining: u64 = ticks
+    var remaining: u64 = ticks
     while remaining > 0 {
         test_fiber_yield()
         remaining -= 1
@@ -317,7 +317,7 @@ func test_fiber_sleep(ticks: u64) {
 
 func main(): u64 {
     // Run all concurrency tests
-    let mut result: u64 = 0
+    var result: u64 = 0
 
     // Channel tests
     let ch: u64 = test_channel_create()

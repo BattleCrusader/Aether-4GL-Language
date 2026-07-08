@@ -15,14 +15,14 @@ func classify(x: u64): u64 {
 @test
 func main(): void {
     // Half-open range in for loop
-    let mut sum1: u64 = 0
+    var sum1: u64 = 0
     for i in 0..10 {
         sum1 = sum1 + i
     }
     // sum1 = 0+1+2+...+9 = 45
 
     // Inclusive range in for loop
-    let mut sum2: u64 = 0
+    var sum2: u64 = 0
     for i in 0..=5 {
         sum2 = sum2 + i
     }

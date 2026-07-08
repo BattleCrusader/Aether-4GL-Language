@@ -24,8 +24,8 @@ public func clamp(value: int, lowerBound: int, upperBound: int): int {
 
 public func integerSquareRoot(value: u64): u64 {
     if value < 2 { return value }
-    let mut x: u64 = value
-    let mut y: u64 = (x + 1) / 2
+    var x: u64 = value
+    var y: u64 = (x + 1) / 2
     while y < x {
         x = y
         y = (y + value / y) / 2
@@ -35,9 +35,9 @@ public func integerSquareRoot(value: u64): u64 {
 
 public func power(base: u64, exponent: u64): u64 {
     if exponent == 0 { return 1 }
-    let mut result: u64 = 1
-    let mut b: u64 = base
-    let mut e: u64 = exponent
+    var result: u64 = 1
+    var b: u64 = base
+    var e: u64 = exponent
     while e > 0 {
         if e & 1 == 1 { result = result * b }
         b = b * b
@@ -50,7 +50,7 @@ public func isPrime(value: u64): bool {
     if value < 2 { return false }
     if value < 4 { return true }
     if value % 2 == 0 { return false }
-    let mut i: u64 = 3
+    var i: u64 = 3
     while i * i <= value {
         if value % i == 0 { return false }
         i = i + 2
@@ -73,8 +73,8 @@ public func leastCommonMultiple(a: u64, b: u64): u64 {
 
 public func factorial(value: u64): u64 {
     if value <= 1 { return 1 }
-    let mut result: u64 = 1
-    let mut i: u64 = 2
+    var result: u64 = 1
+    var i: u64 = 2
     while i <= value {
         result = result * i
         i = i + 1
@@ -85,9 +85,9 @@ public func factorial(value: u64): u64 {
 public func fibonacci(value: u64): u64 {
     if value == 0 { return 0 }
     if value == 1 { return 1 }
-    let mut a: u64 = 0
-    let mut b: u64 = 1
-    let mut i: u64 = 2
+    var a: u64 = 0
+    var b: u64 = 1
+    var i: u64 = 2
     while i <= value {
         let next: u64 = a + b
         a = b

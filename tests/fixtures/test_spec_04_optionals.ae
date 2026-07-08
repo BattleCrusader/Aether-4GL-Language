@@ -17,7 +17,7 @@ func main(): void {
     let val3: u64 = opt_none or 100   // 100
 
     // if-let pattern matching
-    let mut result: u64 = 0
+    var result: u64 = 0
 
     if let v = opt_some {
         result = result + v  // +42

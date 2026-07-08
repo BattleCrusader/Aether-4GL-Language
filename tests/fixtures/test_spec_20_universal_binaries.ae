@@ -264,7 +264,7 @@ func test_elf_ident_check(ident: ptr byte): bool {
 // ── Architecture Feature Detection ────────────────────────────────────────
 
 func test_cpu_feature_detection(): u64 {
-    let mut features: u64 = 0
+    var features: u64 = 0
     asm {
         mov rax, 1
         cpuid

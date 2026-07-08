@@ -1,5 +1,5 @@
 func main(): u64 {
-    let mut p = heap 42
+    var p = heap 42
     let val = *p
     return val
 }

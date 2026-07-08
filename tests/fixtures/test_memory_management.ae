@@ -124,7 +124,7 @@ func test_rc_type(): u64 {
 // ── 8.7 Region-Based Allocation ──────────────────────────────────────────
 
 func test_region_basic(): u64 {
-    let mut result: u64 = 0
+    var result: u64 = 0
     region("test") {
         let p = heap 42
         result = *p
@@ -133,7 +133,7 @@ func test_region_basic(): u64 {
 }
 
 func test_region_anon(): u64 {
-    let mut result: u64 = 0
+    var result: u64 = 0
     region("anon") {
         let p = heap 100
         result = *p
@@ -142,8 +142,8 @@ func test_region_anon(): u64 {
 }
 
 func test_region_nested(): u64 {
-    let mut outer_val: u64 = 0
-    let mut inner_val: u64 = 0
+    var outer_val: u64 = 0
+    var inner_val: u64 = 0
     region("outer") {
         let o = heap 10
         outer_val = *o
@@ -188,8 +188,8 @@ func test_optional_or_default_some(): u64 {
 // ── 8.9 Mixed Memory Patterns ───────────────────────────────────────────
 
 func test_heap_then_region(): u64 {
-    let mut heap_val: u64 = 0
-    let mut region_val: u64 = 0
+    var heap_val: u64 = 0
+    var region_val: u64 = 0
 
     let p = heap 55
     heap_val = *p
@@ -203,7 +203,7 @@ func test_heap_then_region(): u64 {
 }
 
 func test_owned_in_region(): u64 {
-    let mut result: u64 = 0
+    var result: u64 = 0
     region("owned_region") {
         let r: Resource
         r.id = 42

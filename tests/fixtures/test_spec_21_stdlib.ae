@@ -257,7 +257,7 @@ func test_collections_array_length(): u64 {
 }
 
 func test_collections_array_mutate() {
-    let mut arr: [u64] = [1, 2, 3]
+    var arr: [u64] = [1, 2, 3]
     arr[0] = 100
     arr[1] = 200
     arr[2] = 300
@@ -265,7 +265,7 @@ func test_collections_array_mutate() {
 
 func test_collections_array_iterate(): u64 {
     let arr: [u64] = [1, 2, 3, 4, 5]
-    let mut sum: u64 = 0
+    var sum: u64 = 0
     for val in arr {
         sum += val
     }
@@ -274,7 +274,7 @@ func test_collections_array_iterate(): u64 {
 
 func test_collections_array_iterate_index(): u64 {
     let arr: [u64] = [10, 20, 30]
-    let mut sum: u64 = 0
+    var sum: u64 = 0
     for i, val in arr {
         sum += val
     }
@@ -498,7 +498,7 @@ func test_typeName_bool(): string {
 
 func main(): u64 {
     // Run all stdlib tests
-    let mut failures: u64 = 0
+    var failures: u64 = 0
 
     // I/O tests
     test_io_print()

@@ -52,7 +52,7 @@ func test_expression_bodied(): u64 {
 // ============================================================
 // Test 3: Void return functions (Section 6.1)
 // ============================================================
-let mut void_side_effect: u64 = 0
+var void_side_effect: u64 = 0
 
 func void_func() {
     void_side_effect = 42
@@ -268,8 +268,8 @@ func test_default_params(): u64 {
 // Test 16: Default parameter with one required (Section 6.3)
 // ============================================================
 func power_default(base: u64, exp: u64 = 2): u64 {
-    let mut result: u64 = 1
-    let mut i: u64 = 0
+    var result: u64 = 1
+    var i: u64 = 0
     while i < exp {
         result = result * base
         i = i + 1
@@ -303,7 +303,7 @@ func test_extern_declaration(): u64 {
 // Test 18: Variadic functions — basic (Section 6.4)
 // ============================================================
 func variadic_sum(values: ...u64): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for v in values {
         total = total + v
     }
@@ -322,7 +322,7 @@ func test_variadic_basic(): u64 {
 // Test 19: Variadic with regular params (Section 6.4)
 // ============================================================
 func variadic_with_prefix(factor: u64, values: ...u64): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for v in values {
         total = total + v
     }
@@ -340,7 +340,7 @@ func test_variadic_with_prefix(): u64 {
 // Test 20: Variadic with many elements (Section 6.4)
 // ============================================================
 func variadic_many(values: ...u64): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for v in values {
         total = total + v
     }
@@ -360,7 +360,7 @@ func test_variadic_many(): u64 {
 // Test 21: Variadic with for loop index (Section 6.4)
 // ============================================================
 func variadic_with_index(values: ...u64): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for i, v in values {
         total = total + v
     }
@@ -377,7 +377,7 @@ func test_variadic_with_index(): u64 {
 // Test 22: Variadic with different integer types (Section 6.4)
 // ============================================================
 func variadic_u8(values: ...u8): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for v in values {
         total = total + v
     }
@@ -385,7 +385,7 @@ func variadic_u8(values: ...u8): u64 {
 }
 
 func variadic_i64(values: ...i64): i64 {
-    let mut total: i64 = 0
+    var total: i64 = 0
     for v in values {
         total = total + v
     }
@@ -463,7 +463,7 @@ func test_conditional_return(): u64 {
 // Test 26: Function with string parameter (Section 6.1)
 // ============================================================
 func string_length(s: string): u64 {
-    let mut len: u64 = 0
+    var len: u64 = 0
     while s[len] != 0 {
         len = len + 1
     }
@@ -600,8 +600,8 @@ func test_logical_funcs(): u64 {
 // Test 33: Function with while loop inside (Section 6.1)
 // ============================================================
 func sum_to_n(n: u64): u64 {
-    let mut total: u64 = 0
-    let mut i: u64 = 0
+    var total: u64 = 0
+    var i: u64 = 0
     while i <= n {
         total = total + i
         i = i + 1
@@ -622,7 +622,7 @@ func test_func_with_while(): u64 {
 // Test 34: Function with for loop inside (Section 6.1)
 // ============================================================
 func sum_range(n: u64): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for i in 0..n {
         total = total + i
     }
@@ -706,7 +706,7 @@ func test_abs(): u64 {
 // Test 38: Function with compound assignment (Section 6.1)
 // ============================================================
 func accumulate(values: ...u64): u64 {
-    let mut result: u64 = 0
+    var result: u64 = 0
     for v in values {
         result += v
     }

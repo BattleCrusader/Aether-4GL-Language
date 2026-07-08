@@ -407,7 +407,7 @@ func test_comptime_constants(): u64 {
 
 func main(): u64 {
     // Run all future features tests
-    let mut result: u64 = 0
+    var result: u64 = 0
 
     result += test_comptime_memory_map()
     result += test_goal_io_read()

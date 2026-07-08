@@ -6,7 +6,7 @@ import "std/test"
 // Test 1: Variadic u64 — basic sum (happy path from spec)
 // ============================================================
 func sum(values: ...u64): u64 {
-    let mut total = 0
+    var total = 0
     for v in values {
         total += v
     }
@@ -17,7 +17,7 @@ func sum(values: ...u64): u64 {
 // Test 2: Variadic u8 — small values
 // ============================================================
 func sumU8(values: ...u8): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for v in values {
         total += v
     }
@@ -28,7 +28,7 @@ func sumU8(values: ...u8): u64 {
 // Test 3: Variadic u16 — medium values
 // ============================================================
 func sumU16(values: ...u16): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for v in values {
         total += v
     }
@@ -39,7 +39,7 @@ func sumU16(values: ...u16): u64 {
 // Test 4: Variadic u32 — large values
 // ============================================================
 func sumU32(values: ...u32): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for v in values {
         total += v
     }
@@ -50,7 +50,7 @@ func sumU32(values: ...u32): u64 {
 // Test 5: Variadic i8 — signed small values
 // ============================================================
 func sumI8(values: ...i8): i64 {
-    let mut total: i64 = 0
+    var total: i64 = 0
     for v in values {
         total += v
     }
@@ -61,7 +61,7 @@ func sumI8(values: ...i8): i64 {
 // Test 6: Variadic i16 — signed medium values
 // ============================================================
 func sumI16(values: ...i16): i64 {
-    let mut total: i64 = 0
+    var total: i64 = 0
     for v in values {
         total += v
     }
@@ -72,7 +72,7 @@ func sumI16(values: ...i16): i64 {
 // Test 7: Variadic i32 — signed large values
 // ============================================================
 func sumI32(values: ...i32): i64 {
-    let mut total: i64 = 0
+    var total: i64 = 0
     for v in values {
         total += v
     }
@@ -83,7 +83,7 @@ func sumI32(values: ...i32): i64 {
 // Test 8: Variadic i64 — signed max values
 // ============================================================
 func sumI64(values: ...i64): i64 {
-    let mut total: i64 = 0
+    var total: i64 = 0
     for v in values {
         total += v
     }
@@ -94,7 +94,7 @@ func sumI64(values: ...i64): i64 {
 // Test 9: Variadic bool — count trues
 // ============================================================
 func countTrue(values: ...bool): u64 {
-    let mut count: u64 = 0
+    var count: u64 = 0
     for v in values {
         if v {
             count += 1
@@ -107,7 +107,7 @@ func countTrue(values: ...bool): u64 {
 // Test 10: Variadic byte — same as u8
 // ============================================================
 func sumByte(values: ...byte): u64 {
-    let mut total: u64 = 0
+    var total: u64 = 0
     for v in values {
         total += v
     }
@@ -118,7 +118,7 @@ func sumByte(values: ...byte): u64 {
 // Test 11: Empty variadic — no args
 // ============================================================
 func emptySum(values: ...u64): u64 {
-    let mut total = 0
+    var total = 0
     for v in values {
         total += v
     }
@@ -129,7 +129,7 @@ func emptySum(values: ...u64): u64 {
 // Test 12: Single element variadic
 // ============================================================
 func singleSum(values: ...u64): u64 {
-    let mut total = 0
+    var total = 0
     for v in values {
         total += v
     }
@@ -140,7 +140,7 @@ func singleSum(values: ...u64): u64 {
 // Test 13: Variadic with regular params before it
 // ============================================================
 func multiplySum(factor: u64, values: ...u64): u64 {
-    let mut total = 0
+    var total = 0
     for v in values {
         total += v
     }
@@ -151,7 +151,7 @@ func multiplySum(factor: u64, values: ...u64): u64 {
 // Test 14: Many elements (10+)
 // ============================================================
 func sumMany(values: ...u64): u64 {
-    let mut total = 0
+    var total = 0
     for v in values {
         total += v
     }
@@ -162,7 +162,7 @@ func sumMany(values: ...u64): u64 {
 // Test 15: Variadic with for loop using index variable
 // ============================================================
 func sumWithIndex(values: ...u64): u64 {
-    let mut total = 0
+    var total = 0
     for i, v in values {
         total += v
     }
@@ -173,7 +173,7 @@ func sumWithIndex(values: ...u64): u64 {
 // Test 16: Nested for loops over variadic
 // ============================================================
 func nestedSum(values: ...u64): u64 {
-    let mut total = 0
+    var total = 0
     for v in values {
         for w in values {
             total += w
@@ -186,7 +186,7 @@ func nestedSum(values: ...u64): u64 {
 // Test 17: Variadic with string interpolation in print
 // ============================================================
 func printAndSum(values: ...u64): u64 {
-    let mut total = 0
+    var total = 0
     for v in values {
         total += v
     }

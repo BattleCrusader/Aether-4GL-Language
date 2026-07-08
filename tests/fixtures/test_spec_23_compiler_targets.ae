@@ -422,7 +422,7 @@ func test_target_config(target_id: u64): bool {
 
 func main(): u64 {
     // Run all target tests
-    let mut result: u64 = 0
+    var result: u64 = 0
 
     result += test_target_host_entry()
     result += test_target_host_return()

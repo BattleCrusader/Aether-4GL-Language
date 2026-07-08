@@ -25,9 +25,9 @@ func printError(value: string) {
 }
 
 func readLine(): string {
-    let mut result: string = ""
+    var result: string = ""
     let buf: u64 = heap 1
-    let mut done: bool = false
+    var done: bool = false
     while !done {
         let bytesRead: u64 = read(0, buf, 1)
         if bytesRead == 0 { done = true; break }
@@ -41,14 +41,14 @@ func readLine(): string {
 }
 
 func printHex(value: u64) {
-    let mut result: string = ""
-    let mut v: u64 = value
+    var result: string = ""
+    var v: u64 = value
     if v == 0 {
         print("0x0")
         return
     }
-    let mut started: bool = false
-    let mut shift: u64 = 60
+    var started: bool = false
+    var shift: u64 = 60
     while true {
         let digit: u64 = (v >> shift) & 0xF
         if digit != 0 or started or shift == 0 {
@@ -76,14 +76,14 @@ func printDecimal(value: u64) {
         print("0")
         return
     }
-    let mut digits: [byte] = []
-    let mut v: u64 = value
+    var digits: [byte] = []
+    var v: u64 = value
     while v > 0 {
         let digit: byte = (v % 10) + 48
         digits = digits + [digit]
         v = v / 10
     }
-    let mut i: u64 = #digits
+    var i: u64 = #digits
     while i > 0 {
         i = i - 1
         let s: string = string(digits[i])

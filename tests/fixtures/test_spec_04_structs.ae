@@ -24,7 +24,7 @@ struct Line {
 @test
 func main(): void {
     // Create struct via field assignment
-    let mut p: Point
+    var p: Point
     p.x = 10
     p.y = 20
 
@@ -37,7 +37,7 @@ func main(): void {
     let px2: u64 = p.x
 
     // Struct with string field
-    let mut r: Rectangle
+    var r: Rectangle
     r.width = 100
     r.height = 200
     r.label = "box"
@@ -46,7 +46,7 @@ func main(): void {
     let e: Empty
 
     // Nested structs
-    let mut line: Line
+    var line: Line
     line.start.x = 0
     line.start.y = 0
     line.end.x = 10
