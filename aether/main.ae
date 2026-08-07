@@ -115,8 +115,11 @@ func main(): u64 {
     }
 
     // Phase 1: Tokenization
+    __ae_print("DBG: before newLexer\n")
     var lexer = newLexer(source)
+    __ae_print("DBG: after newLexer\n")
     lexer = tokenize(lexer)
+    __ae_print("DBG: after tokenize\n")
     if lexer.hadError {
         __ae_print("error: tokenization failed: ")
         __ae_print(lexer.errorMsg)

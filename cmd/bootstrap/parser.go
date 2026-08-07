@@ -883,20 +883,26 @@ func (p *Parser) parseArrayLiteral() Expr {
 func (p *Parser) parseUnaryPrefix() Expr {
 	tok := p.advance()
 	op := tok.Lexeme
-	operand := p.parsePrecedence(PREC_UNARY)
+	// Parse the operand at PREC_CALL so postfix operators (., (), []) bind
+	// into the operand: -x.field = -(x.field), !a.b = !(a.b).
+	operand := p.parsePrecedence(PREC_CALL)
 	return &UnaryExpr{pos: tok.Pos(), Op: op, Operand: operand}
 }
 
 func (p *Parser) parsePrefixIncDec() Expr {
 	tok := p.advance()
 	op := tok.Lexeme
-	operand := p.parsePrecedence(PREC_UNARY)
+	operand := p.parsePrecedence(PREC_CALL)
 	return &UnaryExpr{pos: tok.Pos(), Op: op, Operand: operand, IsPostfix: false}
 }
 
 func (p *Parser) parseLengthPrefix() Expr {
 	tok := p.advance()
-	operand := p.parsePrecedence(PREC_UNARY)
+	// Parse the operand at PREC_CALL so #l.source = #(l.source), not (#l).source.
+	// PREC_UNARY (12) < PREC_CALL (13) let the . postfix escape to the outer
+	// loop, miscompiling the length of a struct field as a getter on the
+	// length result (NULL deref).
+	operand := p.parsePrecedence(PREC_CALL)
 	return &UnaryExpr{pos: tok.Pos(), Op: "#", Operand: operand}
 }
 
