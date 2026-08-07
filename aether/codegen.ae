@@ -51,6 +51,15 @@ struct codegen {
     stackOffsets: [string],   // variable names
     stackOffsetVals: [u64],   // corresponding offsets
     stackSize: u64,
+    // Variable type tracking (parallel to stackOffsets)
+    varTypes: [string],
+    // Struct tracking (name -> size in bytes, all fields 8 bytes)
+    structNames: [string],
+    structSizes: [u64],
+    // Per-struct per-field info (parallel arrays, all fields 8 bytes)
+    // structFields[name] is concatenated as "StructName.fieldName" for lookup.
+    structFields: [string],
+    structFieldOffsets: [u64],
 }
 func newCodegen(): codegen {
     var c: codegen
@@ -73,6 +82,11 @@ func newCodegen(): codegen {
     c.stackOffsetVals = []
     c.lastStringLabel = ""
     c.lastCallee = ""
+    c.varTypes = []
+    c.structNames = []
+    c.structSizes = []
+    c.structFields = []
+    c.structFieldOffsets = []
     return c
 }
 
@@ -84,8 +98,11 @@ func addError(c: codegen, msg: string): codegen {
 // Byte emission
 // ============================================================
 
-func emitByte(c: codegen, b: byte): codegen {
-    c.text = push(c.text, b)
+// emitByte: emit a single byte to the text buffer.
+// b is a u64; we push the low 8 bits into the byte array.
+func emitByte(c: codegen, b: u64): codegen {
+    var lo: u64 = b & 0xFF
+    c.text = push(c.text, lo)
     return c
 }
 
@@ -122,6 +139,16 @@ func emitU32(c: codegen, val: u64): codegen {
 
 func emitRexW(c: codegen): codegen {
     return emitByte(c, REX_W)
+}
+
+// emitRexWRB emits a REX.W prefix with optional REX.R (regField >= 8) and
+// REX.B (rmField >= 8). Mirrors the Go bootstrap's emitRexWRB exactly so the
+// Aether compiler emits byte-identical code.
+func emitRexWRB(c: codegen, regField: byte, rmField: byte): codegen {
+    var rex: byte = REX_W
+    if regField >= 8 { rex = rex | 0x04 }  // REX.R
+    if rmField >= 8 { rex = rex | 0x01 }   // REX.B
+    return emitByte(c, rex)
 }
 
 // ============================================================
@@ -182,7 +209,7 @@ func needsRex(reg: string): bool {
 // ============================================================
 
 func emitMovR64Imm64(c: codegen, reg: string, val: u64): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, 0, regCode(reg))
     c = emitByte(c, 0xB8 + (regCode(reg) & 7))
     c = emitU64(c, val)
     return c
@@ -190,7 +217,7 @@ func emitMovR64Imm64(c: codegen, reg: string, val: u64): codegen {
 
 // mov rax, rbx
 func emitMovR64R64(c: codegen, dst: string, src: string): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x89)
     // 0x89: MOV r/m64, r64 — reg field = source, rm field = destination
     c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
@@ -199,7 +226,7 @@ func emitMovR64R64(c: codegen, dst: string, src: string): codegen {
 
 // lea rax, [label] — RIP-relative (records label reference for linker)
 func emitLeaR64Label(c: codegen, reg: string, labelName: string): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, regCode(reg), 5)
     c = emitByte(c, 0x8D)
     c = emitByte(c, modRM(0, regCode(reg), 5))  // RIP-relative
     // Record the label reference before emitting placeholder
@@ -216,7 +243,7 @@ func emitLeaR64Label(c: codegen, reg: string, labelName: string): codegen {
 
 // add rax, rbx
 func emitAddR64R64(c: codegen, dst: string, src: string): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x01)
     // 0x01: ADD r/m64, r64 — reg field = source, rm field = destination
     c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
@@ -225,7 +252,7 @@ func emitAddR64R64(c: codegen, dst: string, src: string): codegen {
 
 // add rax, imm8
 func emitAddR64Imm8(c: codegen, reg: string, imm: byte): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, 0, regCode(reg))
     c = emitByte(c, 0x83)
     c = emitByte(c, modRM(3, 0, regCode(reg)))
     c = emitByte(c, imm)
@@ -234,7 +261,7 @@ func emitAddR64Imm8(c: codegen, reg: string, imm: byte): codegen {
 
 // sub rax, rbx
 func emitSubR64R64(c: codegen, dst: string, src: string): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x29)
     // 0x29: SUB r/m64, r64 — reg field = source, rm field = destination
     c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
@@ -243,7 +270,7 @@ func emitSubR64R64(c: codegen, dst: string, src: string): codegen {
 
 // sub rax, imm8
 func emitSubR64Imm8(c: codegen, reg: string, imm: byte): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, 5, regCode(reg))
     c = emitByte(c, 0x83)
     c = emitByte(c, modRM(3, 5, regCode(reg)))
     c = emitByte(c, imm)
@@ -278,9 +305,9 @@ func emitDivR64(c: codegen, reg: string): codegen {
 
 // xor rax, rbx
 func emitXorR64R64(c: codegen, dst: string, src: string): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x31)
-    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
     return c
 }
 
@@ -306,15 +333,15 @@ func emitNotR64(c: codegen, reg: string): codegen {
 
 // test rax, rax
 func emitTestR64R64(c: codegen, dst: string, src: string): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x85)
-    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
     return c
 }
 
 // cmp rax, rbx
 func emitCmpR64R64(c: codegen, dst: string, src: string): codegen {
-    c = emitRexW(c)
+    c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x39)
     // 0x39: CMP r/m64, r64 — computes r/m64 - r64
     // reg field = r64 (source), rm field = r/m64 (destination)
@@ -637,6 +664,10 @@ func emitStart(c: codegen): codegen {
     c = emitMovR64ToAddr(c, "rdi", "rcx", 0)  // mov [rcx], rdi
     c = emitLeaR64Label(c, "rcx", "__ae_saved_argv")
     c = emitMovR64ToAddr(c, "rsi", "rcx", 0)  // mov [rcx], rsi
+    // Initialize heap bump pointer to __ae_heap_start
+    c = emitLeaR64Label(c, "rcx", "__ae_heap_start")
+    c = emitLeaR64Label(c, "rdx", "__ae_heap_ptr")
+    c = emitMovR64ToAddr(c, "rcx", "rdx", 0)  // mov [__ae_heap_ptr], rcx
     // Call main
     c = emitCallLabel(c, "main")
     // Exit with return code from rax
@@ -653,6 +684,7 @@ func emitStart(c: codegen): codegen {
 struct genCtx {
     c: codegen,
     pos: u64,
+    lastVarName: string,  // last variable evaluated by genPrimary (for member access type lookup)
 }
 
 func ctxPeek(ctx: genCtx, tokens: [Token]): Token {
@@ -716,17 +748,85 @@ func generate(c: codegen, tokens: [Token]): codegen {
 
 func skipStructDecl(ctx: genCtx, tokens: [Token]): genCtx {
     ctx = ctxAdvance(ctx, tokens)
-    if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
-    if ctxCheck(ctx, tokens, TOKEN_LBRACE) {
+    if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+        let structName = tokens[ctx.pos].lexeme
         ctx = ctxAdvance(ctx, tokens)
-        var depth: u64 = 1
-        while depth > 0 and not ctxIsAtEnd(ctx, tokens) {
-            if ctxCheck(ctx, tokens, TOKEN_LBRACE) { depth = depth + 1 }
-            elif ctxCheck(ctx, tokens, TOKEN_RBRACE) { depth = depth - 1 }
+        if ctxCheck(ctx, tokens, TOKEN_LBRACE) {
             ctx = ctxAdvance(ctx, tokens)
+            var depth: u64 = 1
+            var fieldCount: u64 = 0
+            // Track field names + offsets. The field name is the identifier
+            // BEFORE the colon. Track the last ident and only record it as
+            // a field name once we see a colon after it.
+            var lastIdent: string = ""
+            var sawIdent: bool = false
+            var sawColon: bool = false
+            while depth > 0 and not ctxIsAtEnd(ctx, tokens) {
+                if ctxCheck(ctx, tokens, TOKEN_LBRACE) { depth = depth + 1; ctx = ctxAdvance(ctx, tokens) }
+                elif ctxCheck(ctx, tokens, TOKEN_RBRACE) {
+                    // End of struct. If we have a pending field name, record it.
+                    if depth == 1 and sawIdent {
+                        let key = structName + "." + lastIdent
+                        ctx.c.structFields = push(ctx.c.structFields, key)
+                        ctx.c.structFieldOffsets = push(ctx.c.structFieldOffsets, fieldCount * 8)
+                        fieldCount = fieldCount + 1
+                        sawIdent = false
+                        sawColon = false
+                    }
+                    depth = depth - 1
+                    ctx = ctxAdvance(ctx, tokens)
+                }
+                elif ctxCheck(ctx, tokens, TOKEN_COMMA) {
+                    // End of previous field. Record if pending.
+                    if sawColon and sawIdent {
+                        let key = structName + "." + lastIdent
+                        ctx.c.structFields = push(ctx.c.structFields, key)
+                        ctx.c.structFieldOffsets = push(ctx.c.structFieldOffsets, fieldCount * 8)
+                        fieldCount = fieldCount + 1
+                        sawIdent = false
+                        sawColon = false
+                    }
+                    ctx = ctxAdvance(ctx, tokens)
+                }
+                elif ctxCheck(ctx, tokens, TOKEN_COLON) {
+                    // Mark that we've seen a colon after a field name.
+                    if sawIdent { sawColon = true }
+                    ctx = ctxAdvance(ctx, tokens)
+                }
+                elif ctxCheck(ctx, tokens, TOKEN_IDENT) {
+                    // Only overwrite if we don't have a pending field.
+                    // (The type name after `:` would otherwise clobber the field name.)
+                    if not sawColon {
+                        lastIdent = tokens[ctx.pos].lexeme
+                        sawIdent = true
+                    }
+                    ctx = ctxAdvance(ctx, tokens)
+                }
+                else { ctx = ctxAdvance(ctx, tokens) }
+            }
+            // Size = max(1, fieldCount) * 8 (each field is 8 bytes; structs always
+            // allocate at least 8 bytes so a heap pointer has somewhere to live).
+            var size: u64 = fieldCount * 8
+            if size == 0 { size = 8 }
+            ctx.c.structNames = push(ctx.c.structNames, structName)
+            ctx.c.structSizes = push(ctx.c.structSizes, size)
         }
     }
     return ctx
+}
+
+func getStructSize(c: codegen, name: string): u64 {
+    for i in 0..#c.structNames {
+        if c.structNames[i] == name { return c.structSizes[i] }
+    }
+    return 0
+}
+
+func isStructType(c: codegen, name: string): bool {
+    for i in 0..#c.structNames {
+        if c.structNames[i] == name { return true }
+    }
+    return false
 }
 
 func skipEnumDecl(ctx: genCtx, tokens: [Token]): genCtx {
@@ -806,7 +906,10 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
     ctx = collectLocals(ctx, tokens)
     var stackAlloc: u64 = ctx.c.stackSize
     if stackAlloc < 128 { stackAlloc = 128 }
-    stackAlloc = (stackAlloc + 15) & (0 - 16)
+    // Align to 16 bytes: round up to multiple of 16.
+    // Use explicit masking: stackAlloc & 0xFFFFFFF0 (clear low 4 bits) after adding 15.
+    var alignMask: u64 = 0 - 16
+    stackAlloc = (stackAlloc + 15) & alignMask
     if stackAlloc <= 127 {
         ctx.c = emitSubR64Imm8(ctx.c, "rsp", stackAlloc)
     } else {
@@ -855,6 +958,16 @@ func collectLocalsWalk(ctx: genCtx, tokens: [Token]): genCtx {
                     ctx.c.stackSize = ctx.c.stackSize + 8
                 }
                 ctx = ctxAdvance(ctx, tokens)
+                // Record the variable's type (if annotated)
+                var vtype = ""
+                if ctxCheck(ctx, tokens, TOKEN_COLON) {
+                    ctx = ctxAdvance(ctx, tokens)
+                    if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+                        vtype = tokens[ctx.pos].lexeme
+                        ctx = ctxAdvance(ctx, tokens)
+                    }
+                }
+                ctx.c.varTypes = push(ctx.c.varTypes, vtype)
             }
         } elif ctxCheck(ctx, tokens, TOKEN_LBRACE) {
             ctx = ctxAdvance(ctx, tokens)
@@ -865,6 +978,13 @@ func collectLocalsWalk(ctx: genCtx, tokens: [Token]): genCtx {
         } else { ctx = ctxAdvance(ctx, tokens) }
     }
     return ctx
+}
+
+func getVarType(c: codegen, name: string): string {
+    for i in 0..#c.stackOffsets {
+        if c.stackOffsets[i] == name { return c.varTypes[i] }
+    }
+    return ""
 }
 
 func findStackOffset(c: codegen, name: string): u64 {
@@ -917,13 +1037,25 @@ func genVarDecl(ctx: genCtx, tokens: [Token]): genCtx {
     if ctxCheck(ctx, tokens, TOKEN_IDENT) {
         let varName = tokens[ctx.pos].lexeme
         ctx = ctxAdvance(ctx, tokens)
+        var typeName = ""
         if ctxCheck(ctx, tokens, TOKEN_COLON) {
             ctx = ctxAdvance(ctx, tokens)
-            if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+            if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+                typeName = tokens[ctx.pos].lexeme
+                ctx = ctxAdvance(ctx, tokens)
+            }
         }
         if ctxCheck(ctx, tokens, TOKEN_EQUAL) {
             ctx = ctxAdvance(ctx, tokens)
             ctx = genExpr(ctx, tokens)
+            let offset = findStackOffset(ctx.c, varName)
+            ctx.c = emitMovR64Stack(ctx.c, "rax", offset)
+        } elif isStructType(ctx.c, typeName) {
+            // No initializer: allocate the struct on the heap so field
+            // assignments (l.field = v) have a valid target.
+            let size = getStructSize(ctx.c, typeName)
+            ctx.c = emitMovR64Imm64(ctx.c, "rdi", size)
+            ctx.c = emitCallLabel(ctx.c, "__ae_alloc")
             let offset = findStackOffset(ctx.c, varName)
             ctx.c = emitMovR64Stack(ctx.c, "rax", offset)
         }
@@ -1046,8 +1178,28 @@ func genExpr(ctx: genCtx, tokens: [Token]): genCtx {
             ctx = ctxAdvance(ctx, tokens)
             if ctxCheck(ctx, tokens, TOKEN_IDENT) {
                 let fieldName = tokens[ctx.pos].lexeme; ctx = ctxAdvance(ctx, tokens)
-                ctx.c = emitPush(ctx.c, "rax"); ctx.c = emitPop(ctx.c, "rdi")
-                ctx.c = emitCallLabel(ctx.c, "__ae_field_" + fieldName)
+                // Determine the struct type of the object (from the last variable evaluated)
+                let objType = getVarType(ctx.c, ctx.lastVarName)
+                var getterLabel = "__ae_field_" + fieldName
+                var setterLabel = "__ae_field_set_" + fieldName
+                if isStructType(ctx.c, objType) {
+                    getterLabel = "__ae_field_" + objType + "_" + fieldName
+                    setterLabel = "__ae_field_set_" + objType + "_" + fieldName
+                }
+                if ctxCheck(ctx, tokens, TOKEN_EQUAL) {
+                    // Member assignment: obj.field = value
+                    // rax currently holds the struct pointer. Save it.
+                    ctx.c = emitPush(ctx.c, "rax")
+                    ctx = ctxAdvance(ctx, tokens)  // skip '='
+                    ctx = genExpr(ctx, tokens)     // evaluate RHS -> rax = value
+                    ctx.c = emitPush(ctx.c, "rax") // push value
+                    ctx.c = emitPop(ctx.c, "rsi")  // rsi = value
+                    ctx.c = emitPop(ctx.c, "rdi")  // rdi = struct pointer
+                    ctx.c = emitCallLabel(ctx.c, setterLabel)
+                } else {
+                    ctx.c = emitPush(ctx.c, "rax"); ctx.c = emitPop(ctx.c, "rdi")
+                    ctx.c = emitCallLabel(ctx.c, getterLabel)
+                }
             }
         }
         elif ctxCheck(ctx, tokens, TOKEN_PLUS_PLUS) { ctx = ctxAdvance(ctx, tokens); ctx.c = emitAddR64Imm8(ctx.c, "rax", 1) }
@@ -1119,6 +1271,7 @@ func genPrimary(ctx: genCtx, tokens: [Token]): genCtx {
         if isStackVar(ctx.c, name) {
             let offset = findStackOffset(ctx.c, name)
             ctx.c = emitMovStackR64(ctx.c, "rax", offset)
+            ctx.lastVarName = name
         } else { ctx.c.lastCallee = name }
         return ctx
     }
@@ -1209,6 +1362,8 @@ func emitRuntimeData(c: codegen): codegen {
     c.text = push(c.text, 0)
     c = label(c, "__ae_heap_start")
     for i in 0..65536 { c.text = push(c.text, 0) }
+    c = label(c, "__ae_heap_ptr")
+    for i in 0..8 { c.text = push(c.text, 0) }
     return c
 }
 
@@ -1334,6 +1489,15 @@ func emitAeLen(c: codegen): codegen {
     c = label(c, "__ae_len")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
     c = emitPush(c, "rdi"); c = emitPush(c, "rsi")
+    // Check tag: if [rdi] == AE_ARRAY_TAG, it's an array -> return [rdi+8]
+    c = emitMovFromAddr(c, "rax", "rdi", 0)
+    c = emitMovR64Imm64(c, "rcx", 0x7E41AE41AE41AE41)
+    c = emitCmpR64R64(c, "rax", "rcx")
+    c = emitJnzLabel(c, "__ae_len_string")
+    c = emitMovFromAddr(c, "rax", "rdi", 8)
+    c = emitJmpLabel(c, "__ae_len_done")
+    // String: scan for null terminator
+    c = label(c, "__ae_len_string")
     c = emitMovR64R64(c, "rsi", "rdi"); c = emitXorR64R64(c, "rax", "rax")
     c = label(c, "__ae_len_loop")
     c = emitByte(c, 0x80); c = emitByte(c, 0x3C); c = emitByte(c, 0x06); c = emitByte(c, 0x00)
@@ -1348,25 +1512,81 @@ func emitAeLen(c: codegen): codegen {
 func emitAeIndex(c: codegen): codegen {
     c = label(c, "__ae_index")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
-    c = emitPush(c, "rdi"); c = emitPush(c, "rsi")
+    c = emitPush(c, "rdi"); c = emitPush(c, "rsi"); c = emitPush(c, "rbx")
+    // Check tag: if [rdi] == AE_ARRAY_TAG, it's an array
+    c = emitMovFromAddr(c, "rax", "rdi", 0)
+    c = emitMovR64Imm64(c, "rcx", 0x7E41AE41AE41AE41)
+    c = emitCmpR64R64(c, "rax", "rcx")
+    c = emitJnzLabel(c, "__ae_index_string")
+    // Array: rax = [[rdi+24] + rsi*8]
+    c = emitMovFromAddr(c, "rbx", "rdi", 24)
+    c = emitMovR64R64(c, "rax", "rsi")
+    c = emitShlR64Imm8(c, "rax", 3)
+    c = emitAddR64R64(c, "rax", "rbx")
+    c = emitMovFromAddr(c, "rax", "rax", 0)
+    c = emitJmpLabel(c, "__ae_index_done")
+    // String: movzx rax, byte [rdi + rsi]
+    c = label(c, "__ae_index_string")
     c = emitAddR64R64(c, "rdi", "rsi")
     c = emitRexW(c); c = emitByte(c, 0x0F); c = emitByte(c, 0xB6); c = emitByte(c, 0x07)
-    c = emitPop(c, "rsi"); c = emitPop(c, "rdi"); c = emitPop(c, "rbp"); c = emitRet(c)
+    c = label(c, "__ae_index_done")
+    c = emitPop(c, "rbx"); c = emitPop(c, "rsi"); c = emitPop(c, "rdi"); c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
 
 func emitAeIndexSet(c: codegen): codegen {
     c = label(c, "__ae_index_set")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
-    c = emitPop(c, "rbp"); c = emitRet(c)
+    c = emitPush(c, "rdi"); c = emitPush(c, "rsi"); c = emitPush(c, "rbx")
+    // Check tag: if [rdi] == AE_ARRAY_TAG, it's an array
+    c = emitMovFromAddr(c, "rax", "rdi", 0)
+    c = emitMovR64Imm64(c, "rcx", 0x7E41AE41AE41AE41)
+    c = emitCmpR64R64(c, "rax", "rcx")
+    c = emitJnzLabel(c, "__ae_index_set_string")
+    // Array: [ [rdi+24] + rsi*8 ] = rdx  (8-byte store)
+    c = emitMovFromAddr(c, "rbx", "rdi", 24)
+    c = emitMovR64R64(c, "rax", "rsi")
+    c = emitShlR64Imm8(c, "rax", 3)
+    c = emitAddR64R64(c, "rax", "rbx")
+    c = emitMovR64ToAddr(c, "rdx", "rax", 0)
+    c = emitJmpLabel(c, "__ae_index_set_done")
+    // String: [rdi + rsi] = dl  (byte store)
+    c = label(c, "__ae_index_set_string")
+    c = emitAddR64R64(c, "rdi", "rsi")
+    c = emitByte(c, 0x88); c = emitByte(c, 0x17)
+    c = label(c, "__ae_index_set_done")
+    c = emitPop(c, "rbx"); c = emitPop(c, "rsi"); c = emitPop(c, "rdi"); c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
 
 func emitAeArrayNew(c: codegen): codegen {
     c = label(c, "__ae_array_new")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
-    c = emitLeaR64Label(c, "rax", "__ae_heap_start")
-    c = emitPop(c, "rbp"); c = emitRet(c)
+    c = emitPush(c, "rdi"); c = emitPush(c, "rsi"); c = emitPush(c, "rbx"); c = emitPush(c, "r12")
+    // rbx = current heap ptr
+    c = emitLeaR64Label(c, "rcx", "__ae_heap_ptr")
+    c = emitMovFromAddr(c, "rbx", "rcx", 0)
+    // rax = header = rbx (return value)
+    c = emitMovR64R64(c, "rax", "rbx")
+    // Set tag at [rbx+0]
+    c = emitMovR64Imm64(c, "rcx", 0x7E41AE41AE41AE41)
+    c = emitMovR64ToAddr(c, "rcx", "rbx", 0)
+    // Set len at [rbx+8] = n (rdi)
+    c = emitMovR64ToAddr(c, "rdi", "rbx", 8)
+    // Set cap at [rbx+16] = n (rdi)
+    c = emitMovR64ToAddr(c, "rdi", "rbx", 16)
+    // data ptr at [rbx+24] = rbx + 32
+    c = emitMovR64R64(c, "r12", "rbx")
+    c = emitAddR64Imm8(c, "r12", 32)
+    c = emitMovR64ToAddr(c, "r12", "rbx", 24)
+    // Advance heap ptr: [__ae_heap_ptr] = rbx + 32 + n*8
+    c = emitMovR64R64(c, "r12", "rdi")
+    c = emitShlR64Imm8(c, "r12", 3)
+    c = emitAddR64Imm8(c, "r12", 32)
+    c = emitAddR64R64(c, "r12", "rbx")
+    c = emitLeaR64Label(c, "rcx", "__ae_heap_ptr")
+    c = emitMovR64ToAddr(c, "r12", "rcx", 0)
+    c = emitPop(c, "r12"); c = emitPop(c, "rbx"); c = emitPop(c, "rsi"); c = emitPop(c, "rdi"); c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
 
@@ -1400,20 +1620,113 @@ func emitAeStrEq(c: codegen): codegen {
 func emitAePush(c: codegen): codegen {
     c = label(c, "__ae_push")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
-    c = emitPop(c, "rbp"); c = emitRet(c)
+    c = emitPush(c, "rdi"); c = emitPush(c, "rsi"); c = emitPush(c, "rbx")
+    c = emitPush(c, "r12"); c = emitPush(c, "r13")
+    // rbx = array header pointer
+    c = emitMovR64R64(c, "rbx", "rdi")
+    // r12 = value
+    c = emitMovR64R64(c, "r12", "rsi")
+    // rax = len = [rbx+8]
+    c = emitMovFromAddr(c, "rax", "rbx", 8)
+    // rcx = cap = [rbx+16]
+    c = emitMovFromAddr(c, "rcx", "rbx", 16)
+    // if len < cap: fast path (no realloc)
+    c = emitCmpR64R64(c, "rax", "rcx")
+    c = emitJbLabel(c, "__ae_push_fast")
+    // ---- Grow path ----
+    // newCap = cap * 2 (or cap+1 if cap==0)
+    c = emitMovR64R64(c, "r13", "rcx")
+    c = emitTestR64R64(c, "r13", "r13")
+    c = emitJnzLabel(c, "__ae_push_grow_double")
+    c = emitMovR64Imm64(c, "r13", 1)
+    c = emitJmpLabel(c, "__ae_push_grow_alloc")
+    c = label(c, "__ae_push_grow_double")
+    c = emitShlR64Imm8(c, "r13", 1)
+    // Allocate new data buffer: newCap*8 bytes from heap
+    c = label(c, "__ae_push_grow_alloc")
+    c = emitLeaR64Label(c, "rcx", "__ae_heap_ptr")
+    c = emitMovFromAddr(c, "rcx", "rcx", 0)
+    c = emitMovR64R64(c, "rdx", "r13")
+    c = emitShlR64Imm8(c, "rdx", 3)
+    c = emitAddR64R64(c, "rcx", "rdx")
+    c = emitLeaR64Label(c, "rdx", "__ae_heap_ptr")
+    c = emitMovR64ToAddr(c, "rcx", "rdx", 0)
+    // Copy old data (len elements) to new buffer
+    c = emitMovFromAddr(c, "rcx", "rbx", 24)
+    c = emitLeaR64Label(c, "rdx", "__ae_heap_ptr")
+    c = emitMovFromAddr(c, "rdx", "rdx", 0)
+    c = emitMovR64R64(c, "r8", "r13")
+    c = emitShlR64Imm8(c, "r8", 3)
+    c = emitSubR64R64(c, "rdx", "r8")
+    // Copy loop: for i in 0..len: [rdx + i*8] = [rcx + i*8]
+    c = emitXorR64R64(c, "r8", "r8")
+    c = label(c, "__ae_push_copy_loop")
+    c = emitCmpR64R64(c, "r8", "rax")
+    c = emitJzLabel(c, "__ae_push_copy_done")
+    c = emitMovFromAddr(c, "r9", "rcx", 0)
+    c = emitMovR64R64(c, "r10", "r8")
+    c = emitShlR64Imm8(c, "r10", 3)
+    c = emitAddR64R64(c, "r10", "rdx")
+    c = emitMovR64ToAddr(c, "r9", "r10", 0)
+    c = emitAddR64Imm8(c, "rcx", 8)
+    c = emitAddR64Imm8(c, "r8", 1)
+    c = emitJmpLabel(c, "__ae_push_copy_loop")
+    c = label(c, "__ae_push_copy_done")
+    // Update header: data = newData, cap = newCap
+    c = emitLeaR64Label(c, "r8", "__ae_heap_ptr")
+    c = emitMovFromAddr(c, "r8", "r8", 0)
+    c = emitMovR64R64(c, "r9", "r13")
+    c = emitShlR64Imm8(c, "r9", 3)
+    c = emitSubR64R64(c, "r8", "r9")
+    c = emitMovR64ToAddr(c, "r8", "rbx", 24)
+    c = emitMovR64ToAddr(c, "r13", "rbx", 16)
+    // ---- Fast path ----
+    c = label(c, "__ae_push_fast")
+    c = emitMovFromAddr(c, "rax", "rbx", 8)
+    c = emitMovFromAddr(c, "rcx", "rbx", 24)
+    c = emitMovR64R64(c, "rdx", "rax")
+    c = emitShlR64Imm8(c, "rdx", 3)
+    c = emitAddR64R64(c, "rdx", "rcx")
+    c = emitMovR64ToAddr(c, "r12", "rdx", 0)
+    c = emitAddR64Imm8(c, "rax", 1)
+    c = emitMovR64ToAddr(c, "rax", "rbx", 8)
+    // Return array pointer
+    c = emitMovR64R64(c, "rax", "rbx")
+    c = emitPop(c, "r13"); c = emitPop(c, "r12"); c = emitPop(c, "rbx")
+    c = emitPop(c, "rsi"); c = emitPop(c, "rdi"); c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
 
 func emitAePop(c: codegen): codegen {
     c = label(c, "__ae_pop")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
-    c = emitPop(c, "rbp"); c = emitRet(c)
+    c = emitPush(c, "rdi"); c = emitPush(c, "rbx")
+    // rbx = array header
+    c = emitMovR64R64(c, "rbx", "rdi")
+    // rax = len = [rbx+8]
+    c = emitMovFromAddr(c, "rax", "rbx", 8)
+    // if len == 0, return 0
+    c = emitTestR64R64(c, "rax", "rax")
+    c = emitJzLabel(c, "__ae_pop_done")
+    // len--
+    c = emitSubR64Imm8(c, "rax", 1)
+    c = emitMovR64ToAddr(c, "rax", "rbx", 8)
+    // rcx = data = [rbx+24]
+    c = emitMovFromAddr(c, "rcx", "rbx", 24)
+    // rax = [data + (len-1)*8]
+    c = emitMovR64R64(c, "rdx", "rax")
+    c = emitShlR64Imm8(c, "rdx", 3)
+    c = emitAddR64R64(c, "rdx", "rcx")
+    c = emitMovFromAddr(c, "rax", "rdx", 0)
+    c = label(c, "__ae_pop_done")
+    c = emitPop(c, "rbx"); c = emitPop(c, "rdi"); c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
 
 func emitPushBuiltin(c: codegen): codegen {
     c = label(c, "push")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitCallLabel(c, "__ae_push")
     c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
@@ -1426,7 +1739,57 @@ func emitLogicalHelpers(c: codegen): codegen {
     return c
 }
 
+// emitStructFieldHelpers emits __ae_field_<Struct>_<name> and __ae_field_set_<Struct>_<name>
+// helpers for every (Struct, field) pair discovered during skipStructDecl.
+// Each getter takes a struct pointer in rdi and returns the field value in rax.
+// Each setter takes a struct pointer in rdi and value in rsi.
 func emitStructFieldHelpers(c: codegen): codegen {
+    var i: u64 = 0
+    while i < #c.structFields {
+        let key = c.structFields[i]
+        let offset: u64 = c.structFieldOffsets[i]
+        // key = "StructName.fieldName"
+        var dotIdx: u64 = 0
+        var foundDot: bool = false
+        var j: u64 = 0
+        while j < #key {
+            if key[j] == 46 and not foundDot {  // 46 == '.'
+                dotIdx = j
+                foundDot = true
+            }
+            j = j + 1
+        }
+        var structName: string = ""
+        var fieldName: string = ""
+        if foundDot {
+            structName = key[0:dotIdx]
+            fieldName = key[dotIdx+1:#key]
+        } else {
+            fieldName = key
+        }
+        let getterLabel = "__ae_field_" + structName + "_" + fieldName
+        let setterLabel = "__ae_field_set_" + structName + "_" + fieldName
+
+        // Getter: __ae_field_<Struct>_<name>
+        c = label(c, getterLabel)
+        c = emitPush(c, "rbp")
+        c = emitMovR64R64(c, "rbp", "rsp")
+        // Load field at offset from struct pointer (rdi)
+        c = emitMovFromAddr(c, "rax", "rdi", offset)
+        c = emitPop(c, "rbp")
+        c = emitRet(c)
+
+        // Setter: __ae_field_set_<Struct>_<name>
+        c = label(c, setterLabel)
+        c = emitPush(c, "rbp")
+        c = emitMovR64R64(c, "rbp", "rsp")
+        // Store value (rsi) at field offset of struct pointer (rdi)
+        c = emitMovR64ToAddr(c, "rsi", "rdi", offset)
+        c = emitPop(c, "rbp")
+        c = emitRet(c)
+
+        i = i + 1
+    }
     return c
 }
 
@@ -1434,17 +1797,33 @@ func emitStructFieldHelpers(c: codegen): codegen {
 // emitMovR64ToAddr / emitMovFromAddr / emitJnsLabel / emitJbLabel / emitShlR64Imm8
 // ============================================================
 
-func emitMovR64ToAddr(c: codegen, src: string, addrReg: string, offset: byte): codegen {
-    c = emitRexW(c); c = emitByte(c, 0x89)
-    if offset == 0 { c = emitByte(c, modRM(0, regCode(src), regCode(addrReg))) }
-    else { c = emitByte(c, modRM(1, regCode(src), regCode(addrReg))); c = emitByte(c, offset) }
+// emitMovR64ToAddr: mov [addrReg + offset], src
+// offset is u64; we encode it as a byte disp if it fits, otherwise it's an error.
+func emitMovR64ToAddr(c: codegen, src: string, addrReg: string, offset: u64): codegen {
+    if offset == 0 {
+        c = emitRexWRB(c, regCode(src), regCode(addrReg)); c = emitByte(c, 0x89)
+        c = emitByte(c, modRM(0, regCode(src), regCode(addrReg)))
+    } else {
+        // Mask to byte range. For our use case offsets stay tiny.
+        var offByte: u64 = offset & 0xFF
+        c = emitRexWRB(c, regCode(src), regCode(addrReg)); c = emitByte(c, 0x89)
+        c = emitByte(c, modRM(1, regCode(src), regCode(addrReg)))
+        c = emitByte(c, offByte)
+    }
     return c
 }
 
-func emitMovFromAddr(c: codegen, dst: string, addrReg: string, offset: byte): codegen {
-    c = emitRexW(c); c = emitByte(c, 0x8B)
-    if offset == 0 { c = emitByte(c, modRM(0, regCode(dst), regCode(addrReg))) }
-    else { c = emitByte(c, modRM(1, regCode(dst), regCode(addrReg))); c = emitByte(c, offset) }
+// emitMovFromAddr: mov dst, [addrReg + offset]
+func emitMovFromAddr(c: codegen, dst: string, addrReg: string, offset: u64): codegen {
+    if offset == 0 {
+        c = emitRexWRB(c, regCode(dst), regCode(addrReg)); c = emitByte(c, 0x8B)
+        c = emitByte(c, modRM(0, regCode(dst), regCode(addrReg)))
+    } else {
+        var offByte: u64 = offset & 0xFF
+        c = emitRexWRB(c, regCode(dst), regCode(addrReg)); c = emitByte(c, 0x8B)
+        c = emitByte(c, modRM(1, regCode(dst), regCode(addrReg)))
+        c = emitByte(c, offByte)
+    }
     return c
 }
 
@@ -1467,7 +1846,7 @@ func emitJbLabel(c: codegen, labelName: string): codegen {
 }
 
 func emitShlR64Imm8(c: codegen, reg: string, imm: byte): codegen {
-    c = emitRexW(c); c = emitByte(c, 0xC1)
+    c = emitRexWRB(c, 0, regCode(reg)); c = emitByte(c, 0xC1)
     c = emitByte(c, modRM(3, 4, regCode(reg)))
     c = emitByte(c, imm)
     return c
