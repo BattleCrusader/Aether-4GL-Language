@@ -1,0 +1,8 @@
+// negative_undeclared_var.ae — Negative test: undeclared variable must be rejected
+// The compiler MUST report an error: 'x' is undefined.
+// If this compiles, that's a bug — the type checker didn't catch the undeclared identifier.
+
+func main(): u64 {
+    let r = x    // x is undeclared
+    return r
+}

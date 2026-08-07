@@ -1,0 +1,195 @@
+// test_spec_05_variables.ae — Section 5: Variables and Bindings
+// Tests: let/var, explicit/implicit types, const, scope, shadowing,
+//        globals, recursion, destructuring
+//
+// Convention: each test function computes an "expected" u64 and returns it.
+// main() runs all tests and returns __fail_count as the exit code.
+// (We can't use std/test/assertEquals because the bootstrap import resolver
+// doesn't currently link std/test.ae symbols.)
+
+var __fail: u64 = 0
+
+func check(label: u64, expected: u64, actual: u64): u64 {
+    if expected == actual { return 0 }
+    return label
+}
+
+// ── 5.1 let (immutable) ─────────────────────────────────────────────────────
+func test_let_immutable(): u64 {
+    let x: u64 = 42
+    let y = 100
+    let s: string = "hello"
+    let big_u: u64 = 1844674407370955161   // 2^61 - 1
+    let r: u64 = 0
+    let _ = check(1, 42, x)
+    if check(1, 42, x) != 0 { r = r + 1 }
+    if check(2, 100, y) != 0 { r = r + 1 }
+    if check(3, 1844674407370955161, big_u) != 0 { r = r + 1 }
+    return r
+}
+
+// ── 5.1 var (mutable) ───────────────────────────────────────────────────────
+func test_var_mutable(): u64 {
+    var a: u64 = 5
+    a = 15
+    a = 25
+    var b = 7
+    b = 8
+    let r: u64 = 0
+    if check(4, 25, a) != 0 { return 4 }
+    if check(5, 8, b) != 0 { return 5 }
+    return r
+}
+
+// ── 5.1 type inference ─────────────────────────────────────────────────────
+func test_type_inference(): u64 {
+    let i = 42
+    let s = "hello"
+    let flag = true
+    if check(6, 42, i) != 0 { return 6 }
+    return 0
+}
+
+// ── 5.1 const (compile-time) ────────────────────────────────────────────────
+const MAX = 1000
+const BUFFER_SIZE = MAX * 64
+
+func test_const(): u64 {
+    if check(8, 1000, MAX) != 0 { return 8 }
+    if check(9, 64000, BUFFER_SIZE) != 0 { return 9 }
+    return 0
+}
+
+// ── 5.2 scope ───────────────────────────────────────────────────────────────
+func test_scope(): u64 {
+    let outer = 1
+    let inner_acc: u64 = 0
+    let outer_acc: u64 = 0
+    {
+        let inner = 2
+        if check(10, 1, outer) != 0 { return 10 }
+        if check(11, 2, inner) != 0 { return 11 }
+    }
+    if check(12, 1, outer) != 0 { return 12 }
+    return 0
+}
+
+// ── 5.3 shadowing ───────────────────────────────────────────────────────────
+func test_shadowing(): u64 {
+    let x = 10
+    let outer_x: u64 = 0
+    {
+        let x = 99
+        if check(13, 99, x) != 0 { return 13 }
+    }
+    if check(14, 10, x) != 0 { return 14 }
+    return 0
+}
+
+// ── 5.4 globals ─────────────────────────────────────────────────────────────
+var global_counter: u64 = 0
+
+func test_globals(): u64 {
+    global_counter = 42
+    if check(15, 42, global_counter) != 0 { return 15 }
+    return 0
+}
+
+// ── 5.5 recursion ──────────────────────────────────────────────────────────
+func factorial(n: u64): u64 {
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
+}
+
+func fibonacci(n: u64): u64 {
+    if n <= 1 { return n }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+func test_recursion(): u64 {
+    if check(16, 120, factorial(5)) != 0 { return 16 }
+    if check(17, 0, fibonacci(0)) != 0 { return 17 }
+    if check(18, 1, fibonacci(1)) != 0 { return 18 }
+    if check(19, 1, fibonacci(2)) != 0 { return 19 }
+    if check(20, 55, fibonacci(10)) != 0 { return 20 }
+    return 0
+}
+
+// ── 5.1 destructuring ───────────────────────────────────────────────────────
+func get_pair(): (u64, u64) { return (100, 200) }
+
+func test_destructuring(): u64 {
+    let (a, b) = get_pair()
+    if check(21, 100, a) != 0 { return 21 }
+    if check(22, 200, b) != 0 { return 22 }
+
+    var (c, d) = get_pair()
+    if check(23, 100, c) != 0 { return 23 }
+    if check(24, 200, d) != 0 { return 24 }
+    return 0
+}
+
+// ── 5.1 triple destructuring ────────────────────────────────────────────────
+func get_triple(): (u64, u64, u64) { return (1, 2, 3) }
+
+func test_triple_destructure(): u64 {
+    let (x, y, z) = get_triple()
+    if check(25, 1, x) != 0 { return 25 }
+    if check(26, 2, y) != 0 { return 26 }
+    if check(27, 3, z) != 0 { return 27 }
+    return 0
+}
+
+// ── 5.1 swap via destructuring ──────────────────────────────────────────────
+func test_swap(): u64 {
+    var p: u64 = 5
+    var q: u64 = 10
+    let (pa, pb) = (q, p)
+    if check(28, 10, pa) != 0 { return 28 }
+    if check(29, 5, pb) != 0 { return 29 }
+    return 0
+}
+
+// ── Combined test ───────────────────────────────────────────────────────────
+func test_combined(): u64 {
+    const PI = 3
+    var area: u64 = 0
+    for radius in 1..4 {
+        let r2 = radius * radius
+        if r2 > 4 { break }
+        area = area + r2
+    }
+    if check(30, 5, area) != 0 { return 30 }
+    if check(31, 3, PI) != 0 { return 31 }
+    return 0
+}
+
+// ── Entry point — runs all tests, returns total failure count ───────────────
+func main(): u64 {
+    var fails: u64 = 0
+    let r1: u64 = test_let_immutable()
+    fails = fails + r1
+    let r2: u64 = test_var_mutable()
+    fails = fails + r2
+    let r3: u64 = test_type_inference()
+    fails = fails + r3
+    let r4: u64 = test_const()
+    fails = fails + r4
+    let r5: u64 = test_scope()
+    fails = fails + r5
+    let r6: u64 = test_shadowing()
+    fails = fails + r6
+    let r7: u64 = test_globals()
+    fails = fails + r7
+    let r8: u64 = test_recursion()
+    fails = fails + r8
+    let r9: u64 = test_destructuring()
+    fails = fails + r9
+    let r10: u64 = test_triple_destructure()
+    fails = fails + r10
+    let r11: u64 = test_swap()
+    fails = fails + r11
+    let r12: u64 = test_combined()
+    fails = fails + r12
+    return fails
+}

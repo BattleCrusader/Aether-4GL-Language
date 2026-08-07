@@ -1,0 +1,14 @@
+// negative_undefined_struct_field.ae — Negative test: access undefined field
+// Point has no 'z' field — accessing it must fail.
+
+struct Point {
+    x: u64
+    y: u64
+}
+
+func main(): u64 {
+    var p: Point
+    p.x = 10
+    p.y = 20
+    return p.z    // ERROR: Point has no field 'z'
+}

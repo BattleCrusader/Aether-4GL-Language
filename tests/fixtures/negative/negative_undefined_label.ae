@@ -1,0 +1,9 @@
+// negative_undefined_label.ae — Negative test: break/continue targeting undefined label
+// 'unknown_label' doesn't exist.
+
+func main(): u64 {
+    for i in 0..10 {
+        break unknown_label    // ERROR: unknown label
+    }
+    return 0
+}

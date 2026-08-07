@@ -1,0 +1,9 @@
+// negative_type_mismatch.ae — Negative test: type mismatch must be rejected
+// Mixing u64 and string in arithmetic should be a semantic error.
+
+func main(): u64 {
+    let n: u64 = 42
+    let s: string = "hello"
+    let r = n + s    // type error: can't add string to u64
+    return r
+}

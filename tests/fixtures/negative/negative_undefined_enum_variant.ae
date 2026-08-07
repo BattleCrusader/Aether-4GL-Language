@@ -1,0 +1,13 @@
+// negative_undefined_enum_variant.ae — Negative test: invalid enum variant
+// Color doesn't have a 'Purple' variant.
+
+enum Color {
+    Red
+    Green
+    Blue
+}
+
+func main(): u64 {
+    let c: Color = Color::Purple    // ERROR: no Purple variant
+    return 0
+}

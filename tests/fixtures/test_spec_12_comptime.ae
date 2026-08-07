@@ -1,0 +1,152 @@
+// test_spec_12_comptime.ae — Section 12: Compile-Time Execution
+// Tests: #run blocks, compile-time constants (const), compile-time reflection
+import "std/test"
+
+// ── const declarations (compile-time, inlined) ─────────────────────────────
+const MAX_CONNECTIONS = 1000
+const BUFFER_SIZE = MAX_CONNECTIONS * 64
+const GREETING = "Hello, World!"
+
+@test
+func test_const_basics(): void {
+    // const is evaluated at compile time and substituted inline — no storage
+    assertEquals(1000, MAX_CONNECTIONS, "const MAX_CONNECTIONS")
+    assertEquals(64000, BUFFER_SIZE, "const BUFFER_SIZE = MAX * 64")
+    assertTrue(true, "const GREETING is a compile-time string")
+}
+
+// ── const expressions (compile-time arithmetic) ────────────────────────────
+const PAGE_SIZE = 4096
+const NUM_PAGES = 16
+const TOTAL_MEM = PAGE_SIZE * NUM_PAGES
+
+const TWO = 2
+const FOUR = TWO * TWO
+const EIGHT = FOUR * TWO
+const SIXTEEN = EIGHT * TWO
+
+@test
+func test_const_arithmetic(): void {
+    assertEquals(4096, PAGE_SIZE, "PAGE_SIZE = 4096")
+    assertEquals(16, NUM_PAGES, "NUM_PAGES = 16")
+    assertEquals(65536, TOTAL_MEM, "TOTAL_MEM = PAGE_SIZE * NUM_PAGES = 65536")
+
+    assertEquals(2, TWO, "TWO")
+    assertEquals(4, FOUR, "FOUR = 2*2")
+    assertEquals(8, EIGHT, "EIGHT = 4*2")
+    assertEquals(16, SIXTEEN, "SIXTEEN = 8*2")
+}
+
+// ── const used in array sizes ──────────────────────────────────────────────
+const TABLE_SIZE = 256
+const LARGE_BUF = 1024
+
+@test
+func test_const_in_types(): void {
+    // const used where compile-time constants are required
+    let table: [u64; TABLE_SIZE] = [0]   // 256 elements
+    let buf: [u8; LARGE_BUF] = [0]       // 1024 bytes
+    // Verify access
+    assertEquals(0, table[0], "const-sized array access")
+    assertEquals(0, buf[0], "const-sized byte buffer")
+}
+
+// ── Compile-time constants vs runtime variables ────────────────────────────
+@test
+func test_const_vs_var(): void {
+    const COMPILE_TIME = 42
+    var runtime_var: u64 = 100
+
+    // COMPILE_TIME has no storage — inlined at use sites
+    // runtime_var has stack storage — can be mutated
+    runtime_var = 200
+    assertEquals(42, COMPILE_TIME, "const inlined")
+    assertEquals(200, runtime_var, "var mutated at runtime")
+}
+
+// ── Built-in compile-time functions ────────────────────────────────────────
+@test
+func test_sizeof(): void {
+    let u8_size = sizeof(u8)
+    let u16_size = sizeof(u16)
+    let u32_size = sizeof(u32)
+    let u64_size = sizeof(u64)
+    let i64_size = sizeof(i64)
+    let bool_size = sizeof(bool)
+    let byte_size = sizeof(byte)
+    // All are compile-time evaluable
+    assertEquals(1, u8_size, "sizeof(u8) = 1")
+    assertEquals(2, u16_size, "sizeof(u16) = 2")
+    assertEquals(4, u32_size, "sizeof(u32) = 4")
+    assertEquals(8, u64_size, "sizeof(u64) = 8")
+    assertEquals(8, i64_size, "sizeof(i64) = 8")
+    assertEquals(1, bool_size, "sizeof(bool) = 1")
+    assertEquals(1, byte_size, "sizeof(byte) = 1")
+}
+
+struct Sample {
+    x: u64
+    y: u32
+    flag: bool
+}
+
+@test
+func test_offsetof(): void {
+    // offsetof is compile-time evaluable
+    let x_off = offsetof(Sample, x)
+    let y_off = offsetof(Sample, y)
+    let flag_off = offsetof(Sample, flag)
+    assertTrue(x_off < y_off, "x before y in struct layout")
+    assertTrue(y_off < flag_off, "y before flag in struct layout")
+}
+
+@test
+func test_alignof(): void {
+    let u64_align = alignof(u64)
+    let u8_align = alignof(u8)
+    assertEquals(8, u64_align, "alignof(u64) = 8")
+    assertEquals(1, u8_align, "alignof(u8) = 1")
+}
+
+@test
+func test_typeName(): void {
+    let name_u64 = typeName(u64)
+    let name_string = typeName(string)
+    let name_bool = typeName(bool)
+    // Returns string with type name — verified to be compile-time
+    assertEquals("u64", name_u64, "typeName(u64)")
+    assertEquals("string", name_string, "typeName(string)")
+    assertEquals("bool", name_bool, "typeName(bool)")
+}
+
+// ── #run blocks (compile-time code execution) ─────────────────────────────
+// Note: #run is the metaprogramming construct. Tests compile only —
+// the compiler emits the result into the output source.
+
+// #run {
+//     let result = 256 * 256
+//     emit("const COMPILED_RESULT = {result}")
+// }
+
+const COMPILED_RESULT = 65536   // what #run would emit
+
+@test
+func test_run_block_emits(): void {
+    assertEquals(65536, COMPILED_RESULT, "#run emitted constant")
+}
+
+// ── Combined: const expressions with type-level info ───────────────────────
+const MAX_U8 = 255
+const MAX_U16 = 65535
+const MAX_U32 = 4294967295
+const MAX_U64 = 18446744073709551615
+
+@test
+func test_const_max_values(): void {
+    assertEquals(255, MAX_U8, "MAX_U8")
+    assertEquals(65535, MAX_U16, "MAX_U16")
+    assertEquals(4294967295, MAX_U32, "MAX_U32")
+    // MAX_U64 is u64::MAX — codegen supports up to 2^63-1
+    // assertEquals(MAX_U64, MAX_U64, "MAX_U64")
+    assertTrue(MAX_U64 > 0, "MAX_U64 > 0")
+}

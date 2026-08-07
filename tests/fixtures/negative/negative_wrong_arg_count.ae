@@ -1,0 +1,10 @@
+// negative_wrong_arg_count.ae — Negative test: wrong number of args must be rejected
+// Function takes 2 args, called with 1. Must be a type-check error.
+
+func add(a: u64, b: u64): u64 {
+    return a + b
+}
+
+func main(): u64 {
+    return add(5)    // ERROR: expected 2 args, got 1
+}

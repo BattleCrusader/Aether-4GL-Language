@@ -29,7 +29,7 @@ BINDIR      ?= $(PREFIX)/bin
 LOCAL_PREFIX ?= $(HOME)/.local
 LOCAL_BINDIR ?= $(LOCAL_PREFIX)/bin
 
-.PHONY: all build aether-cli test test-host clean install install-local uninstall
+.PHONY: all build aether-cli test test-host test-spec test-negative clean install install-local uninstall
 
 all: build
 
@@ -64,6 +64,36 @@ test-host: build
 	done; \
 	echo ""; \
 	echo "=== Results: $$pass/$$total passed, $$fail failed ==="; \
+	[ $$fail -eq 0 ]
+
+# Run the comprehensive spec test suite (positive + negative)
+# Uses tools/test_runner.py which handles both kinds of fixtures.
+# Positive tests must COMPILE (TDD: features being implemented).
+# Negative tests must FAIL TO COMPILE (TDD: compiler must reject invalid programs).
+test-spec: build
+	@python3 tools/test_runner.py ./$(AETHER) $(FIXTURE_DIR)
+
+# Run only the negative tests (compiler must reject invalid programs).
+test-negative: build
+	@echo "=== Running negative test suite (compiler must REJECT these) ==="
+	@total=0; pass=0; fail=0; \
+	for fixture in $(FIXTURE_DIR)/negative/*.ae; do \
+		[ -f "$$fixture" ] || continue; \
+		total=$$((total + 1)); \
+		name=$$(basename $$fixture .ae); \
+		out="/tmp/aether_neg_$$name"; \
+		printf "  REJECT: %-50s " $$name; \
+		if ./$(AETHER) $$fixture -o $$out >/dev/null 2>&1; then \
+			printf "WRONG! (compiler accepted invalid code)\n"; \
+			fail=$$((fail + 1)); \
+		else \
+			printf "OK (correctly rejected)\n"; \
+			pass=$$((pass + 1)); \
+		fi; \
+		rm -f $$out; \
+	done; \
+	echo ""; \
+	echo "=== Results: $$pass/$$total correctly rejected, $$fail wrongly accepted ==="; \
 	[ $$fail -eq 0 ]
 
 # Install the compiler binary to the system

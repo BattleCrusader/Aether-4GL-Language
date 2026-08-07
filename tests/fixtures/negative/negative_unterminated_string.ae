@@ -1,0 +1,7 @@
+// negative_unterminated_string.ae — Negative test: unterminated string literal
+// Lexer must reject strings that don't have a closing quote.
+
+func main(): u64 {
+    let s: string = "unterminated
+    return 0
+}

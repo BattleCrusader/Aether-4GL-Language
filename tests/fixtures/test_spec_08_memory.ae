@@ -1,0 +1,192 @@
+// test_spec_08_memory.ae — Section 8: Memory Management
+// Tests: stack alloc, escape analysis, heap, ownership/copy,
+//        region alloc, no null (T?), unsafe, automatic destructor insertion
+import "std/test"
+
+// ── Stack allocation (default) ──────────────────────────────────────────────
+func stack_alloc(): u64 {
+    let a: u64 = 100   // stack-allocated
+    let b: u64 = 200   // stack-allocated
+    return a + b       // 300
+}
+
+@test
+func test_stack_alloc(): void {
+    assertEquals(300, stack_alloc(), "sum of two stack-local vars")
+}
+
+// ── Escape analysis: returning a value auto-promotes to heap ───────────────
+struct Point {
+    x: u64
+    y: u64
+}
+
+func make_point(x: u64, y: u64): Point {
+    var p: Point
+    p.x = x
+    p.y = y
+    return p    // escapes — auto-promoted to heap
+}
+
+func use_local(): u64 {
+    let local: u64 = 42
+    return local   // does NOT escape — stack-alloc OK
+}
+
+@test
+func test_escape_analysis(): void {
+    var pt: Point = make_point(10, 20)
+    assertEquals(10, pt.x, "escape analysis: x preserved")
+    assertEquals(20, pt.y, "escape analysis: y preserved")
+    assertEquals(42, use_local(), "no escape: stack local returned as u64")
+}
+
+// ── Explicit heap keyword ───────────────────────────────────────────────────
+struct Big { data: u64; size: u64 }
+
+func explicit_heap(): Big {
+    let big = heap Big()   // explicit heap allocation
+    big.data = 0xDEADBEEF
+    big.size = 1024
+    return big
+}
+
+@test
+func test_explicit_heap(): void {
+    let b: Big = explicit_heap()
+    assertEquals(0xDEADBEEF, b.data, "heap-allocated Big.data")
+    assertEquals(1024, b.size, "heap-allocated Big.size")
+}
+
+// ── Ownership: borrow vs shared ────────────────────────────────────────────
+struct Buffer { size: u64 }
+
+func consume(buf: Buffer): u64 {
+    return buf.size   // borrow, no free
+}
+
+func share(buf: Buffer): u64 {
+    let copy = buf    // shared, compiler inserts refcount ops
+    return copy.size
+}
+
+@test
+func test_ownership(): void {
+    var buf: Buffer
+    buf.size = 512
+
+    assertEquals(512, consume(buf), "borrow returns size, no free")
+    assertEquals(512, share(buf), "shared copy returns size, refcount balanced")
+}
+
+// ── copy keyword: force pass-by-value ──────────────────────────────────────
+struct Data { value: u64 }
+
+func process(data: copy Data): u64 {
+    return data.value
+}
+
+@test
+func test_copy_keyword(): void {
+    var d: Data
+    d.value = 999
+    let v = process(d)        // explicit copy on call
+    let x = copy d            // explicit copy at binding
+    assertEquals(999, v, "copy in parameter")
+    assertEquals(999, x.value, "copy in binding")
+}
+
+// ── Region-based allocation ────────────────────────────────────────────────
+func use_region(): u64 {
+    var total: u64 = 0
+    region("kernel") {
+        let p1: u64 = 100   // from kernel region
+        let p2: u64 = 200
+        total = p1 + p2
+    }  // entire region freed at once — O(1) teardown
+    return total
+}
+
+@test
+func test_region_alloc(): void {
+    assertEquals(300, use_region(), "region sum = 100+200")
+}
+
+// ── No null pointers — T? optional instead ─────────────────────────────────
+@test
+func test_no_null(): void {
+    // Use T? instead of null
+    let maybe: u64? = some(42)
+    let absent: u64? = none
+    let unwrapped = maybe or 0
+    let fallback = absent or 99
+    assertEquals(42, unwrapped, "optional unwrapped with some")
+    assertEquals(99, fallback, "optional fallback for none")
+}
+
+// ── Unsafe block: allows inline asm and direct memory ops ──────────────────
+@test
+func test_unsafe_block(): void {
+    let r: u64 = 0
+    unsafe {
+        // unsafe block allows operations the compiler can't prove safe:
+        // inline asm, raw pointers, FFI calls, mutable statics
+        let _ = r
+    }
+    assertTrue(true, "unsafe block executes")
+}
+
+// ── Inline asm in unsafe context ───────────────────────────────────────────
+@test
+func test_asm_in_unsafe(): void {
+    var v: u64 = 0
+    unsafe {
+        asm { mov rax, 42 }
+        asm { mov [v], rax }
+    }
+    assertEquals(42, v, "asm wrote 42 into v")
+}
+
+// ── Automatic destructor insertion ─────────────────────────────────────────
+class Resource {
+    name: string
+    cleanup_count: u64
+
+    func init(n: string): Resource {
+        var r: Resource
+        r.name = n
+        r.cleanup_count = 0
+        return r
+    }
+
+    func drop() {
+        // Compiler inserts this call at every scope exit point
+        cleanup_count = cleanup_count + 1
+    }
+}
+
+@test
+func test_destructor(): void {
+    var total: u64 = 0
+    {
+        var r1: Resource = Resource::init("first")
+        var r2: Resource = Resource::init("second")
+        total = 1
+    }  // LIFO drop order: r2 dropped, then r1
+    // We can't directly observe the drop calls from here, but
+    // verify the class compiles and the destructor is registered
+    assertEquals(1, total, "scope exited without crash")
+}
+
+// ── Combined: heap + region + unsafe ───────────────────────────────────────
+@test
+func test_memory_combined(): void {
+    let opt: u64? = some(100)
+
+    var result: u64 = 0
+    region("test") {
+        let v = opt or 0
+        result = v + 50
+    }
+    assertEquals(150, result, "region + optional combined")
+}

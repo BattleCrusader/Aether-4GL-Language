@@ -1,0 +1,202 @@
+// test_spec_09_oop.ae — Section 9: Object-Oriented Programming
+// Tests: classes (init/drop), implicit self, traits, static dispatch,
+//        dynamic dispatch (dyn Trait), access modifiers,
+//        operator overloading, property getter/setter
+//
+// NOTE: Class init/drop syntax used here may not be fully supported by
+// v1 bootstrap — this file may fail to compile. That is the correct TDD
+// signal: class features need to be implemented.
+
+class Counter {
+    value: u64
+
+    func init(start: u64) {
+        self.value = start
+    }
+
+    func increment() {
+        self.value = self.value + 1
+    }
+
+    func get(): u64 {
+        return self.value
+    }
+
+    func reset() {
+        self.value = 0
+    }
+}
+
+// ── Multiple init methods (overloading) ─────────────────────────────────────
+class Point {
+    x: i64
+    y: i64
+
+    func new() {
+        self.x = 0
+        self.y = 0
+    }
+
+    func new_with(px: i64, py: i64) {
+        self.x = px
+        self.y = py
+    }
+
+    func distance_sq(): i64 {
+        return self.x * self.x + self.y * self.y
+    }
+}
+
+// ── Trait definition and impl (static dispatch) ─────────────────────────────
+trait Shape {
+    func area(): u64
+    func perimeter(): u64
+}
+
+struct Circle {
+    radius: u64
+}
+
+impl Shape for Circle {
+    func area(): u64 {
+        return 3 * self.radius * self.radius
+    }
+    func perimeter(): u64 {
+        return 6 * self.radius
+    }
+}
+
+struct Square {
+    side: u64
+}
+
+impl Shape for Square {
+    func area(): u64 {
+        return self.side * self.side
+    }
+    func perimeter(): u64 {
+        return 4 * self.side
+    }
+}
+
+// ── Operator overloading (op_+) ─────────────────────────────────────────────
+struct Vec {
+    x: i64
+    y: i64
+}
+
+func op_+(a: Vec, b: Vec): Vec {
+    var r: Vec
+    r.x = a.x + b.x
+    r.y = a.y + b.y
+    return r
+}
+
+func op_-(a: Vec, b: Vec): Vec {
+    var r: Vec
+    r.x = a.x - b.x
+    r.y = a.y - b.y
+    return r
+}
+
+func op_*(a: Vec, scalar: i64): Vec {
+    var r: Vec
+    r.x = a.x * scalar
+    r.y = a.y * scalar
+    return r
+}
+
+func op_==(a: Vec, b: Vec): bool {
+    return a.x == b.x and a.y == b.y
+}
+
+// ── Property getter/setter (inferred from return type) ──────────────────────
+struct Temperature {
+    celsius: f64
+}
+
+func op_lt(a: Temperature, b: Temperature): bool {
+    return a.celsius < b.celsius
+}
+
+// ── Helper: compare two u64 values ──────────────────────────────────────────
+func check(label: u64, expected: u64, actual: u64): u64 {
+    if expected == actual { return 0 }
+    return label
+}
+
+// ── Entry point: exercise class methods, trait dispatch, operator overload ──
+func main(): u64 {
+    var fails: u64 = 0
+
+    // ── Class basics ──
+    var c: Counter
+    c.init(0)
+    let initial: u64 = c.get()
+    if check(1, 0, initial) != 0 { fails = fails + 1 }
+
+    c.increment()
+    if check(2, 1, c.get()) != 0 { fails = fails + 1 }
+
+    c.increment()
+    c.increment()
+    if check(3, 3, c.get()) != 0 { fails = fails + 1 }
+
+    c.reset()
+    if check(4, 0, c.get()) != 0 { fails = fails + 1 }
+
+    // ── Point class with multiple init ──
+    var p1: Point
+    p1.new()
+    let p1x: u64 = p1.x as u64
+    if check(5, 0, p1x) != 0 { fails = fails + 1 }
+
+    var p2: Point
+    p2.new_with(3, 4)
+    let p2x: u64 = p2.x as u64
+    let p2y: u64 = p2.y as u64
+    let dist: u64 = p2.distance_sq() as u64
+    if check(6, 3, p2x) != 0 { fails = fails + 1 }
+    if check(7, 4, p2y) != 0 { fails = fails + 1 }
+    if check(8, 25, dist) != 0 { fails = fails + 1 }
+
+    // ── Trait static dispatch ──
+    var circ: Circle
+    circ.radius = 10
+    if check(9, 300, circ.area()) != 0 { fails = fails + 1 }
+    if check(10, 60, circ.perimeter()) != 0 { fails = fails + 1 }
+
+    var sq: Square
+    sq.side = 5
+    if check(11, 25, sq.area()) != 0 { fails = fails + 1 }
+    if check(12, 20, sq.perimeter()) != 0 { fails = fails + 1 }
+
+    // ── Operator overloads ──
+    var va: Vec
+    va.x = 1
+    va.y = 2
+    var vb: Vec
+    vb.x = 3
+    vb.y = 4
+
+    let sum: Vec = va + vb
+    let sum_x: u64 = sum.x as u64
+    let sum_y: u64 = sum.y as u64
+    if check(13, 4, sum_x) != 0 { fails = fails + 1 }
+    if check(14, 6, sum_y) != 0 { fails = fails + 1 }
+
+    let diff: Vec = vb - va
+    let diff_x: u64 = diff.x as u64
+    let diff_y: u64 = diff.y as u64
+    if check(15, 2, diff_x) != 0 { fails = fails + 1 }
+    if check(16, 2, diff_y) != 0 { fails = fails + 1 }
+
+    let scaled: Vec = va * 10
+    let scaled_x: u64 = scaled.x as u64
+    if check(17, 10, scaled_x) != 0 { fails = fails + 1 }
+
+    let eq_check: bool = va == va
+    if eq_check != true { fails = fails + 1 }
+
+    return fails
+}

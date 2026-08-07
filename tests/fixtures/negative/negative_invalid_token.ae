@@ -1,0 +1,7 @@
+// negative_missing_semicolon_newline.ae — Negative test: invalid syntax
+// Random token sequence must produce a parse error.
+
+func main(): u64 {
+    @@@@
+    return 0
+}

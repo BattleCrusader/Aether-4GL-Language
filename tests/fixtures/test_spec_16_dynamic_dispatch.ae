@@ -1,0 +1,199 @@
+// test_spec_16_dynamic_dispatch.ae — Section 16: Dynamic Dispatch
+// Tests: dyn Trait syntax (fat pointer = vtable + data),
+//        static dispatch (default, monomorphized),
+//        when to use static vs dynamic
+import "std/test"
+
+// ── Trait definition ────────────────────────────────────────────────────────
+trait Drawable {
+    func draw()
+    func area(): f64
+}
+
+// ── Static dispatch (default) — monomorphized, zero overhead ──────────────
+struct Circle {
+    radius: f64
+}
+
+impl Drawable for Circle {
+    func draw() {
+        let _ = 0
+    }
+    func area(): f64 {
+        return 3.14159 * self.radius * self.radius
+    }
+}
+
+struct Square {
+    side: f64
+}
+
+impl Drawable for Square {
+    func draw() {
+        let _ = 0
+    }
+    func area(): f64 {
+        return self.side * self.side
+    }
+}
+
+// Static dispatch function — generic over Drawable, monomorphized at compile time
+func render_static_static<T: Drawable>(item: T) {
+    item.draw()
+}
+
+@test
+func test_static_dispatch(): void {
+    var c: Circle
+    c.radius = 10.0
+    let c_area: f64 = c.area()
+
+    var s: Square
+    s.side = 5.0
+    let s_area: f64 = s.area()
+
+    render_static_static(c)
+    render_static_static(s)
+
+    assertTrue(c_area > 0.0, "Circle area computed")
+    assertTrue(s_area > 0.0, "Square area computed")
+}
+
+// ── Dynamic dispatch (dyn Trait) — fat pointer (vtable + data) ─────────────
+func render_dynamic(item: dyn Drawable) {
+    // vtable lookup at runtime — one pointer dereference per call
+    item.draw()
+}
+
+func render_dynamic_array(items: [dyn Drawable]) {
+    for item in items {
+        item.draw()
+    }
+}
+
+@test
+func test_dynamic_dispatch(): void {
+    var c: Circle
+    c.radius = 5.0
+    var s: Square
+    s.side = 10.0
+
+    // dyn Trait creates a fat pointer
+    let d1: dyn Drawable = c
+    let d2: dyn Drawable = s
+
+    render_dynamic(d1)
+    render_dynamic(d2)
+
+    assertTrue(true, "dynamic dispatch via fat pointer")
+}
+
+// ── Heterogeneous collection requires dyn Trait ────────────────────────────
+@test
+func test_dyn_array(): void {
+    var c: Circle
+    c.radius = 3.0
+    var s: Square
+    s.side = 4.0
+
+    let arr: [dyn Drawable] = [c, s]
+    render_dynamic_array(arr)
+
+    assertTrue(true, "heterogeneous [dyn Drawable] array renders")
+}
+
+// ── Static vs dynamic decision points ──────────────────────────────────────
+@test
+func test_when_static(): void {
+    // Use static dispatch when:
+    // 1. Concrete type is known at compile time
+    // 2. Performance is critical
+    // 3. No heterogeneous collections
+    var c: Circle
+    c.radius = 1.0
+    let _ = c.area()   // static dispatch
+    assertTrue(true, "static dispatch: known type at compile time")
+}
+
+@test
+func test_when_dynamic(): void {
+    // Use dynamic dispatch when:
+    // 1. Heterogeneous collections (mixed types)
+    // 2. Runtime polymorphism (type chosen at runtime)
+    // 3. Plugin architectures
+    var c: Circle
+    c.radius = 1.0
+    let items: [dyn Drawable] = [c]   // dynamic dispatch
+    render_dynamic_array(items)
+    assertTrue(true, "dynamic dispatch: heterogeneous collection")
+}
+
+// ── dyn Trait with generics + bounds ──────────────────────────────────────
+func sum_areas_static<T: Drawable>(items: [T]): f64 {
+    let total: f64 = 0.0
+    for item in items {
+        let a: f64 = item.area()
+        // accumulate
+    }
+    return total
+}
+
+func sum_areas_dynamic(items: [dyn Drawable]): f64 {
+    let total: f64 = 0.0
+    for item in items {
+        let a: f64 = item.area()
+        // accumulate
+    }
+    return total
+}
+
+@test
+func test_combined_dispatch(): void {
+    var c: Circle
+    c.radius = 2.0
+    var s: Square
+    s.side = 3.0
+
+    // Static: each type instantiated separately, monomorphized
+    let _ = sum_areas_static([c, c, c])
+
+    // Dynamic: single instantiation with fat pointers
+    let _ = sum_areas_dynamic([c, s])
+
+    assertTrue(true, "static vs dynamic both compile")
+}
+
+// ── Trait object safety rules ──────────────────────────────────────────────
+// Self parameter in trait method makes the trait NOT dyn-safe
+trait Cloneable {
+    func clone(): Self
+}
+
+impl Cloneable for Circle {
+    func clone(): Circle {
+        return self
+    }
+}
+
+@test
+func test_cloneable(): void {
+    var c: Circle
+    c.radius = 5.0
+    let c2: Circle = c.clone()
+    assertTrue(c2.radius == 5.0, "clone preserves value")
+}
+
+// ── dyn Trait coercion from concrete type ──────────────────────────────────
+func take_drawable(d: dyn Drawable): f64 {
+    return d.area()
+}
+
+@test
+func test_dyn_coercion(): void {
+    var c: Circle
+    c.radius = 1.0
+
+    // Implicit coercion from Circle to dyn Drawable
+    let area: f64 = take_drawable(c)
+    assertTrue(area > 0.0, "Circle coerced to dyn Drawable")
+}

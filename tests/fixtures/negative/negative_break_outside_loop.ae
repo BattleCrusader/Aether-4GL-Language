@@ -1,0 +1,7 @@
+// negative_break_outside_loop.ae — Negative test: break outside any loop
+// break must be inside a loop body.
+
+func main(): u64 {
+    break    // ERROR: break outside loop
+    return 0
+}

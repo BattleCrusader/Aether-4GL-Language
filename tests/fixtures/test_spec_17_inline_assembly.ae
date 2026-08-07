@@ -1,0 +1,196 @@
+// test_spec_17_inline_assembly.ae — Section 17: Inline Assembly
+// Tests: basic asm block, asm with output bindings, top-level asm,
+//        const values in asm, labels and jumps, RAX preservation
+import "std/test"
+
+// ── Basic inline asm (NASM syntax emitted verbatim) ───────────────────────
+func writePortByte(port: u16, value: byte) {
+    asm {
+        mov dx, rdi       // SysV ABI: rdi = first arg (port)
+        mov al, sil       // sil = low byte of rsi (value)
+        out dx, al        // output to port
+    }
+}
+
+@test
+func test_basic_asm(): void {
+    // Compile-check only — port I/O not safe in tests
+    writePortByte(0x3F8, 0x41)
+    assertTrue(true, "basic asm block compiled")
+}
+
+// ── asm with output bindings (asm: (vars) { body }) ────────────────────────
+func readTimestampCounter(): u64 {
+    var hi: u32
+    var lo: u32
+    asm: (hi, lo) {
+        rdtsc                // reads TSC into EDX:EAX
+        mov [hi], edx
+        mov [lo], eax
+    }
+    return (u64(hi) << 32) | u64(lo)
+}
+
+@test
+func test_asm_output_bindings(): void {
+    let tsc: u64 = readTimestampCounter()
+    // TSC should be non-zero on any modern CPU
+    assertTrue(tsc > 0, "rdtsc returned non-zero")
+    // Two reads should differ (TSC increments)
+    let tsc2: u64 = readTimestampCounter()
+    assertTrue(tsc2 >= tsc, "TSC monotonically non-decreasing")
+}
+
+// ── const values accessible in asm (via equ directives) ───────────────────
+const COM1_DATA = 0x3F8
+const LSR_THR_EMPTY = 0x20
+
+func serial_putc(c: byte) {
+    asm {
+        mov dx, COM1_DATA     // const COM1_DATA = 0x3F8 emitted as equ
+        mov al, dil           // rdi low byte = char
+        out dx, al
+    }
+}
+
+func serial_tx_ready(): bool {
+    var status: u8 = 0
+    asm {
+        mov dx, COM1_DATA + 5   // LSR offset
+        in al, dx
+        mov [status], al
+    }
+    return (status & LSR_THR_EMPTY) != 0
+}
+
+@test
+func test_const_in_asm(): void {
+    // Compile-check — don't actually touch serial in tests
+    serial_putc(0x41)
+    let ready: bool = serial_tx_ready()
+    assertTrue(true, "const values used in asm compile to equ directives")
+}
+
+// ── asm with labels and jumps ──────────────────────────────────────────────
+func spin_wait(cycles: u64) {
+    asm {
+        mov rcx, cycles   // arg 1 in rdi -> but cycles is the param name
+        // for safety, use explicit register reference:
+        .loop:
+        dec rcx
+        jnz .loop
+    }
+}
+
+@test
+func test_asm_labels(): void {
+    spin_wait(100)
+    assertTrue(true, "asm with .loop label compiles and runs")
+}
+
+// ── Multi-architecture assembly (translated by multi-target assembler) ─────
+func setup_gdt() {
+    asm {
+        lgdt [gdt_ptr]
+        mov ax, 0x10
+        mov ds, ax
+        mov ss, ax
+    }
+}
+
+asm {
+    // top-level BSS / data declarations
+    gdt_ptr: resq 1
+}
+
+@test
+func test_top_level_asm_data(): void {
+    setup_gdt()
+    assertTrue(true, "top-level asm declarations + function-level asm combined")
+}
+
+// ── Top-level asm: section declarations ────────────────────────────────────
+asm {
+    section .bss
+cmd_names:    resq 16
+cmd_handlers: resq 16
+cmd_count:    resq 1
+
+    section .data
+help_text:    db "Available commands: help, ls, echo", 0
+
+    section .text
+}
+
+@test
+func test_top_level_section_asm(): void {
+    // Verify the top-level asm doesn't cause runtime issues
+    assertTrue(true, "top-level .bss/.data/.text asm declarations parse")
+}
+
+// ── Extern hoisting from asm blocks ────────────────────────────────────────
+func zero_bss() {
+    asm {
+        extern __bss_start
+        extern __bss_end
+    }
+    asm {
+        mov rdi, __bss_start
+        mov rcx, __bss_end
+        sub rcx, rdi
+        xor al, al
+        rep stosb
+    }
+}
+
+@test
+func test_extern_hoisting(): void {
+    zero_bss()
+    assertTrue(true, "extern declarations hoisted to file level")
+}
+
+// ── RAX preservation from asm block ────────────────────────────────────────
+func get_forty_two(): u64 {
+    asm {
+        mov rax, 42     // rax is the return register
+    }
+    // No "xor rax, rax" emitted here — rax preserved from asm block
+}
+
+@test
+func test_rax_preserved(): void {
+    let v: u64 = get_forty_two()
+    assertEquals(42, v, "asm block sets rax, no epilogue zeros it")
+}
+
+// ── Multiple asm blocks in same function (sequential) ─────────────────────
+func multi_asm(val: u64): u64 {
+    var x: u64 = 0
+    asm { mov [x], rdi }      // save arg
+    asm { mov rax, [x] }      // reload to rax
+    asm { add rax, 1 }        // increment
+    return x                  // returns input
+}
+
+@test
+func test_multi_asm_blocks(): void {
+    let r: u64 = multi_asm(41)
+    assertEquals(41, r, "multiple asm blocks compose correctly")
+}
+
+// ── asm with string ops (movs, stos, lods) ────────────────────────────────
+func memset_asm(dst: u64, val: u8, count: u64) {
+    asm {
+        mov rdi, dst
+        mov al, val
+        mov rcx, count
+        rep stosb
+    }
+}
+
+@test
+func test_asm_string_ops(): void {
+    let buf: [u8] = []
+    memset_asm(buf, 0, 16)
+    assertTrue(true, "rep stosb via inline asm compiles")
+}

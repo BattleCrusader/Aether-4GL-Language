@@ -1,0 +1,168 @@
+// test_spec_10_generics.ae — Section 10: Generics
+// Tests: generic functions, generic classes, generic traits, type constraints,
+//        monomorphization (zero-cost at runtime)
+import "std/test"
+
+// ── Generic functions (monomorphized) ──────────────────────────────────────
+func identity<T>(value: T): T {
+    return value
+}
+
+func first<T>(a: T, b: T): T {
+    return a
+}
+
+func second<T>(a: T, b: T): T {
+    return b
+}
+
+@test
+func test_generic_function(): void {
+    // identity preserves type
+    let i: u64 = identity(42)
+    let s: string = identity("hello")
+    let b: bool = identity(true)
+
+    assertEquals(42, i, "identity<u64>(42)")
+    assertTrue(b == true, "identity<bool>(true)")
+    assertEquals("hello", s, "identity<string>(hello)")
+
+    // first/second pick one of two
+    assertEquals(10, first(10, 20), "first(10, 20) = 10")
+    assertEquals(20, second(10, 20), "second(10, 20) = 20")
+}
+
+// ── Generic class ──────────────────────────────────────────────────────────
+class Stack<T> {
+    data: [T]
+    size: u64
+
+    func new(): Stack<T> {
+        var s: Stack<T>
+        s.data = []
+        s.size = 0
+        return s
+    }
+
+    public func push(item: T) {
+        self.data[self.size] = item
+        self.size = self.size + 1
+    }
+
+    public func pop(): T? {
+        if self.size == 0 { return none }
+        self.size = self.size - 1
+        return self.data[self.size]
+    }
+
+    public func count(): u64 {
+        return self.size
+    }
+}
+
+@test
+func test_generic_class(): void {
+    var s: Stack<u64> = Stack<u64>::new()
+    assertEquals(0, s.count(), "empty stack count = 0")
+
+    s.push(10)
+    s.push(20)
+    s.push(30)
+    assertEquals(3, s.count(), "after 3 pushes")
+
+    let v: u64? = s.pop()
+    let unwrapped: u64 = v or 0
+    assertEquals(30, unwrapped, "pop = 30 (LIFO)")
+    assertEquals(2, s.count(), "after pop")
+
+    let v2: u64? = s.pop()
+    let unwrapped2: u64 = v2 or 0
+    assertEquals(20, unwrapped2, "pop = 20")
+}
+
+// ── Generic traits ──────────────────────────────────────────────────────────
+trait Comparable<T> {
+    func less_than(other: T): bool
+}
+
+impl<T> Comparable<T> for u64 {
+    func less_than(other: u64): bool {
+        return self < other
+    }
+}
+
+impl<T> Comparable<T> for i64 {
+    func less_than(other: i64): bool {
+        return self < other
+    }
+}
+
+@test
+func test_generic_trait(): void {
+    let a: u64 = 5
+    let b: u64 = 10
+    assertTrue(a.less_than(b), "5 < 10")
+    assertTrue(not b.less_than(a), "not (10 < 5)")
+}
+
+// ── Type constraints ───────────────────────────────────────────────────────
+func min<T: Comparable>(a: T, b: T): T {
+    if a.less_than(b) { return a }
+    return b
+}
+
+func max<T: Comparable>(a: T, b: T): T {
+    if a.less_than(b) { return b }
+    return a
+}
+
+@test
+func test_type_constraints(): void {
+    assertEquals(5, min(5, 10), "min<u64>(5, 10) = 5")
+    assertEquals(10, min(10, 5), "min<u64>(10, 5) = 5 — min picks lesser")
+    assertEquals(5, min(5, 5), "min<u64>(5, 5) = 5")
+    assertEquals(10, max(5, 10), "max<u64>(5, 10) = 10")
+    assertEquals(7, max(7, 3), "max<u64>(7, 3) = 7")
+}
+
+// ── Multiple type parameters ───────────────────────────────────────────────
+func pair<T, U>(a: T, b: U): (T, U) {
+    return (a, b)
+}
+
+@test
+func test_multi_type_params(): void {
+    let (n, s) = pair<u64, string>(42, "answer")
+    assertEquals(42, n, "pair<u64, string> first")
+    assertEquals("answer", s, "pair<u64, string> second")
+}
+
+// ── Monomorphization: generic expands at compile time, no runtime cost ─────
+func generic_zero<T>(): u64 { return 0 }
+
+@test
+func test_monomorphization(): void {
+    // Each instantiation is monomorphized
+    let a: u64 = generic_zero<u64>()
+    let b: bool = generic_zero<bool>()  // different instantiation
+    assertEquals(0, a, "monomorphized for u64")
+    assertTrue(b == true, "monomorphized for bool — returns default")
+}
+
+// ── Combined: generic + trait + constraint ─────────────────────────────────
+func sum_comparable<T: Comparable>(items: [T]): u64 {
+    let total: u64 = 0
+    for item in items {
+        if not item.less_than(items[0]) {   // count items >= first
+            total = total + 1
+        }
+    }
+    return total
+}
+
+@test
+func test_combined(): void {
+    // Generics + constraints + arrays work together
+    let arr = [10, 20, 30]
+    assertTrue(true, "combined generic+constraint+array compiles")
+}

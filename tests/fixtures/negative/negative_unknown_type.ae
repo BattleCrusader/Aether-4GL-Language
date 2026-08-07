@@ -1,0 +1,7 @@
+// negative_unknown_type.ae — Negative test: unknown type name must be rejected
+// 'nonexistent_type' is not defined anywhere.
+
+func main(): u64 {
+    let x: nonexistent_type = 42
+    return 0
+}

@@ -1,0 +1,8 @@
+// negative_let_reassign.ae — Negative test: let must be immutable
+// 'let' declares an immutable binding. Reassigning is a compile error.
+
+func main(): u64 {
+    let x: u64 = 42
+    x = 99    // ERROR: cannot reassign immutable binding
+    return x
+}

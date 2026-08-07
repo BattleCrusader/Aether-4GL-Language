@@ -1,0 +1,7 @@
+// negative_call_non_function.ae — Negative test: calling something that isn't a function
+// 'x' is a u64, not a function — calling it must fail.
+
+func main(): u64 {
+    let x: u64 = 42
+    return x(1, 2)    // ERROR: x is not callable
+}
