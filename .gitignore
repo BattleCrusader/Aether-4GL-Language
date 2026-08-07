@@ -18,6 +18,7 @@ tests/fixtures/test_defer
 
 # Generated compiler binaries (root, cmd/, cmd/bootstrap/)
 /aether
+!/aether/
 /aether_compile
 /aether_compiled
 /aether_debug
