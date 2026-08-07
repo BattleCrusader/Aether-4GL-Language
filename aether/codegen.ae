@@ -628,9 +628,11 @@ func emitStringData(c: codegen): codegen {
 }
 func emitStart(c: codegen): codegen {
     c = label(c, "_start")
-    // Save argc and argv on stack (stack is always writable)
-    c = emitPush(c, "rdi")  // save argc
-    c = emitPush(c, "rsi")  // save argv
+    // Save argc and argv to globals (text section is mapped RWX)
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argc")
+    c = emitMovR64ToAddr(c, "rdi", "rcx", 0)  // mov [rcx], rdi
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argv")
+    c = emitMovR64ToAddr(c, "rsi", "rcx", 0)  // mov [rcx], rsi
     // Call main
     c = emitCallLabel(c, "main")
     // Exit with return code from rax
@@ -1091,9 +1093,12 @@ func genPrimary(ctx: genCtx, tokens: [Token]): genCtx {
     }
     if ctxCheck(ctx, tokens, TOKEN_STRING) {
         let s = tokens[ctx.pos].literal
-        if s == "" { s = tokens[ctx.pos].lexeme }
+        if s == "" {
+            s = tokens[ctx.pos].lexeme
+            if #s >= 2 { s = s[1:#s-1] }
+        }
         ctx.c = addString(ctx.c, s)
-        ctx.c = emitLeaR64Label(ctx.c, ctx.c.lastStringLabel)
+        ctx.c = emitLeaR64Label(ctx.c, "rax", ctx.c.lastStringLabel)
         ctx = ctxAdvance(ctx, tokens); return ctx
     }
     if ctxCheck(ctx, tokens, TOKEN_CHAR) {
@@ -1292,16 +1297,17 @@ func emitAeGetArg(c: codegen): codegen {
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
     c = emitPush(c, "rbx")
     c = emitMovR64R64(c, "rbx", "rdi")
-    // Stack: _start pushed rdi(argc) then rsi(argv), called main,
-    // main pushed rbp, called __ae_get_arg which pushed rbp
-    // argc at [rbp+40], argv at [rbp+32]
-    c = emitMovFromAddr(c, "rdx", "rbp", 40)  // rdx = argc
+    // Load argc from global
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argc")
+    c = emitMovFromAddr(c, "rdx", "rcx", 0)  // rdx = argc
     c = emitCmpR64R64(c, "rbx", "rdx")
     c = emitJbLabel(c, "__ae_get_arg_ok")
     c = emitLeaR64Label(c, "rax", "__ae_empty_str")
     c = emitPop(c, "rbx"); c = emitPop(c, "rbp"); c = emitRet(c)
     c = label(c, "__ae_get_arg_ok")
-    c = emitMovFromAddr(c, "rcx", "rbp", 32)  // rcx = argv
+    // Load argv from global
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argv")
+    c = emitMovFromAddr(c, "rcx", "rcx", 0)  // rcx = argv
     c = emitMovR64R64(c, "rax", "rbx")
     c = emitShlR64Imm8(c, "rax", 3)
     c = emitAddR64R64(c, "rax", "rcx")
@@ -1313,7 +1319,9 @@ func emitAeGetArg(c: codegen): codegen {
 func emitAeArgc(c: codegen): codegen {
     c = label(c, "__ae_argc")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
-    c = emitMovFromAddr(c, "rax", "rbp", 40)
+    // Load argc from global
+    c = emitLeaR64Label(c, "rcx", "__ae_saved_argc")
+    c = emitMovFromAddr(c, "rax", "rcx", 0)
     c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
@@ -1371,8 +1379,8 @@ func emitAeStrEq(c: codegen): codegen {
     c = emitPush(c, "rbx"); c = emitPush(c, "r12")
     c = emitMovR64R64(c, "rbx", "rdi"); c = emitMovR64R64(c, "r12", "rsi")
     c = label(c, "__ae_str_eq_loop")
-    c = emitByte(c, 0x8A); c = emitByte(c, 0x03)
-    c = emitByte(c, 0x8A); c = emitByte(c, 0x1C); c = emitByte(c, 0x24); c = emitByte(c, 0x0C); c = emitByte(c, 0x12)
+    c = emitByte(c, 0x8A); c = emitByte(c, 0x03)                    // mov al, byte [rbx]
+    c = emitByte(c, 0x41); c = emitByte(c, 0x8A); c = emitByte(c, 0x1C); c = emitByte(c, 0x24)  // mov bl, byte [r12]
     c = emitCmpR64R64(c, "rax", "rbx")
     c = emitJnzLabel(c, "__ae_str_eq_done")
     c = emitTestR64R64(c, "rax", "rax")

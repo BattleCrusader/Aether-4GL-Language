@@ -831,7 +831,7 @@ func (p *Parser) parseLiteral() Expr {
 		}
 		lit.Value = val
 	case TOKEN_STRING:
-		lit.Value = tok.Lexeme
+		lit.Value = tok.Literal.(string)
 	case TOKEN_CHAR:
 		lit.Value = tok.Lexeme
 	case TOKEN_KW_TRUE:

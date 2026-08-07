@@ -2,19 +2,61 @@ package main
 
 import (
 	"encoding/binary"
+	_ "embed"
 	"fmt"
+	"os"
 )
 
-type relocEntry struct {
-	offset  int    // offset of the 4-byte displacement in text
-	target  string // target label name
-	instLen int   // total instruction length (7 for LEA, 5 for call/jmp)
+//go:embed writefile.bin
+var aeWriteFileStr string
+
+//go:noinline
+func (c *Codegen) emitAeWriteFile() {
+	// String-to-[]byte conversion creates a runtime copy the optimizer
+	// cannot statically analyze, preventing reordering.
+	code := []byte(aeWriteFileStr)
+	c.text = append(c.text, code...)
+	c.labels["__ae_write_file"] = len(c.text) - len(code)
+}
+
+//go:noinline
+func getAeWriteFileCode() []byte {
+	return []byte{
+		0x55, 0x48, 0x89, 0xE5,
+		0x48, 0x89, 0x7D, 0xF8,
+		0x48, 0x89, 0x75, 0xF0,
+		0x48, 0x89, 0x55, 0xE8,
+		0x48, 0x8B, 0x7D, 0xF8,
+		0x48, 0xBE, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x48, 0xBA, 0xA4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x48, 0xB8, 0x05, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+		0x0F, 0x05,
+		0x48, 0x85, 0xC0,
+		0x79, 0x09,
+		0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,
+		0x5D, 0xC3,
+		0x48, 0x89, 0xC7,
+		0x48, 0x8B, 0x75, 0xF0,
+		0x48, 0x8B, 0x55, 0xE8,
+		0x48, 0xB8, 0x04, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+		0x0F, 0x05,
+		0x48, 0xB8, 0x06, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+		0x0F, 0x05,
+		0x48, 0x33, 0xC0,
+		0x5D, 0xC3,
+	}
 }
 
 // structField describes a struct field: name and offset (in bytes)
 type structField struct {
 	Name   string
 	Offset int
+}
+
+type relocEntry struct {
+	offset  int    // offset of the 4-byte displacement in text
+	target  string // target label name
+	instLen int   // total instruction length (7 for LEA, 5 for call/jmp)
 }
 
 // structInfo describes a struct type: name and its fields
@@ -884,8 +926,10 @@ func (c *Codegen) emitStringData() {
 // Label management
 // ============================================================
 
+//go:noinline
 func (c *Codegen) label(name string) {
-	c.labels[name] = len(c.text)
+	n := len(c.text)
+	c.labels[name] = n
 }
 
 // labelData records a label at the current position in the data section,
@@ -1236,15 +1280,16 @@ func (c *Codegen) emitSyscall() {
 
 // patchRelocs patches all call/jmp/lea displacements now that all labels are known.
 func (c *Codegen) patchRelocs() {
+	fmt.Fprintf(os.Stderr, "=== patchRelocs: %d relocs, %d labels ===\n", len(c.relocs), len(c.labels))
 	for _, r := range c.relocs {
 		targetOff, ok := c.labels[r.target]
 		if !ok {
 			c.errors = append(c.errors, fmt.Sprintf("undefined label %q referenced at offset %d", r.target, r.offset))
+			fmt.Fprintf(os.Stderr, "  UNDEFINED: %q at offset %d\n", r.target, r.offset)
 			continue
 		}
-		// Relative displacement: target - (offset + 4)
-		// offset is the position of the disp32, next instruction is at offset+4
 		disp := int32(targetOff - (r.offset + 4))
+		fmt.Fprintf(os.Stderr, "  %q: offset=%d targetOff=%d disp=%d\n", r.target, r.offset, targetOff, disp)
 		binary.LittleEndian.PutUint32(c.text[r.offset:r.offset+4], uint32(disp))
 	}
 }
@@ -1396,60 +1441,6 @@ func (c *Codegen) emitAeExit() {
 
 // __ae_write_file: write data to a file
 // rdi = path (null-terminated), rsi = data pointer, rdx = data length
-// Returns 0 on success, non-zero on error
-func (c *Codegen) emitAeWriteFile() {
-	c.label("__ae_write_file")
-	c.emitPush("rbp")
-	c.emitMovR64R64("rbp", "rsp")
-	c.emitPush("rbx")
-	c.emitPush("r12")
-	c.emitPush("r13")
-
-	c.emitMovR64R64("rbx", "rdi") // path
-	c.emitMovR64R64("r12", "rsi") // data
-	c.emitMovR64R64("r13", "rdx") // len
-
-	// open(path, O_WRONLY|O_CREAT|O_TRUNC, 0644)
-	c.emitMovR64R64("rdi", "rbx")     // path
-	c.emitMovR64Imm64("rsi", 0x601)   // flags
-	c.emitMovR64Imm64("rdx", 0x1A4)   // mode: 0644
-	c.emitMovR64Imm64("rax", 0x2000005) // open syscall
-	c.emitSyscall()
-
-	c.emitTestR64R64("rax", "rax")
-	c.emitJns("__ae_write_open_ok")
-
-	// Open failed — return 1
-	c.emitMovR64Imm64("rax", 1)
-	c.emitPop("r13")
-	c.emitPop("r12")
-	c.emitPop("rbx")
-	c.emitPop("rbp")
-	c.emitRet()
-
-	c.label("__ae_write_open_ok")
-	c.emitMovR64R64("rdi", "rax") // fd
-	c.emitPush("rdi")             // save fd
-
-	// write(fd, data, len)
-	c.emitMovR64R64("rsi", "r12") // data
-	c.emitMovR64R64("rdx", "r13") // len
-	c.emitMovR64Imm64("rax", 0x2000004) // write syscall
-	c.emitSyscall()
-
-	// close(fd)
-	c.emitPop("rdi") // fd
-	c.emitMovR64Imm64("rax", 0x2000006) // close syscall
-	c.emitSyscall()
-
-	c.emitXorR64R64("rax", "rax") // return 0
-	c.emitPop("r13")
-	c.emitPop("r12")
-	c.emitPop("rbx")
-	c.emitPop("rbp")
-	c.emitRet()
-}
-
 // __ae_read_file: read a file into a string
 // rdi = path (null-terminated)
 // Returns pointer to null-terminated string (or pointer to empty string on error)
