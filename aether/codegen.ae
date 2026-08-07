@@ -2362,14 +2362,24 @@ func linkMachO(c: codegen): codegen {
     let textSize = #textSection
     let dataSize = #c.data
 
-    // Mach-O header + load commands = 624 bytes
+    // Mach-O header + load commands.
+    // Layout: mach_header(32) + LC_SEGMENT_64 __PAGEZERO(72)
+    //       + LC_SEGMENT_64 __TEXT(152, 1 section_64=80)
+    //       + LC_SEGMENT_64 __DATA(152, 1 section_64=80)
+    //       + LC_UNIXTHREAD(184, x86_THREAD_STATE64)
+    //       + LC_DYLD_INFO_ONLY(48)
+    //       + LC_BUILD_VERSION(32, macOS 14.0 + ld 1234.0)
+    // section_64 is 80 bytes (16+16+8+8+4*7 = 76, but 16+16+8+8+4+4+4+4+4+4+4 = 80).
+    // LC_SEGMENT_64 header is 72 bytes; + 1 section = 152. (Common pitfall: 144 is wrong.)
+    // Total cmds: 640 bytes. Total header+cmds: 672 bytes.
     let headerSize: u64 = 32
     let pagezeroSize: u64 = 72
-    let textSegSize: u64 = 144
-    let dataSegSize: u64 = 144
+    let textSegSize: u64 = 152
+    let dataSegSize: u64 = 152
     let threadSize: u64 = 184
     let dyldSize: u64 = 48
-    let loadCommandsSize = pagezeroSize + textSegSize + dataSegSize + threadSize + dyldSize
+    let buildVersionSize: u64 = 32
+    let loadCommandsSize = pagezeroSize + textSegSize + dataSegSize + threadSize + dyldSize + buildVersionSize
     let totalHeaderSize = headerSize + loadCommandsSize
 
     let textFileOff: u64 = totalHeaderSize
@@ -2427,7 +2437,7 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x05; off = off + 1  // ncmds = 5
+    buf[off] = 0x06; off = off + 1  // ncmds = 6 (PAGEZERO, TEXT, DATA, UNIXTHREAD, DYLD_INFO, BUILD_VERSION)
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -2477,12 +2487,12 @@ func linkMachO(c: codegen): codegen {
     for i in 0..4 { buf[off] = 0; off = off + 1 }
     for i in 0..4 { buf[off] = 0; off = off + 1 }
 
-    // LC_SEGMENT_64 __TEXT (144 bytes) — RX
+    // LC_SEGMENT_64 __TEXT (152 bytes: 72 header + 80 section_64) — RX
     buf[off] = 0x19; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x90; off = off + 1
+    buf[off] = 0x98; off = off + 1  // cmdsize = 152 (was 0x90 = 144; BUG caused rollback)
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -2510,7 +2520,10 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // Section __text (72 bytes)
+    // Section __text (80 bytes: 16+16+8+8+4+4+4+4+4+4+4 = 76, padded to 80 by 4 bytes of zeros at end)
+    // CORRECT layout per <mach-o/loader.h>: offset is uint32 (4 bytes), not uint64.
+    // Aether's earlier version wrote offset as u64, which shifted all trailing fields by 4 bytes,
+    // putting flags=0x80000400 in reserved1's slot. codesign rejects that as "strict validation failed".
     buf[off] = 0x5F; off = off + 1
     buf[off] = 0x5F; off = off + 1
     buf[off] = 0x74; off = off + 1
@@ -2527,22 +2540,30 @@ func linkMachO(c: codegen): codegen {
     for i in 0..10 { buf[off] = 0; off = off + 1 }
     for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    // offset (uint32, 4 bytes — was incorrectly u64 in prior version)
+    for i in 0..4 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    // align (uint32, 4 bytes)
     for i in 0..4 { buf[off] = 0; off = off + 1 }
+    // reloff (uint32, 4 bytes)
     for i in 0..4 { buf[off] = 0; off = off + 1 }
+    // nreloc (uint32, 4 bytes)
     for i in 0..4 { buf[off] = 0; off = off + 1 }
+    // flags (uint32) = S_REGULAR | S_ATTR_SOME_INSTRUCTIONS = 0x80000400
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x04; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x80; off = off + 1
+    // reserved1 + reserved2 (uint32 each)
     for i in 0..8 { buf[off] = 0; off = off + 1 }
+    // Pad to 80-byte section_64 (alignment to 8 bytes per loader.h)
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
 
-    // LC_SEGMENT_64 __DATA (144 bytes) — RW
+    // LC_SEGMENT_64 __DATA (152 bytes: 72 header + 80 section_64) — RW
     buf[off] = 0x19; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x90; off = off + 1
+    buf[off] = 0x98; off = off + 1  // cmdsize = 152 (was 0x90 = 144; same bug as TEXT)
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -2570,7 +2591,7 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // Section __data (72 bytes)
+    // Section __data (80 bytes)
     buf[off] = 0x5F; off = off + 1
     buf[off] = 0x5F; off = off + 1
     buf[off] = 0x64; off = off + 1
@@ -2587,15 +2608,23 @@ func linkMachO(c: codegen): codegen {
     for i in 0..10 { buf[off] = 0; off = off + 1 }
     for i in 0..8 { buf[off] = (dataVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    // offset (uint32, 4 bytes — corrected from u64)
+    for i in 0..4 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    // align (uint32, 4 bytes)
     for i in 0..4 { buf[off] = 0; off = off + 1 }
+    // reloff (uint32, 4 bytes)
     for i in 0..4 { buf[off] = 0; off = off + 1 }
+    // nreloc (uint32, 4 bytes)
     for i in 0..4 { buf[off] = 0; off = off + 1 }
-    buf[off] = 0x01; off = off + 1
+    // flags (uint32) = S_REGULAR = 0 (or S_ZEROFILL = 1 for empty data)
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    // reserved1 + reserved2 (uint32 each)
     for i in 0..8 { buf[off] = 0; off = off + 1 }
+    // Pad to 80-byte section_64 (alignment to 8 bytes per loader.h)
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
 
     // LC_UNIXTHREAD (184 bytes)
     buf[off] = 0x05; off = off + 1
@@ -2636,8 +2665,9 @@ func linkMachO(c: codegen): codegen {
     for i in 0..8 { buf[off] = 0; off = off + 1 }
     for i in 0..8 { buf[off] = 0; off = off + 1 }
 
-    // LC_DYLD_INFO_ONLY (48 bytes)
-    buf[off] = 0x1B; off = off + 1
+    // LC_DYLD_INFO_ONLY (48 bytes) — cmd = LC_DYLD_INFO_ONLY (0x22 | LC_REQ_DYLD = 0x80000022)
+    // Was 0x1B (incorrect); should be 0x22. codesign rejects the wrong cmd.
+    buf[off] = 0x22; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x80; off = off + 1
@@ -2646,6 +2676,42 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     for i in 0..40 { buf[off] = 0; off = off + 1 }
+
+    // LC_BUILD_VERSION (32 bytes) — required on macOS 10.14+ to launch.
+    // cmd = 0x32 (50), cmdsize = 32, platform = 1 (MACOS), minos = 14.0, sdk = 14.0,
+    // ntools = 1, tool = 3 (LD), version = 1234.0
+    buf[off] = 0x32; off = off + 1  // cmd = LC_BUILD_VERSION
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x20; off = off + 1  // cmdsize = 32
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x01; off = off + 1  // platform = MACOS
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1  // minos = 14.0 (0x000E0000)
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x0E; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1  // sdk = 14.0 (0x000E0000)
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x0E; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x01; off = off + 1  // ntools = 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x03; off = off + 1  // tool = LD
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0xD2; off = off + 1  // version = 1234.0 (0x000004D2)
+    buf[off] = 0x04; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
 
     // Write section data
     for i in 0..#textSection { buf[textFileOff + i] = textSection[i] }
