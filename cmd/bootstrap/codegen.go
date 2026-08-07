@@ -234,9 +234,20 @@ func (c *Codegen) emitFunc(fd *FuncDecl) {
 	c.stackSize = 0
 	c.labelCount = 0
 
+	c.label(fd.Name)
+
+	// Function prologue
+	c.emitPush("rbp")
+	c.emitMovR64R64("rbp", "rsp")
+
+	// Calculate stack size needed
 	// Assign stack slots to function parameters so references to them
 	// load the value passed in the argument registers. Parameters are
 	// passed in rdi, rsi, rdx, rcx, r8, r9 (first 6), then on the stack.
+	// We start stackSize at 8 (NOT 0) so the first param slot is [rbp-8]
+	// rather than [rbp-0] = [rbp] — [rbp] holds the caller's saved rbp and
+	// must not be clobbered by parameter saves.
+	c.stackSize = 8
 	paramRegs := []string{"rdi", "rsi", "rdx", "rcx", "r8", "r9"}
 	for i, p := range fd.Params {
 		if _, exists := c.stackOffsets[p.Name]; !exists {
@@ -253,14 +264,7 @@ func (c *Codegen) emitFunc(fd *FuncDecl) {
 		}
 	}
 
-	c.label(fd.Name)
-
-	// Function prologue
-	c.emitPush("rbp")
-	c.emitMovR64R64("rbp", "rsp")
-
-	// Calculate stack size needed
-	// First pass: collect all local variables
+	// First pass: collect all local variables (continues from current stackSize)
 	c.collectLocals(fd.Body)
 
 	// Allocate stack space (aligned to 16 bytes)
