@@ -222,7 +222,7 @@ Since the bootstrap tool emits native code, it can use:
 - Made semantic errors non-fatal
 - Fixed TOKEN_KW_MATCH/CASE/AT range in keyword checks
 
-### Phase 4: Self-Hosting Verification ✅
+### Phase 4: Self-Hosting Verification 🔶 (WIP)
 **Goal:** Aether compiler compiles itself.
 
 ```
@@ -247,6 +247,20 @@ Since the bootstrap tool emits native code, it can use:
 - Fixed stack allocation (sign-extension bug with imm8)
 - Text section mapped RWX via `-segprot __TEXT rwx rwx`
 - All 82 tests pass
+
+**Current WIP status (2026-08-07, commit `1e69cee` on `feature/phase4-macho`):**
+- argc/argv now saved to globals `__ae_saved_argc`/`__ae_saved_argv` (was stack) — `aether/codegen.ae`
+- `__ae_str_eq` REX.B encoding fixed (`mov bl,[r12]` with 0x41 prefix) — `aether/codegen.ae`
+- TOKEN_STRING parser uses `tok.Literal` (quote-strip fix) — `cmd/bootstrap/parser.go`
+- `emitAeWriteFile` emitted via `//go:embed writefile.bin` (106-byte asset, byte-verified vs `getAeWriteFileCode()`) — `cmd/bootstrap/codegen.go`
+- Verified: `go build` clean (native + amd64), all Go tests pass, `aether/*.ae` compiles cleanly through bootstrap, all relocs resolve
+- **No regression** vs pre-WIP baseline: self-hosted write/link path failure is pre-existing, not introduced by this WIP
+
+**Current self-hosting state:**
+- `./aether` compiles the compiler source without crashing (exit 0)
+- Self-hosted write/link path still fails: `./aether_v2` runs but produces no output file (exit 0, no file) — pre-existing Phase 4 limitation
+- `./aether_v2` is NOT yet byte-identical to `./aether` — self-hosting not yet verified
+- **Known blocker (queued follow-up):** relocation patching corruption — first 17 bytes zeroed in emitted writefile code. Root cause unknown; suspected relocation patching over the label position. `patchRelocs()` debug prints committed and ready for investigation.
 
 **Future work:** Move away from system `as`/`ld` toolchain — have Aether compiler produce Mach-O directly.
 
@@ -295,10 +309,10 @@ Since the bootstrap tool emits native code, it can use:
 ## Timeline
 
 ```
-Phase 1 (Bootstrap Core)     → simplest possible Aether program compiles
-Phase 2 (Aether Compiler)    → full Aether compiler written in Aether
-Phase 3 (First Compile)      → bootstrap compiles the Aether compiler
-Phase 4 (Self-Hosting)       → Aether compiles itself
+Phase 1 (Bootstrap Core)     → simplest possible Aether program compiles ✅
+Phase 2 (Aether Compiler)    → full Aether compiler written in Aether ✅
+Phase 3 (First Compile)      → bootstrap compiles the Aether compiler ✅
+Phase 4 (Self-Hosting)       → Aether compiles itself 🔶 (WIP — relocation corruption blocker)
 Phase 5 (Retire Bootstrap)   → Go tool deleted
 ```
 
