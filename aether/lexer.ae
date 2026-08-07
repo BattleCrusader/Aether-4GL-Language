@@ -193,7 +193,10 @@ func identifier(l: Lexer): Lexer {
 }
 
 func scanToken(l: Lexer): Lexer {
-    let c = advance(l).source[l.current - 1]
+    __ae_print("DBG: scanToken start\n")
+    let al = advance(l)
+    let c = al.source[al.current - 1]
+    l = al
     match c {
         case 40 -> l = addToken(l, TOKEN_LPAREN)  // (
         case 41 -> l = addToken(l, TOKEN_RPAREN)  // )
@@ -372,6 +375,7 @@ func scanToken(l: Lexer): Lexer {
 }
 
 func tokenize(l: Lexer): Lexer {
+    __ae_print("DBG: tokenize start\n")
     while not isAtEnd(l) {
         l.start = l.current
         l = scanToken(l)

@@ -692,7 +692,10 @@ func ctxPeek(ctx: genCtx, tokens: [Token]): Token {
 }
 
 func ctxIsAtEnd(ctx: genCtx, tokens: [Token]): bool {
-    return ctx.pos >= #tokens or tokens[ctx.pos].typ == TOKEN_EOF
+	if ctx.pos >= #tokens {
+		return true
+	}
+	return tokens[ctx.pos].typ == TOKEN_EOF
 }
 
 func ctxAdvance(ctx: genCtx, tokens: [Token]): genCtx {
