@@ -1,0 +1,7 @@
+// test_neg_identifier_starts_with_digit.ae — invalid identifier
+// Per the lexical rules, identifiers must start with a letter or
+// underscore, NOT a digit.
+//
+// Expected: parser error on `2bad`.
+
+let 2bad: u64 = 0

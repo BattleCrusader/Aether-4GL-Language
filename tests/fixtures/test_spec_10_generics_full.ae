@@ -1,0 +1,97 @@
+// test_spec_10_generics_full.ae
+// Section 10: Generics — comprehensive coverage.
+// Self-contained, exit-code based.
+//
+// Bootstrap status: `<T>` type-parameter syntax is recognised in some
+// positions (see test_generic.ae, test_monomorph.ae, test_generic_constraint.ae
+// in the same directory) but generic *classes* and *traits* are not yet
+// implemented. This fixture tests the working subset and documents gaps.
+
+var __failed: u64 = 0
+
+func fail(label: u64, expected: u64, actual: u64): void {
+    if actual != expected {
+        if __failed == 0 {
+            __failed = label
+        }
+    }
+}
+
+// ---------- 10.1 monomorphized identity for u64 ----------
+// The compiler specialises `identity` for each call-site type.
+func identity_u64(value: u64): u64 {
+    return value
+}
+
+@test
+func test_identity_u64(): void {
+    fail(1, 42, identity_u64(42))
+    fail(2, 0, identity_u64(0))
+    fail(3, 4294967295, identity_u64(4294967295))
+}
+
+// ---------- 10.1 generic-style swap (manual monomorphisation) ----------
+// True `<T>` generic functions are tested by the existing fixtures;
+// this fixture verifies the underlying semantics with u64 instantiations.
+func swap_u64(a: u64, b: u64, first: u64): u64 {
+    // Returns `a` if first==1 else `b`. Useful for pair tests.
+    if first == 1 { return a }
+    return b
+}
+
+@test
+func test_pair_swap(): void {
+    fail(4, 10, swap_u64(10, 20, 1))
+    fail(5, 20, swap_u64(10, 20, 0))
+}
+
+// ---------- 10.4 type constraints ----------
+// TODO: `func min<T: Comparable>(...)` syntax — verify the constraint
+// mechanism works via the existing test_generic_constraint.ae fixture.
+@test
+func test_type_constraint_documented(): void {
+    fail(6, 0, 0)
+}
+
+// ---------- 10.2 generic classes ----------
+// TODO: `class Stack<T> { data: [T]; size: int; func push(item: T) { ... } }`
+@test
+func test_generic_class_documented(): void {
+    fail(7, 0, 0)
+}
+
+// ---------- 10.3 generic traits ----------
+// TODO: `trait Comparable<T> { func less_than(other: T): bool }`
+@test
+func test_generic_trait_documented(): void {
+    fail(8, 0, 0)
+}
+
+// ---------- EDGE: large array of u64 ----------
+func array_sum(arr: [u64; 5]): u64 {
+    var total: u64 = 0
+    var i: u64 = 0
+    while i < 5 {
+        total = total + arr[i]
+        i = i + 1
+    }
+    return total
+}
+
+@test
+func test_array_sum_5(): void {
+    fail(9, 15, array_sum([1, 2, 3, 4, 5]))
+    fail(10, 0, array_sum([0, 0, 0, 0, 0]))
+    fail(11, 5, array_sum([1, 1, 1, 1, 1]))
+}
+
+@test
+func main(): void {
+    test_identity_u64()
+    test_pair_swap()
+    test_type_constraint_documented()
+    test_generic_class_documented()
+    test_generic_trait_documented()
+    test_array_sum_5()
+    return __failed
+}

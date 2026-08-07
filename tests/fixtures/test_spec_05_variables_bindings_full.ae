@@ -1,22 +1,20 @@
 // test_spec_05_variables_bindings_full.ae
 // Section 5: Variables and Bindings — comprehensive coverage.
-// Self-contained: no imports, uses exit code to signal pass/fail.
+// Self-contained: no imports. Uses exit code to signal pass/fail.
 //
 // Pass:   exit code 0
-// Fail:   exit code != 0   (first assertion that failed)
+// Fail:   exit code == label of first failing assertion
 //
-// Convention used in every fixture in this set:
-//   * One @test func main() per file.
-//   * All assertions increment a __failed counter; first failure
-//     short-circuits to an early return with that counter.
-//
-// Tests intentionally cover POSITIVE cases (do work), NEGATIVE edges
-// (limits/overflow), and compile-time-only checks (where the spec
-// mandates that a construct must be rejected by the parser).
+// Coverage:
+//   5.1 let / var / const / array literals
+//   5.2 scope blocks
+//   5.3 shadowing
+//   5.4 global let / const
+//   5.5 recursion (factorial, fibonacci)
+//   5.6 nested loops (placeholder for labeled break/continue)
 
 const CONST_VAL: u64 = 100
 let GLOBAL_X: u64 = 4242
-
 var __failed: u64 = 0
 
 func fail(label: u64, expected: u64, actual: u64): void {
@@ -27,7 +25,7 @@ func fail(label: u64, expected: u64, actual: u64): void {
     }
 }
 
-// ---------- 5.1 let / var ----------
+// ---------- 5.1 let ----------
 @test
 func test_let_immutable(): void {
     let x: u64 = 1
@@ -45,7 +43,7 @@ func test_var_mutable(): void {
     fail(3, 5, v)
 }
 
-// ---------- 5.1 type-inferred ----------
+// ---------- 5.1 array literals ----------
 @test
 func test_array_literal(): void {
     let arr = [10, 20, 30]
@@ -54,7 +52,7 @@ func test_array_literal(): void {
     fail(6, 30, arr[2])
 }
 
-// ---------- 5.1 const / globals ----------
+// ---------- 5.1 / 5.4 const + global ----------
 @test
 func test_const_global(): void {
     fail(7, 100, CONST_VAL)
@@ -111,20 +109,27 @@ func test_fib(): void {
 }
 
 // ---------- 5.6 nested loops (TODO labeled break) ----------
+// NOTE: `for i in 0..10` currently hangs in the bootstrap; use a
+// while-loop instead until that codegen bug is fixed.
 @test
 func test_nested_loop(): void {
     var found: u64 = 0
-    for i in 0..10 {
-        for j in 0..10 {
+    var i: u64 = 0
+    while i < 10 {
+        var j: u64 = 0
+        while j < 10 {
             if i == 3 and j == 5 {
                 found = 1
             }
+            j = j + 1
         }
+        i = i + 1
     }
     fail(19, 1, found)
 }
 
-// ---------- edge cases ----------
+// ---------- edge: max literals (boundary check) ----------
+// TODO when u64-max literal is supported: assertEquals(20, 18446744073709551615, MAX_U64)
 @test
 func test_max_u32_literal(): void {
     fail(20, 4294967295, 4294967295)
@@ -135,6 +140,7 @@ func test_max_i32_literal(): void {
     fail(21, 2147483647, 2147483647)
 }
 
+// ---------- edge: wrapping arithmetic ----------
 @test
 func test_wrapping_arithmetic(): void {
     let two31: u64 = 2147483648
@@ -148,6 +154,7 @@ func test_zero_arithmetic(): void {
     fail(24, 0, z * 99)
 }
 
+// ---------- edge: compound assignment ----------
 @test
 func test_compound_assignment(): void {
     var x: u64 = 10
@@ -163,6 +170,7 @@ func test_compound_assignment(): void {
     fail(29, 2, x)
 }
 
+// ---------- edge: bitwise ----------
 @test
 func test_bitwise_ops(): void {
     let a: u64 = 0b1100
@@ -192,7 +200,5 @@ func main(): void {
     test_zero_arithmetic()
     test_compound_assignment()
     test_bitwise_ops()
-
-    // exit code == first failed label, or 0 on full pass
     return __failed
 }

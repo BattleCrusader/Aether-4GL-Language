@@ -1,0 +1,8 @@
+// test_neg_unterminated_block_comment.ae — unterminated block comment
+// Per the lexical rules, /* ... */ must have a closing */.
+//
+// Expected: tokenizer error on missing closing.
+
+let x: u64 = 0
+/* this comment never closes
+let y: u64 = 1

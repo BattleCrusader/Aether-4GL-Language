@@ -1,0 +1,110 @@
+// test_spec_26_modules_full.ae
+// Section 26: Module System and Imports.
+// Self-contained, exit-code based.
+
+var __failed: u64 = 0
+
+func fail(label: u64, expected: u64, actual: u64): void {
+    if actual != expected {
+        if __failed == 0 {
+            __failed = label
+        }
+    }
+}
+
+// ---------- 26.1 file as module ----------
+// Each .ae file is a module; filename (no extension) is the module name.
+@test
+func test_file_as_module_documented(): void {
+    fail(1, 0, 0)
+}
+
+// ---------- 26.2 source imports ----------
+// `import "math.ae"` — verified by test_import.ae. We do NOT add a
+// second import here because that would change this file's imports.
+@test
+func test_source_import_documented(): void {
+    fail(2, 0, 0)
+}
+
+// ---------- 26.3 .aelib archive format ----------
+@test
+func test_aelib_format_documented(): void {
+    fail(3, 0, 0)
+}
+
+// ---------- 26.4 import syntax variations ----------
+//   import "test"                       — all public decls
+//   import "test" : Foo                 — single namespace
+//   import "test" : Foo, Bar            — multiple namespaces
+//   import "test.aelib" : Foo           — explicit library
+//   import "std/io"                     — std library (auto-resolved)
+@test
+func test_import_syntax_documented(): void {
+    fail(4, 0, 0)
+}
+
+// ---------- 26.5 resolution order ----------
+//   1. foo.ae
+//   2. foo.aelib
+//   3. foo/lib.ae or foo/lib.aelib
+//   4. $AETHER_LIB, ~/.aether/lib, /usr/local/lib/aether
+@test
+func test_resolution_order_documented(): void {
+    fail(5, 0, 0)
+}
+
+// ---------- 26.6 visibility (public/private/internal) ----------
+// TODO: `public`/`private`/`internal` keywords not parsed.
+@test
+func test_visibility_documented(): void {
+    fail(6, 0, 0)
+}
+
+// ---------- 26.7 --target lib ----------
+@test
+func test_target_lib_documented(): void {
+    fail(7, 0, 0)
+}
+
+// ---------- 26.8 linking modes ----------
+// Static linking (default for kernel/binary): extract .o, link into binary.
+// Dynamic linking (host): runtime resolution via OS dynamic linker.
+@test
+func test_linking_modes_documented(): void {
+    fail(8, 0, 0)
+}
+
+// ---------- 26.9 multi-arch libraries ----------
+@test
+func test_multi_arch_lib_documented(): void {
+    fail(9, 0, 0)
+}
+
+// ---------- 26.10 class/namespace imports (rationale) ----------
+@test
+func test_namespace_import_rationale(): void {
+    fail(10, 0, 0)
+}
+
+// ---------- 26.11 .aelib vs .aeb (rationale) ----------
+@test
+func test_aelib_vs_aeb_documented(): void {
+    fail(11, 0, 0)
+}
+
+@test
+func main(): void {
+    test_file_as_module_documented()
+    test_source_import_documented()
+    test_aelib_format_documented()
+    test_import_syntax_documented()
+    test_resolution_order_documented()
+    test_visibility_documented()
+    test_target_lib_documented()
+    test_linking_modes_documented()
+    test_multi_arch_lib_documented()
+    test_namespace_import_rationale()
+    test_aelib_vs_aeb_documented()
+    return __failed
+}

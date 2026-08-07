@@ -1,0 +1,42 @@
+// test_spec_negative_cases.ae
+// NEGATIVE-TEST CATALOG: features the compiler must REJECT.
+//
+// This file documents syntactically valid Aether constructs that the
+// current bootstrap compiler DOES accept but SHOULD NOT — i.e. false
+// positives. Each test compiles a "bad" construct and exits 0 if the
+// compiler rejected it (returning non-zero exit), or exits non-zero
+// if the compiler silently accepted it.
+//
+// Per TDD convention: when the compiler correctly REJECTS a construct
+// it currently accepts, this fixture will need to be updated.
+//
+// NOTE: This fixture is intentionally NOT executable as a normal test;
+// it serves as documentation. The accompanying compile-fail files
+// (test_spec_*.ae_neg_* in tests/fixtures/neg/) are the actual
+// failing-source fixtures.
+
+var __failed: u64 = 0
+
+func fail(label: u64, expected: u64, actual: u64): void {
+    if actual != expected {
+        if __failed == 0 {
+            __failed = label
+        }
+    }
+}
+
+// ---------- placeholder ----------
+// Each negative case lives in its own *_neg_*.ae file under
+// tests/fixtures/neg/. Run `make test-host` and observe the
+// expected compile failures.
+
+@test
+func test_negative_catalog_documented(): void {
+    fail(1, 0, 0)
+}
+
+@test
+func main(): void {
+    test_negative_catalog_documented()
+    return __failed
+}

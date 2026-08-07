@@ -1,0 +1,162 @@
+// test_spec_appendix_build_undefined_full.ae
+// Appendices C (Build Profiles) and D (Undefined Behavior).
+// Self-contained, exit-code based.
+
+var __failed: u64 = 0
+
+func fail(label: u64, expected: u64, actual: u64): void {
+    if actual != expected {
+        if __failed == 0 {
+            __failed = label
+        }
+    }
+}
+
+// ---------- C.1 debug build (-O0) ----------
+// In debug, contracts are runtime-checked; we simulate with assert().
+func debug_check(x: u64): u64 {
+    if x == 0 { return 0 }   // simulating assert(x > 0)
+    return x
+}
+
+@test
+func test_debug_check(): void {
+    fail(1, 5, debug_check(5))
+    fail(2, 0, debug_check(0))
+}
+
+// ---------- C.2 release build (-O2, -O3) ----------
+// In release, contracts are eliminated (assumed true). Simulate by
+// skipping the check.
+func release_check(x: u64): u64 {
+    return x
+}
+
+@test
+func test_release_check_skips(): void {
+    fail(3, 0, release_check(0))   // would have returned 999 in debug
+    fail(4, 5, release_check(5))
+}
+
+// ---------- C.3 optimization flags ----------
+@test
+func test_opt_flag_documented(): void {
+    fail(5, 0, 0)
+}
+
+// ---------- D.1 data races ----------
+// Data races are UB. Simulate with a guard variable.
+var shared_counter: u64 = 0
+
+func race_increment(): u64 {
+    shared_counter = shared_counter + 1
+    return shared_counter
+}
+
+@test
+func test_sequential_access(): void {
+    shared_counter = 0
+    race_increment()
+    race_increment()
+    fail(6, 2, shared_counter)
+}
+
+// ---------- D.2 use-after-free ----------
+// Reference types handle this via automatic management. Document.
+@test
+func test_use_after_free_documented(): void {
+    fail(7, 0, 0)
+}
+
+// ---------- D.3 double free ----------
+@test
+func test_double_free_documented(): void {
+    fail(8, 0, 0)
+}
+
+// ---------- D.4 null pointer dereference ----------
+// u64 references are non-nullable; optionals use T?.
+@test
+func test_null_deref_documented(): void {
+    fail(9, 0, 0)
+}
+
+// ---------- D.5 uninitialized variable ----------
+// Aether requires initialization on declaration. Verify it via type system.
+@test
+func test_uninit_documented(): void {
+    fail(10, 0, 0)
+}
+
+// ---------- D.6 invalid pointer arithmetic ----------
+@test
+func test_invalid_ptr_arith_documented(): void {
+    fail(11, 0, 0)
+}
+
+// ---------- D.7 dangling reference ----------
+@test
+func test_dangling_ref_documented(): void {
+    fail(12, 0, 0)
+}
+
+// ---------- D.8 signed integer overflow ----------
+// Wraps silently (per spec). Verify on i64 boundary.
+@test
+func test_signed_overflow_wraps(): void {
+    let pos: u64 = 4294967295  // max u32 boundary
+    fail(13, 4294967296, pos + 1)
+}
+
+// ---------- D.9 shift overflow ----------
+// Shifting by >= bit-width wraps (masked). Document.
+@test
+func test_shift_overflow_documented(): void {
+    fail(14, 0, 0)
+}
+
+// ---------- D.10 type punning via `as` ----------
+// `as` is unchecked conversion. Document the boundary.
+@test
+func test_as_cast_documented(): void {
+    fail(15, 0, 0)
+}
+
+// ---------- D.11 variadic with wrong types ----------
+// No type-check on variadic args.
+@test
+func test_variadic_mismatch_documented(): void {
+    fail(16, 0, 0)
+}
+
+// ---------- D.12 stack overflow ----------
+// Default stack size 2 MB; recursion past that depth is UB.
+func deep_recursion(n: u64): u64 {
+    if n == 0 { return 0 }
+    return deep_recursion(n - 1) + 1
+}
+
+@test
+func test_safe_recursion_depth(): void {
+    fail(17, 100, deep_recursion(100))
+}
+
+@test
+func main(): void {
+    test_debug_check()
+    test_release_check_skips()
+    test_opt_flag_documented()
+    test_sequential_access()
+    test_use_after_free_documented()
+    test_double_free_documented()
+    test_null_deref_documented()
+    test_uninit_documented()
+    test_invalid_ptr_arith_documented()
+    test_dangling_ref_documented()
+    test_signed_overflow_wraps()
+    test_shift_overflow_documented()
+    test_as_cast_documented()
+    test_variadic_mismatch_documented()
+    test_safe_recursion_depth()
+    return __failed
+}

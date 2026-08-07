@@ -1,0 +1,7 @@
+// test_neg_invalid_integer.ae — invalid integer literal
+// Per the spec, integers are parsed in decimal, hex (0x), octal (0o),
+// or binary (0b). Other forms MUST be rejected by the tokenizer.
+//
+// Expected: parser/tokenizer error on `123abc`.
+
+let bad: u64 = 123abc

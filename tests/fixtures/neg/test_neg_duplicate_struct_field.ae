@@ -1,0 +1,13 @@
+// test_neg_duplicate_struct_field.ae — duplicate struct field
+// Per the spec, struct fields must have unique names.
+//
+// Expected: semantic error on duplicate `x` field.
+
+struct Point {
+    x: u64
+    x: u64
+}
+
+func main(): u64 {
+    return 0
+}

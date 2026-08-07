@@ -1,0 +1,7 @@
+// test_neg_unterminated_string.ae — unterminated string literal
+// Per the lexical rules, strings must end with a closing double quote.
+//
+// Expected: tokenizer error on the missing closing quote.
+
+let s: u64 = 0  // placeholder
+let bad = "hello world
