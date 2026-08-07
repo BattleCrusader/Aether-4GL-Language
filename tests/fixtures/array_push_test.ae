@@ -1,0 +1,43 @@
+func main() {
+    // Test 1: push growth (start empty, push 10 elements to force multiple grows)
+    var arr: [i64] = []
+    var i: i64 = 0
+    while i < 10 {
+        arr = push(arr, i * 2)
+        i = i + 1
+    }
+    // Verify length and values
+    let n = #arr
+    // n should be 10
+    var sum: i64 = 0
+    var j: i64 = 0
+    while j < n {
+        sum = sum + arr[j]
+        j = j + 1
+    }
+    // sum = 0+2+4+6+8+10+12+14+16+18 = 90
+    if n == 10 and sum == 90 {
+        // success
+    } else {
+        // failure
+    }
+
+    // Test 2: array literal with multiple elements (8-byte index_set)
+    var lit: [i64] = [5, 10, 15]
+    let l0 = lit[0]
+    let l1 = lit[1]
+    let l2 = lit[2]
+    if l0 == 5 and l1 == 10 and l2 == 15 {
+        // success
+    } else {
+        // failure
+    }
+
+    // Test 3: index_set on array
+    lit[1] = 99
+    if lit[1] == 99 {
+        // success
+    } else {
+        // failure
+    }
+}

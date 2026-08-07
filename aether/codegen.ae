@@ -917,10 +917,16 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
     ctx.c.stackSize = 0
     ctx.c.varTypes = []
     ctx.c.labelCount = 0
+    ctx.c = label(ctx.c, funcName)
+    ctx.c = emitPush(ctx.c, "rbp")
+    ctx.c = emitMovR64R64(ctx.c, "rbp", "rsp")
+    // First pass: walk body to find local var/let declarations and assign slots.
+    // Parameters are pre-allocated BEFORE collectLocals runs so locals continue
+    // from the next free offset. We start at offset 8 (NOT 0) so the first param
+    // slot is [rbp-8] rather than [rbp-0] = [rbp] — [rbp] is the slot holding
+    // the caller's saved rbp and must not be clobbered by parameters.
+    ctx.c.stackSize = 8
     // Register parameters as stack variables so they can be loaded by name.
-    // First param slot starts at offset 0 (which maps to [rbp-0] = [rbp], the
-    // location where the saved old rbp was — we overwrite it with arg1).
-    // Subsequent params go at offsets 8, 16, ... (i.e., [rbp-8], [rbp-16], ...).
     for i in 0..#paramNames {
         let pname = paramNames[i]
         var found = false
@@ -936,15 +942,11 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
         }
         _ = i
     }
-    ctx.c = label(ctx.c, funcName)
-    ctx.c = emitPush(ctx.c, "rbp")
-    ctx.c = emitMovR64R64(ctx.c, "rbp", "rsp")
     // First pass: walk body to find local var/let declarations and assign slots.
     ctx = collectLocals(ctx, tokens)
     var stackAlloc: u64 = ctx.c.stackSize
     if stackAlloc < 128 { stackAlloc = 128 }
     // Align to 16 bytes: round up to multiple of 16.
-    // Use explicit masking: stackAlloc & 0xFFFFFFF0 (clear low 4 bits) after adding 15.
     var alignMask: u64 = 0 - 16
     stackAlloc = (stackAlloc + 15) & alignMask
     if stackAlloc <= 127 {

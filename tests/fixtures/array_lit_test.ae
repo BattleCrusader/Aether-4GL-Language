@@ -1,0 +1,11 @@
+func main() {
+    var lit: [i64] = [5, 10, 15]
+    let l0 = lit[0]
+    let l1 = lit[1]
+    let l2 = lit[2]
+    if l0 == 5 and l1 == 10 and l2 == 15 {
+        // success
+    } else {
+        // failure
+    }
+}
