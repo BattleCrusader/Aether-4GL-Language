@@ -181,10 +181,11 @@ func (c *Codegen) hasAttr(fd *FuncDecl, name string) bool {
 
 func (c *Codegen) emitStart() {
 	// _start: entry point
-	// On macOS x86_64, _main receives argc in rdi, argv in rsi
-	c.label("_start")
-	// Save argc and argv for __ae_argc / __ae_get_arg
+	// On macOS x86_64, the process entry point (called directly by dyld,
+	// no C runtime) receives argc in rdi, argv in rsi (verified empirically).
+	// Save argc and argv for __ae_argc / __ae_get_arg.
 	// Text section is mapped RWX via -segprot __TEXT rwx rwx
+	c.label("_start")
 	c.emitLeaR64Label("rcx", "__ae_saved_argc")
 	c.emitMovR64ToAddr("rdi", "rcx", 0) // mov [rcx], rdi
 	c.emitLeaR64Label("rcx", "__ae_saved_argv")
@@ -206,6 +207,19 @@ func (c *Codegen) emitFunc(fd *FuncDecl) {
 	c.stackOffsets = make(map[string]int)
 	c.stackSize = 0
 	c.labelCount = 0
+
+	// Assign stack slots to function parameters so references to them
+	// load the value passed in the argument registers. Parameters are
+	// passed in rdi, rsi, rdx, rcx, r8, r9 (first 6), then on the stack.
+	paramRegs := []string{"rdi", "rsi", "rdx", "rcx", "r8", "r9"}
+	for i, p := range fd.Params {
+		if _, exists := c.stackOffsets[p.Name]; !exists {
+			c.stackOffsets[p.Name] = c.stackSize
+			c.stackSize += 8
+			_ = i
+			_ = paramRegs
+		}
+	}
 
 	c.label(fd.Name)
 
@@ -234,6 +248,18 @@ func (c *Codegen) emitFunc(fd *FuncDecl) {
 		c.emitByte(0x81)
 		c.emitByte(c.modRM(3, 5, 4)) // /5 = sub, rm = rsp
 		c.emitU32(uint32(stackAlloc))
+	}
+
+	// Save function parameters to their stack slots. Parameters are passed
+	// in rdi, rsi, rdx, rcx, r8, r9 (first 6); store each into the slot
+	// assigned in the parameter-collection pass above so references to the
+	// parameter name load the correct value.
+	for i, p := range fd.Params {
+		if i < len(paramRegs) {
+			if off, ok := c.stackOffsets[p.Name]; ok {
+				c.emitMovR64ToStack(paramRegs[i], off)
+			}
+		}
 	}
 
 	// Emit function body
@@ -346,8 +372,8 @@ func (c *Codegen) emitStmt(stmt Stmt) {
 }
 
 func (c *Codegen) emitIf(is *IfStmt) {
-	elseLabel := fmt.Sprintf("else_%d", c.nextLabel())
-	endLabel := fmt.Sprintf("endif_%d", c.nextLabel())
+	elseLabel := fmt.Sprintf("%s_else_%d", c.funcName, c.nextLabel())
+	endLabel := fmt.Sprintf("%s_endif_%d", c.funcName, c.nextLabel())
 
 	// Condition
 	c.emitExpr(is.Cond)
@@ -361,7 +387,7 @@ func (c *Codegen) emitIf(is *IfStmt) {
 	// Elif blocks
 	for _, eb := range is.ElifBlocks {
 		c.label(elseLabel)
-		elseLabel = fmt.Sprintf("else_%d", c.nextLabel())
+		elseLabel = fmt.Sprintf("%s_else_%d", c.funcName, c.nextLabel())
 
 		c.emitExpr(eb.Cond)
 		c.emitTestR64R64("rax", "rax")
@@ -381,9 +407,9 @@ func (c *Codegen) emitIf(is *IfStmt) {
 }
 
 func (c *Codegen) emitWhile(ws *WhileStmt) {
-	startLabel := fmt.Sprintf("while_%d", c.nextLabel())
-	endLabel := fmt.Sprintf("endwhile_%d", c.nextLabel())
-	continueLabel := fmt.Sprintf("continue_%d", c.nextLabel())
+	startLabel := fmt.Sprintf("%s_while_%d", c.funcName, c.nextLabel())
+	endLabel := fmt.Sprintf("%s_endwhile_%d", c.funcName, c.nextLabel())
+	continueLabel := fmt.Sprintf("%s_continue_%d", c.funcName, c.nextLabel())
 	breakLabel := c.funcName + "_break"
 
 	c.label(startLabel)
@@ -400,8 +426,8 @@ func (c *Codegen) emitWhile(ws *WhileStmt) {
 }
 
 func (c *Codegen) emitFor(fs *ForStmt) {
-	startLabel := fmt.Sprintf("for_%d", c.nextLabel())
-	endLabel := fmt.Sprintf("endfor_%d", c.nextLabel())
+	startLabel := fmt.Sprintf("%s_for_%d", c.funcName, c.nextLabel())
+	endLabel := fmt.Sprintf("%s_endfor_%d", c.funcName, c.nextLabel())
 	breakLabel := c.funcName + "_break"
 
 	// Initialize loop variable
@@ -420,14 +446,14 @@ func (c *Codegen) emitFor(fs *ForStmt) {
 }
 
 func (c *Codegen) emitMatchStmt(ms *MatchStmt) {
-	endLabel := fmt.Sprintf("match_end_%d", c.nextLabel())
+	endLabel := fmt.Sprintf("%s_match_end_%d", c.funcName, c.nextLabel())
 
 	// Evaluate the match value
 	c.emitExpr(ms.Value)
 	c.emitPush("rax") // save match value on stack
 
 	for _, mc := range ms.Cases {
-		nextLabel := fmt.Sprintf("match_next_%d", c.nextLabel())
+		nextLabel := fmt.Sprintf("%s_match_next_%d", c.funcName, c.nextLabel())
 
 		// Pop match value
 		c.emitPop("rbx")
@@ -597,27 +623,27 @@ func (c *Codegen) emitBinary(be *BinaryExpr) {
 		c.emitDivR64("rbx")
 		c.emitMovR64R64("rax", "rdx")
 	case "==":
-		c.emitCmpR64R64("rax", "rbx")
+		c.emitCmpR64R64("rbx", "rax")
 		c.emitSete("al")
 		c.emitMovzxR64R8("rax", "al")
 	case "!=":
-		c.emitCmpR64R64("rax", "rbx")
+		c.emitCmpR64R64("rbx", "rax")
 		c.emitSetne("al")
 		c.emitMovzxR64R8("rax", "al")
 	case "<":
-		c.emitCmpR64R64("rax", "rbx")
+		c.emitCmpR64R64("rbx", "rax")
 		c.emitSetl("al")
 		c.emitMovzxR64R8("rax", "al")
 	case ">":
-		c.emitCmpR64R64("rax", "rbx")
+		c.emitCmpR64R64("rbx", "rax")
 		c.emitSetg("al")
 		c.emitMovzxR64R8("rax", "al")
 	case "<=":
-		c.emitCmpR64R64("rax", "rbx")
+		c.emitCmpR64R64("rbx", "rax")
 		c.emitSetle("al")
 		c.emitMovzxR64R8("rax", "al")
 	case ">=":
-		c.emitCmpR64R64("rax", "rbx")
+		c.emitCmpR64R64("rbx", "rax")
 		c.emitSetge("al")
 		c.emitMovzxR64R8("rax", "al")
 	case "&&":
@@ -836,14 +862,14 @@ func (c *Codegen) emitStringInterpolation(sie *StringInterpolationExpr) {
 }
 
 func (c *Codegen) emitMatchExpr(me *MatchExpr) {
-	endLabel := fmt.Sprintf("match_expr_end_%d", c.nextLabel())
+	endLabel := fmt.Sprintf("%s_match_expr_end_%d", c.funcName, c.nextLabel())
 
 	// Evaluate the match value
 	c.emitExpr(me.Value)
 	c.emitPush("rax") // save match value on stack
 
 	for _, mc := range me.Cases {
-		nextLabel := fmt.Sprintf("match_expr_next_%d", c.nextLabel())
+		nextLabel := fmt.Sprintf("%s_match_expr_next_%d", c.funcName, c.nextLabel())
 
 		// Pop match value
 		c.emitPop("rbx")
@@ -876,8 +902,8 @@ func (c *Codegen) emitMatchExpr(me *MatchExpr) {
 }
 
 func (c *Codegen) emitIfExpr(ie *IfExpr) {
-	elseLabel := fmt.Sprintf("ifexpr_else_%d", c.nextLabel())
-	endLabel := fmt.Sprintf("ifexpr_end_%d", c.nextLabel())
+	elseLabel := fmt.Sprintf("%s_ifexpr_else_%d", c.funcName, c.nextLabel())
+	endLabel := fmt.Sprintf("%s_ifexpr_end_%d", c.funcName, c.nextLabel())
 
 	c.emitExpr(ie.Cond)
 	c.emitTestR64R64("rax", "rax")
@@ -950,7 +976,7 @@ func (c *Codegen) nextLabel() int {
 // mov rax, [rbp - offset]  (load from stack)
 func (c *Codegen) emitMovFromStack(reg string, offset int) {
 	// REX.W + 8B + modrm(01, reg, rbp) + disp8
-	c.emitRexW()
+	c.emitRexWRB(regCodes[reg], 5) // reg field = reg, rm field = rbp
 	c.emitByte(0x8B)
 	c.emitByte(c.modRM(1, regCodes[reg], 5)) // [rbp + disp8]
 	c.emitByte(byte(-offset)) // negative offset from rbp
@@ -959,7 +985,7 @@ func (c *Codegen) emitMovFromStack(reg string, offset int) {
 // mov [rbp - offset], rax  (store to stack)
 func (c *Codegen) emitMovR64ToStack(reg string, offset int) {
 	// REX.W + 89 + modrm(01, reg, rbp) + disp8
-	c.emitRexW()
+	c.emitRexWRB(regCodes[reg], 5) // reg field = reg, rm field = rbp
 	c.emitByte(0x89)
 	c.emitByte(c.modRM(1, regCodes[reg], 5)) // [rbp + disp8]
 	c.emitByte(byte(-offset))
@@ -998,6 +1024,23 @@ func (c *Codegen) emitRexW() {
 	c.emitByte(REX_W)
 }
 
+// emitRexWRB emits a REX prefix with W=1 (64-bit) plus the R and B bits
+// needed to address registers r8-r15 in the reg and rm fields of a ModRM byte.
+// regField is the register code in the ModRM reg field (the source for
+// r/m64,r64-form opcodes), rmField is the register code in the rm field
+// (the destination). REX.R (0x04) selects regField>=8, REX.B (0x01) selects
+// rmField>=8.
+func (c *Codegen) emitRexWRB(regField, rmField byte) {
+	rex := byte(REX_W)
+	if regField >= 8 {
+		rex |= 0x04 // REX.R
+	}
+	if rmField >= 8 {
+		rex |= 0x01 // REX.B
+	}
+	c.emitByte(rex)
+}
+
 // Register encoding
 var regCodes = map[string]byte{
 	"rax": 0, "rcx": 1, "rdx": 2, "rbx": 3,
@@ -1012,23 +1055,24 @@ func (c *Codegen) modRM(mod byte, reg byte, rm byte) byte {
 
 // mov rax, imm64
 func (c *Codegen) emitMovR64Imm64(reg string, val uint64) {
-	c.emitRexW()
+	c.emitRexWRB(0, regCodes[reg])
 	c.emitByte(0xB8 + regCodes[reg]&7)
 	c.emitU64(val)
 }
 
 // mov rax, rbx
 func (c *Codegen) emitMovR64R64(dst, src string) {
-	c.emitRexW()
-	c.emitByte(0x89)
 	// 0x89: MOV r/m64, r64 — reg field = source, rm field = destination
+	c.emitRexWRB(regCodes[src], regCodes[dst])
+	c.emitByte(0x89)
 	c.emitByte(c.modRM(3, regCodes[src], regCodes[dst]))
 }
 
 // lea rax, [label]
 func (c *Codegen) emitLeaR64Label(reg, label string) {
 	// REX.W + 8D + modrm + sib + disp32
-	c.emitRexW()
+	// reg field = target register (needs REX.R if >= 8), rm field = 5 (RIP)
+	c.emitRexWRB(regCodes[reg], 5)
 	c.emitByte(0x8D)
 	// Use RIP-relative addressing: mod=00, rm=5 (RIP)
 	c.emitByte(c.modRM(0, regCodes[reg], 5))
@@ -1040,14 +1084,15 @@ func (c *Codegen) emitLeaR64Label(reg, label string) {
 
 // add rax, rbx
 func (c *Codegen) emitAddR64R64(dst, src string) {
-	c.emitRexW()
+	// 0x01: ADD r/m64, r64 — reg field = source, rm field = destination
+	c.emitRexWRB(regCodes[src], regCodes[dst])
 	c.emitByte(0x01)
-	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
+	c.emitByte(c.modRM(3, regCodes[src], regCodes[dst]))
 }
 
 // sub rax, imm8
 func (c *Codegen) emitSubR64Imm8(reg string, imm byte) {
-	c.emitRexW()
+	c.emitRexWRB(5, regCodes[reg])
 	c.emitByte(0x83)
 	c.emitByte(c.modRM(3, 5, regCodes[reg]))
 	c.emitByte(imm)
@@ -1055,7 +1100,7 @@ func (c *Codegen) emitSubR64Imm8(reg string, imm byte) {
 
 // add rax, imm8
 func (c *Codegen) emitAddR64Imm8(reg string, imm byte) {
-	c.emitRexW()
+	c.emitRexWRB(0, regCodes[reg])
 	c.emitByte(0x83)
 	c.emitByte(c.modRM(3, 0, regCodes[reg]))
 	c.emitByte(imm)
@@ -1063,14 +1108,15 @@ func (c *Codegen) emitAddR64Imm8(reg string, imm byte) {
 
 // sub rbx, rax (rbx = rbx - rax)
 func (c *Codegen) emitSubR64R64(dst, src string) {
-	c.emitRexW()
+	// 0x29: SUB r/m64, r64 — reg field = source, rm field = destination
+	c.emitRexWRB(regCodes[src], regCodes[dst])
 	c.emitByte(0x29)
-	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
+	c.emitByte(c.modRM(3, regCodes[src], regCodes[dst]))
 }
 
 // mul rbx (rax = rax * rbx)
 func (c *Codegen) emitMulR64(reg string) {
-	c.emitRexW()
+	c.emitRexWRB(4, regCodes[reg])
 	c.emitByte(0xF7)
 	c.emitByte(c.modRM(3, 4, regCodes[reg]))
 }
@@ -1079,70 +1125,77 @@ func (c *Codegen) emitMulR64(reg string) {
 func (c *Codegen) emitDivR64(reg string) {
 	// xor rdx, rdx
 	c.emitXorR64R64("rdx", "rdx")
-	c.emitRexW()
+	c.emitRexWRB(6, regCodes[reg])
 	c.emitByte(0xF7)
 	c.emitByte(c.modRM(3, 6, regCodes[reg]))
 }
 
 // xor rax, rax
 func (c *Codegen) emitXorR64R64(dst, src string) {
-	c.emitRexW()
+	// 0x31: XOR r/m64, r64 — reg field = source, rm field = destination
+	c.emitRexWRB(regCodes[src], regCodes[dst])
 	c.emitByte(0x31)
-	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
+	c.emitByte(c.modRM(3, regCodes[src], regCodes[dst]))
 }
 
 // neg rax
 func (c *Codegen) emitNegR64(reg string) {
-	c.emitRexW()
+	c.emitRexWRB(3, regCodes[reg])
 	c.emitByte(0xF7)
 	c.emitByte(c.modRM(3, 3, regCodes[reg]))
 }
 
 // not rax
 func (c *Codegen) emitNotR64(reg string) {
-	c.emitRexW()
+	c.emitRexWRB(2, regCodes[reg])
 	c.emitByte(0xF7)
 	c.emitByte(c.modRM(3, 2, regCodes[reg]))
 }
 
 // test rax, rax
 func (c *Codegen) emitTestR64R64(dst, src string) {
-	c.emitRexW()
+	// 0x85: TEST r/m64, r64 — reg field = source, rm field = destination
+	c.emitRexWRB(regCodes[src], regCodes[dst])
 	c.emitByte(0x85)
-	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
+	c.emitByte(c.modRM(3, regCodes[src], regCodes[dst]))
 }
 
 // cmp rax, rbx
 func (c *Codegen) emitCmpR64R64(dst, src string) {
-	c.emitRexW()
+	// 0x39: CMP r/m64, r64 — computes r/m64 - r64
+	// reg field = r64 (source being subtracted), rm field = r/m64 (destination)
+	// So modRM(3, regCodes[src], regCodes[dst]) gives "cmp dst, src" = dst - src (natural order)
+	c.emitRexWRB(regCodes[src], regCodes[dst])
 	c.emitByte(0x39)
-	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
+	c.emitByte(c.modRM(3, regCodes[src], regCodes[dst]))
 }
 
 // and rax, rbx
 func (c *Codegen) emitAndR64R64(dst, src string) {
-	c.emitRexW()
+	// 0x21: AND r/m64, r64 — reg field = source, rm field = destination
+	c.emitRexWRB(regCodes[src], regCodes[dst])
 	c.emitByte(0x21)
-	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
+	c.emitByte(c.modRM(3, regCodes[src], regCodes[dst]))
 }
 
 // or rax, rbx
 func (c *Codegen) emitOrR64R64(dst, src string) {
-	c.emitRexW()
+	// 0x09: OR r/m64, r64 — reg field = source, rm field = destination
+	c.emitRexWRB(regCodes[src], regCodes[dst])
 	c.emitByte(0x09)
-	c.emitByte(c.modRM(3, regCodes[dst], regCodes[src]))
+	c.emitByte(c.modRM(3, regCodes[src], regCodes[dst]))
 }
 
 // shl rax, cl (shift left by cl)
 func (c *Codegen) emitShlR64(reg string) {
-	c.emitRexW()
+	c.emitRexWRB(4, regCodes[reg])
 	c.emitByte(0xD3)
 	c.emitByte(c.modRM(3, 4, regCodes[reg]))
 }
 
 // shr rax, cl (shift right by cl)
 func (c *Codegen) emitShrR64(reg string) {
-	c.emitRexW()
+	c.emitRexWRB(5, regCodes[reg])
 	c.emitByte(0xD3)
 	c.emitByte(c.modRM(3, 5, regCodes[reg]))
 }
@@ -1301,7 +1354,7 @@ func (c *Codegen) patchRelocs() {
 // mov [addrReg], src  (store src at address in addrReg)
 func (c *Codegen) emitMovR64ToAddr(src, addrReg string, offset int8) {
 	// REX.W + 89 + modrm(00/01, src, addrReg) + [optional disp8]
-	c.emitRexW()
+	c.emitRexWRB(regCodes[src], regCodes[addrReg])
 	c.emitByte(0x89)
 	if offset == 0 {
 		c.emitByte(c.modRM(0, regCodes[src], regCodes[addrReg]))
@@ -1314,7 +1367,7 @@ func (c *Codegen) emitMovR64ToAddr(src, addrReg string, offset int8) {
 // mov dst, [addrReg]  (load dst from address in addrReg)
 func (c *Codegen) emitMovFromAddr(dst, addrReg string, offset int8) {
 	// REX.W + 8B + modrm(00/01, dst, addrReg) + [optional disp8]
-	c.emitRexW()
+	c.emitRexWRB(regCodes[dst], regCodes[addrReg])
 	c.emitByte(0x8B)
 	if offset == 0 {
 		c.emitByte(c.modRM(0, regCodes[dst], regCodes[addrReg]))

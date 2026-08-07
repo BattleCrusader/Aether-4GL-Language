@@ -190,11 +190,10 @@ func emitMovR64Imm64(c: codegen, reg: string, val: u64): codegen {
 
 // mov rax, rbx
 func emitMovR64R64(c: codegen, dst: string, src: string): codegen {
-    if needsRex(dst) or needsRex(src) {
-        c = emitRexW(c)
-    }
+    c = emitRexW(c)
     c = emitByte(c, 0x89)
-    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    // 0x89: MOV r/m64, r64 — reg field = source, rm field = destination
+    c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
     return c
 }
 
@@ -219,7 +218,8 @@ func emitLeaR64Label(c: codegen, reg: string, labelName: string): codegen {
 func emitAddR64R64(c: codegen, dst: string, src: string): codegen {
     c = emitRexW(c)
     c = emitByte(c, 0x01)
-    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    // 0x01: ADD r/m64, r64 — reg field = source, rm field = destination
+    c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
     return c
 }
 
@@ -236,7 +236,8 @@ func emitAddR64Imm8(c: codegen, reg: string, imm: byte): codegen {
 func emitSubR64R64(c: codegen, dst: string, src: string): codegen {
     c = emitRexW(c)
     c = emitByte(c, 0x29)
-    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    // 0x29: SUB r/m64, r64 — reg field = source, rm field = destination
+    c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
     return c
 }
 
@@ -315,7 +316,10 @@ func emitTestR64R64(c: codegen, dst: string, src: string): codegen {
 func emitCmpR64R64(c: codegen, dst: string, src: string): codegen {
     c = emitRexW(c)
     c = emitByte(c, 0x39)
-    c = emitByte(c, modRM(3, regCode(dst), regCode(src)))
+    // 0x39: CMP r/m64, r64 — computes r/m64 - r64
+    // reg field = r64 (source), rm field = r/m64 (destination)
+    // modRM(3, regCode(src), regCode(dst)) gives "cmp dst, src" = dst - src
+    c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
     return c
 }
 
