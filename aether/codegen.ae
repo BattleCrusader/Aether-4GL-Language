@@ -881,14 +881,30 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
     }
     let funcName = tokens[ctx.pos].lexeme
     ctx = ctxAdvance(ctx, tokens)
+    // Parse param list and capture param names + types.
+    // Parameters are passed in rdi, rsi, rdx, rcx, r8, r9 (first 6).
+    var paramNames: [string] = []
+    var paramTypes: [string] = []
     if ctxCheck(ctx, tokens, TOKEN_LPAREN) {
         ctx = ctxAdvance(ctx, tokens)
-        var parenDepth: u64 = 1
-        while parenDepth > 0 and not ctxIsAtEnd(ctx, tokens) {
-            if ctxCheck(ctx, tokens, TOKEN_LPAREN) { parenDepth = parenDepth + 1 }
-            elif ctxCheck(ctx, tokens, TOKEN_RPAREN) { parenDepth = parenDepth - 1 }
-            ctx = ctxAdvance(ctx, tokens)
+        while not ctxCheck(ctx, tokens, TOKEN_RPAREN) and not ctxIsAtEnd(ctx, tokens) {
+            if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+                let pname = tokens[ctx.pos].lexeme
+                paramNames = push(paramNames, pname)
+                ctx = ctxAdvance(ctx, tokens)
+                var ptype = ""
+                if ctxCheck(ctx, tokens, TOKEN_COLON) {
+                    ctx = ctxAdvance(ctx, tokens)
+                    if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+                        ptype = tokens[ctx.pos].lexeme
+                        ctx = ctxAdvance(ctx, tokens)
+                    }
+                }
+                paramTypes = push(paramTypes, ptype)
+            } else { ctx = ctxAdvance(ctx, tokens) }
+            if ctxCheck(ctx, tokens, TOKEN_COMMA) { ctx = ctxAdvance(ctx, tokens) }
         }
+        if ctxCheck(ctx, tokens, TOKEN_RPAREN) { ctx = ctxAdvance(ctx, tokens) }
     }
     if ctxCheck(ctx, tokens, TOKEN_COLON) {
         ctx = ctxAdvance(ctx, tokens)
@@ -899,10 +915,31 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
     ctx.c.stackOffsets = []
     ctx.c.stackOffsetVals = []
     ctx.c.stackSize = 0
+    ctx.c.varTypes = []
     ctx.c.labelCount = 0
+    // Register parameters as stack variables so they can be loaded by name.
+    // First param slot starts at offset 0 (which maps to [rbp-0] = [rbp], the
+    // location where the saved old rbp was — we overwrite it with arg1).
+    // Subsequent params go at offsets 8, 16, ... (i.e., [rbp-8], [rbp-16], ...).
+    for i in 0..#paramNames {
+        let pname = paramNames[i]
+        var found = false
+        for j in 0..#ctx.c.stackOffsets {
+            if ctx.c.stackOffsets[j] == pname { found = true }
+        }
+        if not found {
+            ctx.c.stackOffsets = push(ctx.c.stackOffsets, pname)
+            ctx.c.stackOffsetVals = push(ctx.c.stackOffsetVals, ctx.c.stackSize)
+            ctx.c.stackSize = ctx.c.stackSize + 8
+            let ptype = paramTypes[i]
+            ctx.c.varTypes = push(ctx.c.varTypes, ptype)
+        }
+        _ = i
+    }
     ctx.c = label(ctx.c, funcName)
     ctx.c = emitPush(ctx.c, "rbp")
     ctx.c = emitMovR64R64(ctx.c, "rbp", "rsp")
+    // First pass: walk body to find local var/let declarations and assign slots.
     ctx = collectLocals(ctx, tokens)
     var stackAlloc: u64 = ctx.c.stackSize
     if stackAlloc < 128 { stackAlloc = 128 }
@@ -917,6 +954,18 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
         ctx.c = emitByte(ctx.c, 0x81)
         ctx.c = emitByte(ctx.c, modRM(3, 5, 4))
         ctx.c = emitU32(ctx.c, stackAlloc)
+    }
+    // Save function parameters (passed in rdi, rsi, rdx, rcx, r8, r9) to their
+    // assigned stack slots. After this, references to param names load the
+    // correct value via emitMovStackR64.
+    let paramRegs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
+    for i in 0..#paramNames {
+        if i < 6 {
+            let reg = paramRegs[i]
+            let offset = findStackOffset(ctx.c, paramNames[i])
+            ctx.c = emitMovR64Stack(ctx.c, reg, offset)
+        }
+        _ = i
     }
     ctx = genBlock(ctx, tokens)
     ctx.c = label(ctx.c, funcName + "_epilogue")
@@ -1297,12 +1346,14 @@ func genCallArgs(ctx: genCtx, tokens: [Token]): genCtx {
         argCount = argCount + 1
     }
     if ctxCheck(ctx, tokens, TOKEN_RPAREN) { ctx = ctxAdvance(ctx, tokens) }
-    if argCount > 0 { ctx.c = emitPop(ctx.c, "rdi") }
-    if argCount > 1 { ctx.c = emitPop(ctx.c, "rsi") }
-    if argCount > 2 { ctx.c = emitPop(ctx.c, "rdx") }
-    if argCount > 3 { ctx.c = emitPop(ctx.c, "rcx") }
-    if argCount > 4 { ctx.c = emitPop(ctx.c, "r8") }
-    if argCount > 5 { ctx.c = emitPop(ctx.c, "r9") }
+    // Pop in reverse order so arg1 (pushed first) lands in rdi, arg2 in rsi, etc.
+    let regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
+    var i: u64 = argCount
+    if i > 6 { i = 6 }
+    while i > 0 {
+        i = i - 1
+        ctx.c = emitPop(ctx.c, regs[i])
+    }
     if calleeName == "" { calleeName = "_unknown_call" }
     ctx.c = emitCallLabel(ctx.c, calleeName)
     return ctx
