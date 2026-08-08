@@ -29,7 +29,7 @@ BINDIR      ?= $(PREFIX)/bin
 LOCAL_PREFIX ?= $(HOME)/.local
 LOCAL_BINDIR ?= $(LOCAL_PREFIX)/bin
 
-.PHONY: all build aether-cli test test-host test-spec test-negative clean install install-local uninstall
+.PHONY: all build self-host aether-cli test test-host test-spec test-negative clean install install-local uninstall
 
 all: build
 
@@ -39,6 +39,19 @@ build: $(AETHER)
 $(AETHER): $(BOOTSTRAP_SRCS)
 	@mkdir -p $(BUILD_DIR)
 	cd $(BOOTSTRAP_DIR) && GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(AETHER) .
+
+# Self-hosted Aether compiler: run the bootstrap against the Aether compiler
+# source (aether/*.ae) to produce build/aether_v2. This is the Phase 4 goal —
+# the Aether compiler written in Aether, compiled by the bootstrap.
+AETHER_SRCS = $(wildcard aether/*.ae)
+AETHER_V2 = $(BUILD_DIR)/aether_v2
+
+self-host: build
+	@echo "=== Self-hosting: compiling Aether compiler source with ./$(AETHER) ==="
+	@mkdir -p $(BUILD_DIR)
+	./$(AETHER) $(AETHER_SRCS) -o $(AETHER_V2)
+	@echo "  -> $(AETHER_V2)"
+	@file $(AETHER_V2)
 
 aether-cli: build
 
