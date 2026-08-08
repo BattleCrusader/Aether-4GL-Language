@@ -21,29 +21,25 @@ func (c *Codegen) emitAeWriteFile() {
 
 //go:noinline
 func getAeWriteFileCode() []byte {
+	// __ae_write_file with mmap buffer + pack loop:
+	// Uses mmap (no label refs needed) to allocate a contiguous buffer,
+	// packs 8-byte array slots into bytes, then writes.
 	return []byte{
-		0x55, 0x48, 0x89, 0xE5,
-		0x48, 0x89, 0x7D, 0xF8,
-		0x48, 0x89, 0x75, 0xF0,
-		0x48, 0x89, 0x55, 0xE8,
-		0x48, 0x8B, 0x7D, 0xF8,
-		0x48, 0xBE, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x48, 0xBA, 0xA4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x48, 0xB8, 0x05, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
-		0x0F, 0x05,
-		0x48, 0x85, 0xC0,
-		0x79, 0x09,
-		0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,
-		0x5D, 0xC3,
-		0x48, 0x89, 0xC7,
-		0x48, 0x8B, 0x75, 0xF0,
-		0x48, 0x8B, 0x55, 0xE8,
-		0x48, 0xB8, 0x04, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
-		0x0F, 0x05,
-		0x48, 0xB8, 0x06, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
-		0x0F, 0x05,
-		0x48, 0x33, 0xC0,
-		0x5D, 0xC3,
+		0x55, 0x48, 0x89, 0xE5, 0x53, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57, 0x48, 0x89, 0xFB,
+		0x49, 0x89, 0xF4, 0x49, 0x89, 0xD5, 0x48, 0x89, 0xDF, 0x48, 0xBE, 0x01, 0x06, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x48, 0xBA, 0xA4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x48, 0xB8, 0x05,
+		0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x05, 0x48, 0x85, 0xC0, 0x0F, 0x89, 0x12, 0x00,
+		0x00, 0x00, 0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00, 0x41, 0x5F, 0x41, 0x5E, 0x41, 0x5D, 0x41,
+		0x5C, 0x5B, 0x5D, 0xC3, 0x49, 0x89, 0xC6, 0x4D, 0x8B, 0x7C, 0x24, 0x18, 0x48, 0x31, 0xFF, 0x4C,
+		0x89, 0xEE, 0x48, 0xC7, 0xC2, 0x03, 0x00, 0x00, 0x00, 0x49, 0xBA, 0x02, 0x10, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x49, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x4D, 0x31, 0xC9,
+		0x48, 0xB8, 0xC5, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x05, 0x48, 0x89, 0xC3, 0x48,
+		0x31, 0xC9, 0x4C, 0x39, 0xE9, 0x0F, 0x84, 0x1E, 0x00, 0x00, 0x00, 0x48, 0x89, 0xC8, 0x48, 0xC1,
+		0xE0, 0x03, 0x4C, 0x01, 0xF8, 0x48, 0x8B, 0x00, 0x48, 0x89, 0xDA, 0x48, 0x01, 0xCA, 0x88, 0x02,
+		0x48, 0x83, 0xC1, 0x01, 0xE9, 0xD9, 0xFF, 0xFF, 0xFF, 0x4C, 0x89, 0xF7, 0x48, 0x89, 0xDE, 0x4C,
+		0x89, 0xEA, 0x48, 0xB8, 0x04, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x05, 0x4C, 0x89,
+		0xF7, 0x48, 0xB8, 0x06, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x05, 0x48, 0x31, 0xC0,
+		0x41, 0x5F, 0x41, 0x5E, 0x41, 0x5D, 0x41, 0x5C, 0x5B, 0x5D, 0xC3,
 	}
 }
 
@@ -84,7 +80,11 @@ type Codegen struct {
 	// Function return types (name -> return type name, for type inference)
 	funcReturnTypes map[string]string
 
-	// Per-function state
+	// Global constants: top-level let/const declarations with integer literal
+// initializers (name -> value). Referenced from emitIdent.
+consts map[string]uint64
+
+// Per-function state
 	funcName    string
 	stackOffsets map[string]int // variable name -> stack offset (negative from rbp)
 	varTypes    map[string]string // variable name -> type name (for struct field access)
@@ -100,6 +100,29 @@ func NewCodegen(prog *Program) *Codegen {
 		prog:    prog,
 		structs: make(map[string]*structInfo),
 		funcReturnTypes: make(map[string]string),
+		consts:  make(map[string]uint64),
+	}
+	// Build global constant table: top-level let/const with integer
+	// initializers (e.g. `let TOKEN_LPAREN = 0`). These are compile-time
+	// folded at every reference site.
+	for _, decl := range prog.Decls {
+		switch d := decl.(type) {
+		case *ConstDecl:
+			if lit, ok := d.Value.(*LiteralExpr); ok {
+				if iv, ok := lit.Value.(int64); ok {
+					c.consts[d.Name] = uint64(iv)
+				}
+			}
+		case *VarDecl:
+			if !d.IsLet {
+				continue
+			}
+			if lit, ok := d.Initializer.(*LiteralExpr); ok {
+				if iv, ok := lit.Value.(int64); ok {
+					c.consts[d.Name] = uint64(iv)
+				}
+			}
+		}
 	}
 	// Build struct layout info
 	c.buildStructInfo()
@@ -210,10 +233,21 @@ func (c *Codegen) emitStart() {
 	c.emitMovR64ToAddr("rdi", "rcx", 0) // mov [rcx], rdi
 	c.emitLeaR64Label("rcx", "__ae_saved_argv")
 	c.emitMovR64ToAddr("rsi", "rcx", 0) // mov [rcx], rsi
-	// Initialize heap bump pointer to __ae_heap_start
-	c.emitLeaR64Label("rcx", "__ae_heap_start")
-	c.emitLeaR64Label("rdx", "__ae_heap_ptr")
-	c.emitMovR64ToAddr("rcx", "rdx", 0) // mov [__ae_heap_ptr], rcx
+	// Initialize heap bump pointer via mmap: allocate an 8MB anonymous
+	// region. The old fixed 64KB static arena (__ae_heap_start) overflows
+	// when the self-hosted compiler builds an output binary (~1.2MB of
+	// text), so the bump pointer now targets mmap'd memory.
+	c.emitMovR64Imm64("rdi", 0)           // addr = NULL (kernel chooses)
+	c.emitMovR64Imm64("rsi", 8*1024*1024) // len = 8MB
+	c.emitMovR64Imm64("rdx", 3)           // prot = PROT_READ|PROT_WRITE
+	c.emitMovR64Imm64("r10", 0x1002)      // flags = MAP_PRIVATE|MAP_ANON
+	c.emitMovR64Imm64("r8", 0)            // fd = 0 (ignored for MAP_ANON)
+	c.emitMovR64Imm64("r9", 0)            // offset = 0
+	c.emitMovR64Imm64("rax", 0x20000C5)   // sys_mmap (macOS x86_64)
+	c.emitSyscall()
+	// heap_ptr = mmap result (rax)
+	c.emitLeaR64Label("rcx", "__ae_heap_ptr")
+	c.emitMovR64ToAddr("rax", "rcx", 0) // mov [__ae_heap_ptr], rax
 	// Call main
 	c.emitCall("main")
 	// Exit with return code
@@ -269,6 +303,12 @@ func (c *Codegen) emitFunc(fd *FuncDecl) {
 
 	// Allocate stack space (aligned to 16 bytes)
 	stackAlloc := c.stackSize
+	if fd.Name == "linkMachO" {
+		fmt.Fprintf(os.Stderr, "DBG linkMachO stackSize=%d\n", c.stackSize)
+		for k, v := range c.stackOffsets {
+			fmt.Fprintf(os.Stderr, "DBG   slot %-24s %d\n", k, v)
+		}
+	}
 	if stackAlloc < 128 {
 		stackAlloc = 128
 	}
@@ -345,6 +385,18 @@ func (c *Codegen) collectLocals(b *Block) {
 		case *WhileStmt:
 			c.collectLocals(s.Body)
 		case *ForStmt:
+			// Allocate a stack slot for the loop variable (and a hidden
+			// bound slot for numeric ranges) so stackAlloc covers them.
+			if s.Variable != "" {
+				if _, exists := c.stackOffsets[s.Variable]; !exists {
+					c.stackOffsets[s.Variable] = c.stackSize
+					c.stackSize += 8
+				}
+				if _, exists := c.stackOffsets[s.Variable+"$end"]; !exists {
+					c.stackOffsets[s.Variable+"$end"] = c.stackSize
+					c.stackSize += 8
+				}
+			}
 			c.collectLocals(s.Body)
 		case *MatchStmt:
 			for _, mc := range s.Cases {
@@ -493,7 +545,70 @@ func (c *Codegen) emitFor(fs *ForStmt) {
 	endLabel := fmt.Sprintf("%s_endfor_%d", c.funcName, c.nextLabel())
 	breakLabel := c.funcName + "_break"
 
-	// Initialize loop variable
+	// Numeric range: for i in a..b (half-open [a,b)) or a..=b (inclusive [a,b]).
+	// Direction is decided at runtime: ascending when a < b, descending when a > b.
+	if be, ok := fs.Iterable.(*BinaryExpr); ok && (be.Op == ".." || be.Op == "..=") {
+		inclusive := be.Op == "..="
+		varOff, ok1 := c.stackOffsets[fs.Variable]
+		endOff, ok2 := c.stackOffsets[fs.Variable+"$end"]
+		if ok1 && ok2 {
+			// i = a
+			c.emitExpr(be.Left)
+			c.emitMovR64ToStack("rax", varOff)
+			// end = b
+			c.emitExpr(be.Right)
+			c.emitMovR64ToStack("rax", endOff)
+
+			descLabel := fmt.Sprintf("%s_for_desc_%d", c.funcName, c.nextLabel())
+
+			c.label(startLabel)
+			// rax = i, rbx = end; cmp end, i
+			c.emitMovFromStack("rax", varOff)
+			c.emitMovFromStack("rbx", endOff)
+			c.emitCmpR64R64("rbx", "rax")
+			if !inclusive {
+				// Half-open: i == end -> done
+				c.emitJz(endLabel)
+			}
+			// end < i -> descending
+			c.emitJb(descLabel)
+			// Ascending body
+			c.emitBlock(fs.Body)
+			if inclusive {
+				// Inclusive: after body, i == end -> done
+				c.emitMovFromStack("rax", varOff)
+				c.emitMovFromStack("rbx", endOff)
+				c.emitCmpR64R64("rbx", "rax")
+				c.emitJz(endLabel)
+			}
+			// i++
+			c.emitMovFromStack("rax", varOff)
+			c.emitAddR64Imm8("rax", 1)
+			c.emitMovR64ToStack("rax", varOff)
+			c.emitJmp(startLabel)
+
+			c.label(descLabel)
+			// Descending body
+			c.emitBlock(fs.Body)
+			if inclusive {
+				c.emitMovFromStack("rax", varOff)
+				c.emitMovFromStack("rbx", endOff)
+				c.emitCmpR64R64("rbx", "rax")
+				c.emitJz(endLabel)
+			}
+			// i--
+			c.emitMovFromStack("rax", varOff)
+			c.emitSubR64Imm8("rax", 1)
+			c.emitMovR64ToStack("rax", varOff)
+			c.emitJmp(startLabel)
+
+			c.label(endLabel)
+			c.label(breakLabel)
+			return
+		}
+	}
+
+	// Fallback: array/other iteration (legacy behavior)
 	c.emitExpr(fs.Iterable)
 
 	c.label(startLabel)
@@ -521,6 +636,21 @@ func (c *Codegen) emitMatchStmt(ms *MatchStmt) {
 		// Pop match value
 		c.emitPop("rbx")
 		c.emitPush("rbx") // keep a copy for next case
+
+		// Wildcard pattern (_): matches unconditionally — used by the
+		// match `else ->` branch. Must NOT be evaluated as a value (an
+		// identifier `_` would emit 0 and never match).
+		if ident, ok := mc.Pattern.(*IdentExpr); ok && ident.Name == "_" {
+			c.emitPop("rax") // discard saved value
+			if b, ok := mc.Body.(*Block); ok {
+				c.emitBlock(b)
+			} else {
+				c.emitStmt(mc.Body)
+			}
+			c.emitJmp(endLabel)
+			c.label(nextLabel)
+			continue
+		}
 
 		// Evaluate pattern
 		c.emitExpr(mc.Pattern)
@@ -623,14 +753,40 @@ func (c *Codegen) emitIdent(e *IdentExpr) {
 		c.emitMovFromStack("rax", offset)
 		return
 	}
+	// Check if it's a global constant (top-level let/const with int value)
+	if v, ok := c.consts[e.Name]; ok {
+		c.emitMovR64Imm64("rax", v)
+		return
+	}
 	// Check if it's a function (load address)
 	// For now, just load 0 as placeholder
 	c.emitXorR64R64("rax", "rax")
 }
 
 func (c *Codegen) emitBinary(be *BinaryExpr) {
-	// Handle string operations specially
-	if be.Op == "+" && c.isStringExpr(be.Left) {
+	// Handle string operations specially. A string operand is a literal,
+	// an identifier typed string/[string] element, or an index into one.
+	isStrOp := func(e Expr) bool {
+		if c.isStringExpr(e) {
+			return true
+		}
+		// Only `string` is a string type; `byte` and `[byte]` elements are
+		// integer char codes and must stay integer compares.
+		if t := c.inferType(e); t == "string" {
+			return true
+		}
+		// labels[i] where labels is [string]
+		if ie, ok := e.(*IndexExpr); ok {
+			if obj, ok := ie.Object.(*IdentExpr); ok {
+				if ot := c.inferType(obj); ot == "[string]" {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	// String concatenation: emit runtime call
+	if be.Op == "+" && isStrOp(be.Left) {
 		// String concatenation: emit runtime call
 		c.emitExpr(be.Left)
 		c.emitPush("rax")
@@ -641,7 +797,7 @@ func (c *Codegen) emitBinary(be *BinaryExpr) {
 		return
 	}
 
-	if be.Op == "==" && c.isStringExpr(be.Left) {
+	if be.Op == "==" && isStrOp(be.Left) {
 		// String comparison
 		c.emitExpr(be.Left)
 		c.emitPush("rax")
@@ -652,7 +808,8 @@ func (c *Codegen) emitBinary(be *BinaryExpr) {
 		return
 	}
 
-	if be.Op == "!=" && c.isStringExpr(be.Left) {
+	if be.Op == "!=" && isStrOp(be.Left) {
+		// String comparison
 		c.emitExpr(be.Left)
 		c.emitPush("rax")
 		c.emitExpr(be.Right)
@@ -849,10 +1006,22 @@ func arrayElemType(typeName string) string {
 // CallExpr (function return type), MemberExpr (field type).
 func (c *Codegen) inferType(e Expr) string {
 	switch ex := e.(type) {
+	case *LiteralExpr:
+		if _, ok := ex.Value.(string); ok {
+			return "string"
+		}
 	case *IdentExpr:
 		return c.varTypes[ex.Name]
 	case *IndexExpr:
 		// arr[i] — the element type of arr. arr could be a variable or a member access.
+		// A slice obj[start:end] yields a string (or a copy of the array type).
+		if be, ok := ex.Index.(*BinaryExpr); ok && be.Op == ":" {
+			objType := c.inferType(ex.Object)
+			if objType == "string" {
+				return "string"
+			}
+			return objType // array slice keeps element array type
+		}
 		objType := c.inferType(ex.Object)
 		if elem := arrayElemType(objType); elem != "" {
 			return elem
@@ -918,6 +1087,19 @@ func (c *Codegen) emitMemberExpr(me *MemberExpr) {
 }
 
 func (c *Codegen) emitIndexExpr(ie *IndexExpr) {
+	// Handle slice: obj[start:end] — the index is a BinaryExpr with ":" op.
+	if be, ok := ie.Index.(*BinaryExpr); ok && be.Op == ":" {
+		c.emitExpr(ie.Object)
+		c.emitPush("rax")
+		c.emitExpr(be.Left)
+		c.emitPush("rax")
+		c.emitExpr(be.Right)
+		c.emitMovR64R64("rdx", "rax") // end
+		c.emitPop("rsi")              // start (top of stack)
+		c.emitPop("rdi")              // object
+		c.emitCall("__ae_slice")
+		return
+	}
 	// Evaluate object (string or array pointer)
 	c.emitExpr(ie.Object)
 	c.emitPush("rax")
@@ -1126,6 +1308,14 @@ func (c *Codegen) nextLabel() int {
 
 // mov rax, [rbp - offset]  (load from stack)
 func (c *Codegen) emitMovFromStack(reg string, offset int) {
+	if offset > 127 {
+		// disp32 form: REX.W + 8B + modrm(10, reg, rbp) + disp32 (negative)
+		c.emitRexWRB(regCodes[reg], 5)
+		c.emitByte(0x8B)
+		c.emitByte(c.modRM(2, regCodes[reg], 5)) // [rbp + disp32]
+		c.emitU32(uint32(-offset))
+		return
+	}
 	// REX.W + 8B + modrm(01, reg, rbp) + disp8
 	c.emitRexWRB(regCodes[reg], 5) // reg field = reg, rm field = rbp
 	c.emitByte(0x8B)
@@ -1135,6 +1325,14 @@ func (c *Codegen) emitMovFromStack(reg string, offset int) {
 
 // mov [rbp - offset], rax  (store to stack)
 func (c *Codegen) emitMovR64ToStack(reg string, offset int) {
+	if offset > 127 {
+		// disp32 form: REX.W + 89 + modrm(10, reg, rbp) + disp32 (negative)
+		c.emitRexWRB(regCodes[reg], 5)
+		c.emitByte(0x89)
+		c.emitByte(c.modRM(2, regCodes[reg], 5)) // [rbp + disp32]
+		c.emitU32(uint32(-offset))
+		return
+	}
 	// REX.W + 89 + modrm(01, reg, rbp) + disp8
 	c.emitRexWRB(regCodes[reg], 5) // reg field = reg, rm field = rbp
 	c.emitByte(0x89)
@@ -1548,6 +1746,7 @@ func (c *Codegen) emitRuntimeHelpers() {
 
 	// Additional runtime helpers needed by the Aether compiler source
 	c.emitAeLen()
+	c.emitAeSlice()
 	c.emitAeIndex()
 	c.emitAeIndexSet()
 	c.emitAeArrayNew()
@@ -1831,6 +2030,124 @@ func (c *Codegen) emitAeLen() {
 	c.emitRet()
 }
 
+// __ae_slice: slice a string OR array.
+// rdi = pointer (string or array header), rsi = start, rdx = end
+// Returns a new heap copy of the slice in rax:
+//   - strings: null-terminated byte copy
+//   - arrays: new array header + copied elements
+func (c *Codegen) emitAeSlice() {
+	c.label("__ae_slice")
+	c.emitPush("rbp")
+	c.emitMovR64R64("rbp", "rsp")
+	c.emitPush("rdi")
+	c.emitPush("rsi")
+	c.emitPush("rdx")
+	c.emitPush("rbx")
+	c.emitPush("r12")
+	c.emitPush("r13")
+	c.emitPush("r14")
+	c.emitPush("r15")
+
+	// rbx = object, r12 = start, r13 = end, r14 = len
+	c.emitMovR64R64("rbx", "rdi")
+	c.emitMovR64R64("r12", "rsi")
+	c.emitMovR64R64("r13", "rdx")
+	c.emitMovR64R64("r14", "r13")
+	c.emitSubR64R64("r14", "r12") // r14 = end - start
+
+	// Check tag: if [rbx] == AE_ARRAY_TAG, it's an array
+	c.emitMovFromAddr("rax", "rbx", 0)
+	c.emitMovR64Imm64("rcx", AE_ARRAY_TAG)
+	c.emitCmpR64R64("rax", "rcx")
+	c.emitJnz("__ae_slice_string")
+
+	// ---- Array path ----
+	// new header in r15 (alloc 32 bytes)
+	c.emitMovR64Imm64("rdi", 32)
+	c.emitCall("__ae_alloc")
+	c.emitMovR64R64("r15", "rax")
+	// header: tag, len, cap = r14
+	c.emitMovR64Imm64("rcx", AE_ARRAY_TAG)
+	c.emitMovR64ToAddr("rcx", "r15", 0)
+	c.emitMovR64ToAddr("r14", "r15", 8)
+	c.emitMovR64ToAddr("r14", "r15", 16)
+	// alloc data: len*8 -> rax, store at [r15+24]
+	c.emitMovR64R64("rdi", "r14")
+	c.emitShlR64Imm8("rdi", 3)
+	c.emitCall("__ae_alloc")
+	c.emitMovR64ToAddr("rax", "r15", 24)
+	// rcx = src data ptr = [rbx+24]
+	c.emitMovFromAddr("rcx", "rbx", 24)
+	// copy loop: for i in 0..len: dst[i] = src[start+i]
+	c.emitXorR64R64("r8", "r8")
+	c.label("__ae_slice_arr_loop")
+	c.emitCmpR64R64("r8", "r14")
+	c.emitJz("__ae_slice_arr_done")
+	// val = [src + (start+i)*8]
+	c.emitMovR64R64("r9", "r12")
+	c.emitAddR64R64("r9", "r8")
+	c.emitShlR64Imm8("r9", 3)
+	c.emitAddR64R64("r9", "rcx")
+	c.emitMovFromAddr("r9", "r9", 0)
+	// [dst + i*8] = val  (dst = [r15+24], held in rax)
+	c.emitMovR64R64("r10", "r8")
+	c.emitShlR64Imm8("r10", 3)
+	c.emitAddR64R64("r10", "rax")
+	c.emitMovR64ToAddr("r9", "r10", 0)
+	c.emitAddR64Imm8("r8", 1)
+	c.emitJmp("__ae_slice_arr_loop")
+	c.label("__ae_slice_arr_done")
+	// rax = new header
+	c.emitMovR64R64("rax", "r15")
+	c.emitJmp("__ae_slice_done")
+
+	// ---- String path ----
+	c.label("__ae_slice_string")
+	// alloc len+1
+	c.emitMovR64R64("rdi", "r14")
+	c.emitAddR64Imm8("rdi", 1)
+	c.emitCall("__ae_alloc")
+	// copy loop: for i in 0..len: dst[i] = src[start+i]
+	c.emitXorR64R64("r8", "r8")
+	c.label("__ae_slice_str_loop")
+	c.emitCmpR64R64("r8", "r14")
+	c.emitJz("__ae_slice_str_done")
+	// cl = byte [rbx + start + i]
+	c.emitMovR64R64("r9", "r12")
+	c.emitAddR64R64("r9", "r8")
+	c.emitAddR64R64("r9", "rbx")
+	c.emitByte(0x41) // REX.B (r9)
+	c.emitByte(0x8A)
+	c.emitByte(0x09) // mov cl, byte [r9]
+	// byte [rax + i] = cl
+	c.emitMovR64R64("r10", "rax")
+	c.emitAddR64R64("r10", "r8")
+	c.emitByte(0x41) // REX.B (r10)
+	c.emitByte(0x88)
+	c.emitByte(0x0A) // mov byte [r10], cl
+	c.emitAddR64Imm8("r8", 1)
+	c.emitJmp("__ae_slice_str_loop")
+	c.label("__ae_slice_str_done")
+	// null-terminate: byte [rax + len] = 0
+	c.emitMovR64R64("rcx", "rax")
+	c.emitAddR64R64("rcx", "r14")
+	c.emitXorR64R64("rdx", "rdx")
+	c.emitByte(0x88)
+	c.emitByte(0x11) // mov byte [rcx], dl
+
+	c.label("__ae_slice_done")
+	c.emitPop("r15")
+	c.emitPop("r14")
+	c.emitPop("r13")
+	c.emitPop("r12")
+	c.emitPop("rbx")
+	c.emitPop("rdx")
+	c.emitPop("rsi")
+	c.emitPop("rdi")
+	c.emitPop("rbp")
+	c.emitRet()
+}
+
 // __ae_index: get element at index in a string OR array.
 // rdi = pointer, rsi = index
 // Returns value in rax (byte zero-extended for strings, 8-byte for arrays).
@@ -2045,22 +2362,31 @@ func (c *Codegen) emitAeStrEq() {
 	c.emitMovR64R64("rbx", "rdi") // first
 	c.emitMovR64R64("r12", "rsi") // second
 
-	// Compare byte by byte
+	// Compare byte by byte.
 	c.label("__ae_str_eq_loop")
-	// Load byte from first string
+	// mov al, byte [rbx]
 	c.emitXorR64R64("rax", "rax")
 	c.emitByte(0x8A) // mov al, byte [rbx]
 	c.emitByte(0x03) // modrm: mod=00, reg=000(rax), rm=011(rbx)
-	// Load byte from second string
+	// mov cl, byte [r12]
 	c.emitXorR64R64("rcx", "rcx")
+	c.emitByte(0x41) // REX.B
 	c.emitByte(0x8A) // mov cl, byte [r12]
-	c.emitByte(0x0C) // modrm: mod=00, reg=001(rcx), rm=100(r12) — wait, r12 needs REX
+	c.emitByte(0x0C) // modrm: mod=00, reg=001(rcx), rm=100(r12)
+	c.emitByte(0x24) // SIB: scale=0, index=none, base=r12
+	// cmp al, cl
+	c.emitByte(0x38)
+	c.emitByte(0xC8)
+	c.emitJnz("__ae_str_eq_done")
+	// test al, al (both bytes equal; 0 means end of both strings)
+	c.emitTestR64R64("rax", "rax")
+	c.emitJz("__ae_str_eq_done")
+	// advance both pointers
+	c.emitAddR64Imm8("rbx", 1)
+	c.emitAddR64Imm8("r12", 1)
+	c.emitJmp("__ae_str_eq_loop")
 
-	// This is getting complex. Let me simplify: just compare pointers for now.
-	// In a real implementation, we'd do byte-by-byte comparison.
-
-	// Simplified: compare pointers
-	c.emitCmpR64R64("rbx", "r12")
+	c.label("__ae_str_eq_done")
 	c.emitSete("al")
 	c.emitMovzxR64R8("rax", "al")
 
