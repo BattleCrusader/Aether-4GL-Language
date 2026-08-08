@@ -35,6 +35,7 @@ struct SemanticAnalyzer {
 }
 
 func newSemanticAnalyzer(): SemanticAnalyzer {
+    __ae_print("AN0\n")
     var s: SemanticAnalyzer
     s.scopes = []
     s.errors = []
@@ -45,6 +46,7 @@ func newSemanticAnalyzer(): SemanticAnalyzer {
     var gs: scope
     gs.symbols = []
     s.scopes = push(s.scopes, gs)
+    __ae_print("AN1\n")
     return s
 }
 
@@ -68,7 +70,7 @@ func declare(s: SemanticAnalyzer, name: string, info: symbol): SemanticAnalyzer 
         // Check for duplicate declaration in current scope
         for j in 0..#s.scopes[scopeIdx].symbols {
             if s.scopes[scopeIdx].symbols[j].name == name {
-                s = addError(s, "duplicate declaration: " + name)
+                s = semanticAddError(s, "duplicate declaration: " + name)
                 return s
             }
         }
@@ -95,12 +97,12 @@ func lookup(s: SemanticAnalyzer, name: string): symbol {
     return empty
 }
 
-func addError(s: SemanticAnalyzer, msg: string): SemanticAnalyzer {
+func semanticAddError(s: SemanticAnalyzer, msg: string): SemanticAnalyzer {
     s.errors = push(s.errors, msg)
     return s
 }
 
-func addErrorAt(s: SemanticAnalyzer, line: u64, col: u64, msg: string): SemanticAnalyzer {
+func semanticAddErrorAt(s: SemanticAnalyzer, line: u64, col: u64, msg: string): SemanticAnalyzer {
     // Format: "line X:Y: message"
     var errMsg = "line "
     errMsg = errMsg + u64ToString(line)
@@ -238,20 +240,27 @@ func makeSymbol(name: string, symType: string, kind: u64, isLet: bool, line: u64
 
 // analyze — walk the token stream and perform semantic analysis
 func analyze(s: SemanticAnalyzer, tokens: [Token]): SemanticAnalyzer {
+    __ae_print("AN2 n=")
     var i: u64 = 0
+    __ae_print("AN3\n")
     while i < #tokens {
+        __ae_print("W0\n")
         let tok = tokens[i]
         s.currentLine = tok.line
         s.currentCol = tok.column
 
         // Track function declarations
+        __ae_print("W1\n")
         if tok.typ == TOKEN_KW_FUNC {
+            __ae_print("W1f\n")
             if i + 1 < #tokens {
                 let nameTok = tokens[i + 1]
+                __ae_print("W1g\n")
                 if nameTok.typ == TOKEN_IDENT or isTypeToken(nameTok.typ) {
+                    __ae_print("W1h\n")
                     for j in 0..#s.funcs {
                         if s.funcs[j] == nameTok.lexeme {
-                            s = addErrorAt(s, nameTok.line, nameTok.column, "duplicate function: " + nameTok.lexeme)
+                            s = semanticAddErrorAt(s, nameTok.line, nameTok.column, "duplicate function: " + nameTok.lexeme)
                             break
                         }
                     }
@@ -312,6 +321,7 @@ func analyze(s: SemanticAnalyzer, tokens: [Token]): SemanticAnalyzer {
 
         // Check identifier references
         if tok.typ == TOKEN_IDENT {
+            __ae_print("W2a\n")
             let isDecl = false
             if i > 0 {
                 let prev = tokens[i - 1]
@@ -336,7 +346,7 @@ func analyze(s: SemanticAnalyzer, tokens: [Token]): SemanticAnalyzer {
                             or tok.lexeme == "stringFromByte" or tok.lexeme == "stringFromByteHelper"
                             or tok.lexeme == "makeSymbol"
                         if not isBuiltin {
-                            s = addErrorAt(s, tok.line, tok.column, "undefined reference: " + tok.lexeme)
+                            s = semanticAddErrorAt(s, tok.line, tok.column, "undefined reference: " + tok.lexeme)
                         }
                     }
                 }

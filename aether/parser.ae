@@ -34,11 +34,11 @@ func newParser(tokens: [Token]): Parser {
     return p
 }
 
-func isAtEnd(p: Parser): bool {
+func parserIsAtEnd(p: Parser): bool {
     return p.tokens[p.current].typ == TOKEN_EOF
 }
 
-func peek(p: Parser): Token {
+func parserPeek(p: Parser): Token {
     return p.tokens[p.current]
 }
 
@@ -46,24 +46,24 @@ func previous(p: Parser): Token {
     return p.tokens[p.current - 1]
 }
 
-func advance(p: Parser): Parser {
-    if not isAtEnd(p) {
+func parserAdvance(p: Parser): Parser {
+    if not parserIsAtEnd(p) {
         p.current = p.current + 1
     }
     return p
 }
 
 func check(p: Parser, typ: u64): bool {
-    if isAtEnd(p) {
+    if parserIsAtEnd(p) {
         return false
     }
-    return peek(p).typ == typ
+    return parserPeek(p).typ == typ
 }
 
-func match(p: Parser, types: [u64]): Parser {
+func parserMatch(p: Parser, types: [u64]): Parser {
     for i in 0..#types {
         if check(p, types[i]) {
-            p = advance(p)
+            p = parserAdvance(p)
             return p
         }
     }
@@ -72,7 +72,7 @@ func match(p: Parser, types: [u64]): Parser {
 
 func expect(p: Parser, typ: u64, msg: string): Parser {
     if check(p, typ) {
-        return advance(p)
+        return parserAdvance(p)
     }
     p.errors = push(p.errors, msg)
     return p
@@ -87,19 +87,19 @@ func errorAt(p: Parser, tok: Token, msg: string): Parser {
 func parseExpression(p: Parser): Parser {
     // Simplified: just parse a single identifier or literal
     if check(p, TOKEN_IDENT) {
-        p = advance(p)
+        p = parserAdvance(p)
     } else if check(p, TOKEN_INTEGER) or check(p, TOKEN_FLOAT) or check(p, TOKEN_STRING) or check(p, TOKEN_CHAR) {
-        p = advance(p)
+        p = parserAdvance(p)
     } else if check(p, TOKEN_KW_TRUE) or check(p, TOKEN_KW_FALSE) or check(p, TOKEN_KW_NONE) {
-        p = advance(p)
+        p = parserAdvance(p)
     } else if check(p, TOKEN_LPAREN) {
-        p = advance(p)
+        p = parserAdvance(p)
         p = parseExpression(p)
         if check(p, TOKEN_RPAREN) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
     } else {
-        p = errorAt(p, peek(p), "expected expression")
+        p = errorAt(p, parserPeek(p), "expected expression")
     }
     return p
 }
@@ -107,130 +107,130 @@ func parseExpression(p: Parser): Parser {
 // parseStatement — parse a single statement
 func parseStatement(p: Parser): Parser {
     if check(p, TOKEN_KW_LET) or check(p, TOKEN_KW_VAR) {
-        p = advance(p)
+        p = parserAdvance(p)
         if check(p, TOKEN_IDENT) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
         if check(p, TOKEN_COLON) {
-            p = advance(p)
-            if check(p, TOKEN_IDENT) or isTypeKeyword(peek(p).typ) {
-                p = advance(p)
+            p = parserAdvance(p)
+            if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                p = parserAdvance(p)
             }
         }
         if check(p, TOKEN_EQUAL) {
-            p = advance(p)
+            p = parserAdvance(p)
             p = parseExpression(p)
         }
         return p
     }
     if check(p, TOKEN_KW_RETURN) {
-        p = advance(p)
-        if not check(p, TOKEN_RBRACE) and not isAtEnd(p) {
+        p = parserAdvance(p)
+        if not check(p, TOKEN_RBRACE) and not parserIsAtEnd(p) {
             p = parseExpression(p)
         }
         return p
     }
     if check(p, TOKEN_KW_IF) {
-        p = advance(p)
+        p = parserAdvance(p)
         p = parseExpression(p)
         p = parseBlockOrStmt(p)
         while check(p, TOKEN_KW_ELIF) {
-            p = advance(p)
+            p = parserAdvance(p)
             p = parseExpression(p)
             p = parseBlockOrStmt(p)
         }
         if check(p, TOKEN_KW_ELSE) {
-            p = advance(p)
+            p = parserAdvance(p)
             p = parseBlockOrStmt(p)
         }
         return p
     }
     if check(p, TOKEN_KW_WHILE) {
-        p = advance(p)
+        p = parserAdvance(p)
         p = parseExpression(p)
         p = parseBlockOrStmt(p)
         return p
     }
     if check(p, TOKEN_KW_FOR) {
-        p = advance(p)
+        p = parserAdvance(p)
         if check(p, TOKEN_IDENT) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
         if check(p, TOKEN_COMMA) {
-            p = advance(p)
+            p = parserAdvance(p)
             if check(p, TOKEN_IDENT) {
-                p = advance(p)
+                p = parserAdvance(p)
             }
         }
         if check(p, TOKEN_KW_IN) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
         p = parseExpression(p)
         p = parseBlockOrStmt(p)
         return p
     }
     if check(p, TOKEN_KW_MATCH) {
-        p = advance(p)
+        p = parserAdvance(p)
         p = parseExpression(p)
         if check(p, TOKEN_LBRACE) {
-            p = advance(p)
-            while not check(p, TOKEN_RBRACE) and not isAtEnd(p) {
+            p = parserAdvance(p)
+            while not check(p, TOKEN_RBRACE) and not parserIsAtEnd(p) {
                 if check(p, TOKEN_KW_CASE) {
-                    p = advance(p)
+                    p = parserAdvance(p)
                     p = parseExpression(p)
                     if check(p, TOKEN_ARROW) {
-                        p = advance(p)
+                        p = parserAdvance(p)
                     }
                     p = parseBlockOrStmt(p)
                 } else if check(p, TOKEN_KW_ELSE) {
-                    p = advance(p)
+                    p = parserAdvance(p)
                     if check(p, TOKEN_ARROW) {
-                        p = advance(p)
+                        p = parserAdvance(p)
                     }
                     p = parseBlockOrStmt(p)
                 } else {
-                    p = advance(p)
+                    p = parserAdvance(p)
                 }
             }
             if check(p, TOKEN_RBRACE) {
-                p = advance(p)
+                p = parserAdvance(p)
             }
         }
         return p
     }
     if check(p, TOKEN_KW_DEFER) {
-        p = advance(p)
+        p = parserAdvance(p)
         p = parseBlockOrStmt(p)
         return p
     }
     if check(p, TOKEN_KW_TRY) {
-        p = advance(p)
+        p = parserAdvance(p)
         p = parseBlockOrStmt(p)
         if check(p, TOKEN_KW_CATCH) {
-            p = advance(p)
+            p = parserAdvance(p)
             if check(p, TOKEN_IDENT) {
-                p = advance(p)
+                p = parserAdvance(p)
             }
             p = parseBlockOrStmt(p)
         }
         return p
     }
     if check(p, TOKEN_KW_THROW) {
-        p = advance(p)
+        p = parserAdvance(p)
         p = parseExpression(p)
         return p
     }
     if check(p, TOKEN_KW_BREAK) {
-        p = advance(p)
+        p = parserAdvance(p)
         if check(p, TOKEN_IDENT) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
         return p
     }
     if check(p, TOKEN_KW_CONTINUE) {
-        p = advance(p)
+        p = parserAdvance(p)
         if check(p, TOKEN_IDENT) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
         return p
     }
@@ -252,13 +252,13 @@ func parseBlockOrStmt(p: Parser): Parser {
 
 func parseBlock(p: Parser): Parser {
     if check(p, TOKEN_LBRACE) {
-        p = advance(p)
+        p = parserAdvance(p)
     }
-    while not check(p, TOKEN_RBRACE) and not isAtEnd(p) {
+    while not check(p, TOKEN_RBRACE) and not parserIsAtEnd(p) {
         p = parseStatement(p)
     }
     if check(p, TOKEN_RBRACE) {
-        p = advance(p)
+        p = parserAdvance(p)
     }
     return p
 }
@@ -274,34 +274,34 @@ func isTypeKeyword(typ: u64): bool {
 
 // parseFuncDecl — parse a function declaration
 func parseFuncDecl(p: Parser): Parser {
-    p = advance(p)  // consume 'func'
+    p = parserAdvance(p)  // consume 'func'
     if check(p, TOKEN_IDENT) {
-        p = advance(p)
+        p = parserAdvance(p)
     }
     if check(p, TOKEN_LPAREN) {
-        p = advance(p)
-        while not check(p, TOKEN_RPAREN) and not isAtEnd(p) {
+        p = parserAdvance(p)
+        while not check(p, TOKEN_RPAREN) and not parserIsAtEnd(p) {
             if check(p, TOKEN_IDENT) {
-                p = advance(p)
+                p = parserAdvance(p)
             }
             if check(p, TOKEN_COLON) {
-                p = advance(p)
-                if check(p, TOKEN_IDENT) or isTypeKeyword(peek(p).typ) {
-                    p = advance(p)
+                p = parserAdvance(p)
+                if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                    p = parserAdvance(p)
                 }
             }
             if check(p, TOKEN_COMMA) {
-                p = advance(p)
+                p = parserAdvance(p)
             }
         }
         if check(p, TOKEN_RPAREN) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
     }
     if check(p, TOKEN_COLON) {
-        p = advance(p)
-        if check(p, TOKEN_IDENT) or isTypeKeyword(peek(p).typ) {
-            p = advance(p)
+        p = parserAdvance(p)
+        if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+            p = parserAdvance(p)
         }
     }
     if check(p, TOKEN_LBRACE) {
@@ -314,96 +314,96 @@ func parseFuncDecl(p: Parser): Parser {
 func parseDecl(p: Parser): Parser {
     // Collect attributes
     while check(p, TOKEN_AT) {
-        p = advance(p)
+        p = parserAdvance(p)
         if check(p, TOKEN_IDENT) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
     }
     if check(p, TOKEN_KW_FUNC) {
         return parseFuncDecl(p)
     }
     if check(p, TOKEN_KW_STRUCT) {
-        p = advance(p)
+        p = parserAdvance(p)
         if check(p, TOKEN_IDENT) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
         if check(p, TOKEN_LBRACE) {
-            p = advance(p)
-            while not check(p, TOKEN_RBRACE) and not isAtEnd(p) {
+            p = parserAdvance(p)
+            while not check(p, TOKEN_RBRACE) and not parserIsAtEnd(p) {
                 if check(p, TOKEN_IDENT) {
-                    p = advance(p)
+                    p = parserAdvance(p)
                 }
                 if check(p, TOKEN_COLON) {
-                    p = advance(p)
-                    if check(p, TOKEN_IDENT) or isTypeKeyword(peek(p).typ) {
-                        p = advance(p)
+                    p = parserAdvance(p)
+                    if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                        p = parserAdvance(p)
                     }
                 }
                 if check(p, TOKEN_COMMA) {
-                    p = advance(p)
+                    p = parserAdvance(p)
                 }
             }
             if check(p, TOKEN_RBRACE) {
-                p = advance(p)
+                p = parserAdvance(p)
             }
         }
         return p
     }
     if check(p, TOKEN_KW_ENUM) {
-        p = advance(p)
+        p = parserAdvance(p)
         if check(p, TOKEN_IDENT) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
         if check(p, TOKEN_LBRACE) {
-            p = advance(p)
-            while not check(p, TOKEN_RBRACE) and not isAtEnd(p) {
+            p = parserAdvance(p)
+            while not check(p, TOKEN_RBRACE) and not parserIsAtEnd(p) {
                 if check(p, TOKEN_IDENT) {
-                    p = advance(p)
+                    p = parserAdvance(p)
                 }
                 if check(p, TOKEN_LPAREN) {
-                    p = advance(p)
-                    while not check(p, TOKEN_RPAREN) and not isAtEnd(p) {
-                        if check(p, TOKEN_IDENT) or isTypeKeyword(peek(p).typ) {
-                            p = advance(p)
+                    p = parserAdvance(p)
+                    while not check(p, TOKEN_RPAREN) and not parserIsAtEnd(p) {
+                        if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                            p = parserAdvance(p)
                         }
                         if check(p, TOKEN_COMMA) {
-                            p = advance(p)
+                            p = parserAdvance(p)
                         }
                     }
                     if check(p, TOKEN_RPAREN) {
-                        p = advance(p)
+                        p = parserAdvance(p)
                     }
                 }
                 if check(p, TOKEN_COMMA) {
-                    p = advance(p)
+                    p = parserAdvance(p)
                 }
             }
             if check(p, TOKEN_RBRACE) {
-                p = advance(p)
+                p = parserAdvance(p)
             }
         }
         return p
     }
     if check(p, TOKEN_KW_IMPORT) {
-        p = advance(p)
+        p = parserAdvance(p)
         if check(p, TOKEN_STRING) or check(p, TOKEN_IDENT) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
         return p
     }
     if check(p, TOKEN_KW_CONST) {
-        p = advance(p)
+        p = parserAdvance(p)
         if check(p, TOKEN_IDENT) {
-            p = advance(p)
+            p = parserAdvance(p)
         }
         if check(p, TOKEN_COLON) {
-            p = advance(p)
-            if check(p, TOKEN_IDENT) or isTypeKeyword(peek(p).typ) {
-                p = advance(p)
+            p = parserAdvance(p)
+            if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                p = parserAdvance(p)
             }
         }
         if check(p, TOKEN_EQUAL) {
-            p = advance(p)
+            p = parserAdvance(p)
             p = parseExpression(p)
         }
         return p
@@ -412,13 +412,13 @@ func parseDecl(p: Parser): Parser {
         return parseStatement(p)
     }
     // Skip unknown
-    p = advance(p)
+    p = parserAdvance(p)
     return p
 }
 
 // parse — parse a complete program
 func parse(p: Parser): Parser {
-    while not isAtEnd(p) {
+    while not parserIsAtEnd(p) {
         p = parseDecl(p)
     }
     return p

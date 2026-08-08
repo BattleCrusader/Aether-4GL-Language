@@ -28,32 +28,33 @@ func newLexer(source: string): Lexer {
     return l
 }
 
-func isAtEnd(l: Lexer): bool {
+func lexerIsAtEnd(l: Lexer): bool {
+    __ae_print("IAE\n")
     return l.current >= #l.source
 }
 
-func advance(l: Lexer): Lexer {
+func lexerAdvance(l: Lexer): Lexer {
     l.current = l.current + 1
     l.column = l.column + 1
     return l
 }
 
-func peek(l: Lexer): byte {
-    if isAtEnd(l) {
+func lexerPeek(l: Lexer): byte {
+    if lexerIsAtEnd(l) {
         return 0
     }
     return l.source[l.current]
 }
 
-func peekNext(l: Lexer): byte {
+func lexerPeekNext(l: Lexer): byte {
     if l.current + 1 >= #l.source {
         return 0
     }
     return l.source[l.current + 1]
 }
 
-func match(l: Lexer, expected: byte): Lexer {
-    if isAtEnd(l) {
+func lexerMatch(l: Lexer, expected: byte): Lexer {
+    if lexerIsAtEnd(l) {
         return l
     }
     if l.source[l.current] != expected {
@@ -101,66 +102,66 @@ func isAlphaNumeric(c: byte): bool {
 }
 
 func string(l: Lexer): Lexer {
-    while peek(l) != 34 and not isAtEnd(l) {  // 34 = '"'
-        if peek(l) == 10 {  // '\n'
+    while lexerPeek(l) != 34 and not lexerIsAtEnd(l) {  // 34 = '"'
+        if lexerPeek(l) == 10 {  // '\n'
             l.line = l.line + 1
             l.column = 0
         }
-        if peek(l) == 92 and peekNext(l) == 34 {  // backslash + quote
-            l = advance(l)
-            l = advance(l)
-        } else if peek(l) == 92 and peekNext(l) == 123 {  // backslash + {
-            l = advance(l)
-            l = advance(l)
+        if lexerPeek(l) == 92 and lexerPeekNext(l) == 34 {  // backslash + quote
+            l = lexerAdvance(l)
+            l = lexerAdvance(l)
+        } else if lexerPeek(l) == 92 and lexerPeekNext(l) == 123 {  // backslash + {
+            l = lexerAdvance(l)
+            l = lexerAdvance(l)
         } else {
-            l = advance(l)
+            l = lexerAdvance(l)
         }
     }
-    if isAtEnd(l) {
+    if lexerIsAtEnd(l) {
         l.hadError = true
         l.errorMsg = "unterminated string"
         return l
     }
-    l = advance(l)  // closing quote
+    l = lexerAdvance(l)  // closing quote
     let lexeme = l.source[l.start:l.current]
     l = addTokenLiteral(l, TOKEN_STRING, lexeme[1:#lexeme-1])
     return l
 }
 
 func char(l: Lexer): Lexer {
-    if peek(l) == 92 {  // backslash
-        l = advance(l)
-        l = advance(l)
+    if lexerPeek(l) == 92 {  // backslash
+        l = lexerAdvance(l)
+        l = lexerAdvance(l)
     } else {
-        l = advance(l)
+        l = lexerAdvance(l)
     }
-    if peek(l) != 39 {  // '
+    if lexerPeek(l) != 39 {  // '
         l.hadError = true
         l.errorMsg = "unterminated char literal"
         return l
     }
-    l = advance(l)
+    l = lexerAdvance(l)
     let lexeme = l.source[l.start:l.current]
     l = addTokenLiteral(l, TOKEN_CHAR, lexeme)
     return l
 }
 
 func number(l: Lexer): Lexer {
-    while isDigit(peek(l)) {
-        l = advance(l)
+    while isDigit(lexerPeek(l)) {
+        l = lexerAdvance(l)
     }
-    if peek(l) == 46 and peekNext(l) != 46 and isDigit(peekNext(l)) {  // '.' but not '..'
-        l = advance(l)
-        while isDigit(peek(l)) {
-            l = advance(l)
+    if lexerPeek(l) == 46 and lexerPeekNext(l) != 46 and isDigit(lexerPeekNext(l)) {  // '.' but not '..'
+        l = lexerAdvance(l)
+        while isDigit(lexerPeek(l)) {
+            l = lexerAdvance(l)
         }
-        if peek(l) == 101 or peek(l) == 69 {  // 'e' or 'E'
-            l = advance(l)
-            if peek(l) == 43 or peek(l) == 45 {  // '+' or '-'
-                l = advance(l)
+        if lexerPeek(l) == 101 or lexerPeek(l) == 69 {  // 'e' or 'E'
+            l = lexerAdvance(l)
+            if lexerPeek(l) == 43 or lexerPeek(l) == 45 {  // '+' or '-'
+                l = lexerAdvance(l)
             }
-            while isDigit(peek(l)) {
-                l = advance(l)
+            while isDigit(lexerPeek(l)) {
+                l = lexerAdvance(l)
             }
         }
         let lexeme = l.source[l.start:l.current]
@@ -173,30 +174,168 @@ func number(l: Lexer): Lexer {
 }
 
 func identifier(l: Lexer): Lexer {
-    while isAlphaNumeric(peek(l)) {
-        l = advance(l)
+    __ae_print("ID0\n")
+    while isAlphaNumeric(lexerPeek(l)) {
+        l = lexerAdvance(l)
     }
+    __ae_print("ID1\n")
     let lexeme = l.source[l.start:l.current]
-    // Check if it's a keyword
-    var found = false
-    for i in 0..#keywordNames {
-        if keywordNames[i] == lexeme {
-            l = addToken(l, keywordTokens[i])
-            found = true
-            break
-        }
-    }
-    if not found {
-        l = addToken(l, TOKEN_IDENT)
-    }
-    return l
+    __ae_print("ID2\n")
+    // Keyword lookup via static chain (global arrays are not yet emitted
+    // by the bootstrap; a chain keeps the self-hosted compiler correct).
+    if lexeme == "and"
+        return addToken(l, TOKEN_KW_AND)
+    if lexeme == "as"
+        return addToken(l, TOKEN_KW_AS)
+    if lexeme == "bool"
+        return addToken(l, TOKEN_KW_BOOL)
+    if lexeme == "break"
+        return addToken(l, TOKEN_KW_BREAK)
+    if lexeme == "byte"
+        return addToken(l, TOKEN_KW_BYTE)
+    if lexeme == "catch"
+        return addToken(l, TOKEN_KW_CATCH)
+    if lexeme == "char"
+        return addToken(l, TOKEN_KW_CHAR)
+    if lexeme == "class"
+        return addToken(l, TOKEN_KW_CLASS)
+    if lexeme == "const"
+        return addToken(l, TOKEN_KW_CONST)
+    if lexeme == "continue"
+        return addToken(l, TOKEN_KW_CONTINUE)
+    if lexeme == "copy"
+        return addToken(l, TOKEN_KW_COPY)
+    if lexeme == "defer"
+        return addToken(l, TOKEN_KW_DEFER)
+    if lexeme == "double"
+        return addToken(l, TOKEN_KW_DOUBLE)
+    if lexeme == "dyn"
+        return addToken(l, TOKEN_KW_DYN)
+    if lexeme == "elif"
+        return addToken(l, TOKEN_KW_ELIF)
+    if lexeme == "else"
+        return addToken(l, TOKEN_KW_ELSE)
+    if lexeme == "enum"
+        return addToken(l, TOKEN_KW_ENUM)
+    if lexeme == "export"
+        return addToken(l, TOKEN_KW_EXPORT)
+    if lexeme == "extern"
+        return addToken(l, TOKEN_KW_EXTERN)
+    if lexeme == "false"
+        return addToken(l, TOKEN_KW_FALSE)
+    if lexeme == "float"
+        return addToken(l, TOKEN_KW_FLOAT)
+    if lexeme == "for"
+        return addToken(l, TOKEN_KW_FOR)
+    if lexeme == "func"
+        return addToken(l, TOKEN_KW_FUNC)
+    if lexeme == "heap"
+        return addToken(l, TOKEN_KW_HEAP)
+    if lexeme == "i8"
+        return addToken(l, TOKEN_KW_I8)
+    if lexeme == "i16"
+        return addToken(l, TOKEN_KW_I16)
+    if lexeme == "i32"
+        return addToken(l, TOKEN_KW_I32)
+    if lexeme == "i64"
+        return addToken(l, TOKEN_KW_I64)
+    if lexeme == "if"
+        return addToken(l, TOKEN_KW_IF)
+    if lexeme == "impl"
+        return addToken(l, TOKEN_KW_IMPL)
+    if lexeme == "import"
+        return addToken(l, TOKEN_KW_IMPORT)
+    if lexeme == "in"
+        return addToken(l, TOKEN_KW_IN)
+    if lexeme == "init"
+        return addToken(l, TOKEN_KW_INIT)
+    if lexeme == "int"
+        return addToken(l, TOKEN_KW_INT)
+    if lexeme == "internal"
+        return addToken(l, TOKEN_KW_INTERNAL)
+    if lexeme == "let"
+        return addToken(l, TOKEN_KW_LET)
+    if lexeme == "module"
+        return addToken(l, TOKEN_KW_MODULE)
+    if lexeme == "none"
+        return addToken(l, TOKEN_KW_NONE)
+    if lexeme == "not"
+        return addToken(l, TOKEN_KW_NOT)
+    if lexeme == "or"
+        return addToken(l, TOKEN_KW_OR)
+    if lexeme == "pool"
+        return addToken(l, TOKEN_KW_POOL)
+    if lexeme == "post"
+        return addToken(l, TOKEN_KW_POST)
+    if lexeme == "pre"
+        return addToken(l, TOKEN_KW_PRE)
+    if lexeme == "private"
+        return addToken(l, TOKEN_KW_PRIVATE)
+    if lexeme == "protocol"
+        return addToken(l, TOKEN_KW_PROTOCOL)
+    if lexeme == "public"
+        return addToken(l, TOKEN_KW_PUBLIC)
+    if lexeme == "region"
+        return addToken(l, TOKEN_KW_REGION)
+    if lexeme == "return"
+        return addToken(l, TOKEN_KW_RETURN)
+    if lexeme == "self"
+        return addToken(l, TOKEN_KW_SELF)
+    if lexeme == "static"
+        return addToken(l, TOKEN_KW_STATIC)
+    if lexeme == "string"
+        return addToken(l, TOKEN_KW_STRING)
+    if lexeme == "struct"
+        return addToken(l, TOKEN_KW_STRUCT)
+    if lexeme == "super"
+        return addToken(l, TOKEN_KW_SUPER)
+    if lexeme == "sys"
+        return addToken(l, TOKEN_KW_SYS)
+    if lexeme == "throw"
+        return addToken(l, TOKEN_KW_THROW)
+    if lexeme == "trait"
+        return addToken(l, TOKEN_KW_TRAIT)
+    if lexeme == "true"
+        return addToken(l, TOKEN_KW_TRUE)
+    if lexeme == "try"
+        return addToken(l, TOKEN_KW_TRY)
+    if lexeme == "type"
+        return addToken(l, TOKEN_KW_TYPE)
+    if lexeme == "u8"
+        return addToken(l, TOKEN_KW_U8)
+    if lexeme == "u16"
+        return addToken(l, TOKEN_KW_U16)
+    if lexeme == "u32"
+        return addToken(l, TOKEN_KW_U32)
+    if lexeme == "u64"
+        return addToken(l, TOKEN_KW_U64)
+    if lexeme == "u128"
+        return addToken(l, TOKEN_KW_U128)
+    if lexeme == "unsafe"
+        return addToken(l, TOKEN_KW_UNSAFE)
+    if lexeme == "var"
+        return addToken(l, TOKEN_KW_VAR)
+    if lexeme == "void"
+        return addToken(l, TOKEN_KW_VOID)
+    if lexeme == "while"
+        return addToken(l, TOKEN_KW_WHILE)
+    if lexeme == "yield"
+        return addToken(l, TOKEN_KW_YIELD)
+    if lexeme == "match"
+        return addToken(l, TOKEN_KW_MATCH)
+    if lexeme == "case"
+        return addToken(l, TOKEN_KW_CASE)
+    return addToken(l, TOKEN_IDENT)
 }
 
 func scanToken(l: Lexer): Lexer {
-    __ae_print("DBG: scanToken start\n")
-    let al = advance(l)
+    __ae_print("ST0\n")
+    let al = lexerAdvance(l)
+    __ae_print("ST1\n")
     let c = al.source[al.current - 1]
+    __ae_print("ST2\n")
     l = al
+    __ae_print("ST3\n")
     match c {
         case 40 -> l = addToken(l, TOKEN_LPAREN)  // (
         case 41 -> l = addToken(l, TOKEN_RPAREN)  // )
@@ -207,7 +346,7 @@ func scanToken(l: Lexer): Lexer {
         case 44 -> l = addToken(l, TOKEN_COMMA)  // ,
         case 59 -> l = addToken(l, TOKEN_SEMICOLON)  // ;
         case 58 -> {  // :
-            if match(l, 58).current > l.current {  // ::
+            if lexerMatch(l, 58).current > l.current {  // ::
                 l = addToken(l, TOKEN_COLON_COLON)
             } else {
                 l = addToken(l, TOKEN_COLON)
@@ -217,10 +356,10 @@ func scanToken(l: Lexer): Lexer {
         case 64 -> l = addToken(l, TOKEN_AT)  // @
         case 35 -> l = addToken(l, TOKEN_HASH)  // #
         case 46 -> {  // .
-            if match(l, 46).current > l.current {  // ..
-                if match(l, 46).current > l.current {  // ...
+            if lexerMatch(l, 46).current > l.current {  // ..
+                if lexerMatch(l, 46).current > l.current {  // ...
                     l = addToken(l, TOKEN_DOT_DOT_DOT)
-                } else if match(l, 61).current > l.current {  // ..=
+                } else if lexerMatch(l, 61).current > l.current {  // ..=
                     l = addToken(l, TOKEN_DOT_DOT_EQUAL)
                 } else {
                     l = addToken(l, TOKEN_DOT_DOT)
@@ -230,83 +369,83 @@ func scanToken(l: Lexer): Lexer {
             }
         }
         case 43 -> {  // +
-            if match(l, 43).current > l.current {  // ++
+            if lexerMatch(l, 43).current > l.current {  // ++
                 l = addToken(l, TOKEN_PLUS_PLUS)
-            } else if match(l, 61).current > l.current {  // +=
+            } else if lexerMatch(l, 61).current > l.current {  // +=
                 l = addToken(l, TOKEN_PLUS_EQUAL)
             } else {
                 l = addToken(l, TOKEN_PLUS)
             }
         }
         case 45 -> {  // -
-            if match(l, 45).current > l.current {  // --
+            if lexerMatch(l, 45).current > l.current {  // --
                 l = addToken(l, TOKEN_MINUS_MINUS)
-            } else if match(l, 61).current > l.current {  // -=
+            } else if lexerMatch(l, 61).current > l.current {  // -=
                 l = addToken(l, TOKEN_MINUS_EQUAL)
-            } else if match(l, 62).current > l.current {  // ->
+            } else if lexerMatch(l, 62).current > l.current {  // ->
                 l = addToken(l, TOKEN_ARROW)
             } else {
                 l = addToken(l, TOKEN_MINUS)
             }
         }
         case 42 -> {  // *
-            if match(l, 61).current > l.current {  // *=
+            if lexerMatch(l, 61).current > l.current {  // *=
                 l = addToken(l, TOKEN_STAR_EQUAL)
             } else {
                 l = addToken(l, TOKEN_STAR)
             }
         }
         case 47 -> {  // /
-            if match(l, 47).current > l.current {  // // comment
-                while peek(l) != 10 and not isAtEnd(l) {
-                    l = advance(l)
+            if lexerMatch(l, 47).current > l.current {  // // comment
+                while lexerPeek(l) != 10 and not lexerIsAtEnd(l) {
+                    l = lexerAdvance(l)
                 }
-            } else if match(l, 42).current > l.current {  // /* comment
-                while not isAtEnd(l) {
-                    if peek(l) == 42 and peekNext(l) == 47 {
-                        l = advance(l)
-                        l = advance(l)
+            } else if lexerMatch(l, 42).current > l.current {  // /* comment
+                while not lexerIsAtEnd(l) {
+                    if lexerPeek(l) == 42 and lexerPeekNext(l) == 47 {
+                        l = lexerAdvance(l)
+                        l = lexerAdvance(l)
                         break
                     }
-                    if peek(l) == 10 {
+                    if lexerPeek(l) == 10 {
                         l.line = l.line + 1
                         l.column = 0
                     }
-                    l = advance(l)
+                    l = lexerAdvance(l)
                 }
-            } else if match(l, 61).current > l.current {  // /=
+            } else if lexerMatch(l, 61).current > l.current {  // /=
                 l = addToken(l, TOKEN_SLASH_EQUAL)
             } else {
                 l = addToken(l, TOKEN_SLASH)
             }
         }
         case 37 -> {  // %
-            if match(l, 61).current > l.current {  // %=
+            if lexerMatch(l, 61).current > l.current {  // %=
                 l = addToken(l, TOKEN_PERCENT_EQUAL)
             } else {
                 l = addToken(l, TOKEN_PERCENT)
             }
         }
         case 38 -> {  // &
-            if match(l, 38).current > l.current {  // &&
+            if lexerMatch(l, 38).current > l.current {  // &&
                 l = addToken(l, TOKEN_AMPERSAND_AMPERSAND)
-            } else if match(l, 61).current > l.current {  // &=
+            } else if lexerMatch(l, 61).current > l.current {  // &=
                 l = addToken(l, TOKEN_AMPERSAND_EQUAL)
             } else {
                 l = addToken(l, TOKEN_AMPERSAND)
             }
         }
         case 124 -> {  // |
-            if match(l, 124).current > l.current {  // ||
+            if lexerMatch(l, 124).current > l.current {  // ||
                 l = addToken(l, TOKEN_PIPE_PIPE)
-            } else if match(l, 61).current > l.current {  // |=
+            } else if lexerMatch(l, 61).current > l.current {  // |=
                 l = addToken(l, TOKEN_PIPE_EQUAL)
             } else {
                 l = addToken(l, TOKEN_PIPE)
             }
         }
         case 94 -> {  // ^
-            if match(l, 61).current > l.current {  // ^=
+            if lexerMatch(l, 61).current > l.current {  // ^=
                 l = addToken(l, TOKEN_CARET_EQUAL)
             } else {
                 l = addToken(l, TOKEN_CARET)
@@ -314,40 +453,40 @@ func scanToken(l: Lexer): Lexer {
         }
         case 126 -> l = addToken(l, TOKEN_TILDE)  // ~
         case 33 -> {  // !
-            if match(l, 61).current > l.current {  // !=
+            if lexerMatch(l, 61).current > l.current {  // !=
                 l = addToken(l, TOKEN_EXCLAIM_EQUAL)
             } else {
                 l = addToken(l, TOKEN_EXCLAIM)
             }
         }
         case 60 -> {  // <
-            if match(l, 60).current > l.current {  // <<
-                if match(l, 61).current > l.current {  // <<=
+            if lexerMatch(l, 60).current > l.current {  // <<
+                if lexerMatch(l, 61).current > l.current {  // <<=
                     l = addToken(l, TOKEN_LESS_LESS_EQUAL)
                 } else {
                     l = addToken(l, TOKEN_LESS_LESS)
                 }
-            } else if match(l, 61).current > l.current {  // <=
+            } else if lexerMatch(l, 61).current > l.current {  // <=
                 l = addToken(l, TOKEN_LESS_EQUAL)
             } else {
                 l = addToken(l, TOKEN_LESS)
             }
         }
         case 62 -> {  // >
-            if match(l, 62).current > l.current {  // >>
-                if match(l, 61).current > l.current {  // >>=
+            if lexerMatch(l, 62).current > l.current {  // >>
+                if lexerMatch(l, 61).current > l.current {  // >>=
                     l = addToken(l, TOKEN_GREATER_GREATER_EQUAL)
                 } else {
                     l = addToken(l, TOKEN_GREATER_GREATER)
                 }
-            } else if match(l, 61).current > l.current {  // >=
+            } else if lexerMatch(l, 61).current > l.current {  // >=
                 l = addToken(l, TOKEN_GREATER_EQUAL)
             } else {
                 l = addToken(l, TOKEN_GREATER)
             }
         }
         case 61 -> {  // =
-            if match(l, 61).current > l.current {  // ==
+            if lexerMatch(l, 61).current > l.current {  // ==
                 l = addToken(l, TOKEN_EQUAL_EQUAL)
             } else {
                 l = addToken(l, TOKEN_EQUAL)
@@ -361,9 +500,11 @@ func scanToken(l: Lexer): Lexer {
         case 34 -> l = string(l)  // "
         case 39 -> l = char(l)  // '
         else -> {
+            __ae_print("EL0\n")
             if isDigit(c) {
                 l = number(l)
             } else if isAlpha(c) {
+                __ae_print("EL1\n")
                 l = identifier(l)
             } else {
                 l.hadError = true
@@ -375,14 +516,17 @@ func scanToken(l: Lexer): Lexer {
 }
 
 func tokenize(l: Lexer): Lexer {
-    __ae_print("DBG: tokenize start\n")
-    while not isAtEnd(l) {
+    __ae_print("TZ0\n")
+    __ae_print("CALL\n")
+    while not lexerIsAtEnd(l) {
+        __ae_print("TZ1\n")
         l.start = l.current
         l = scanToken(l)
         if l.hadError {
             return l
         }
     }
+    __ae_print("TZ2\n")
     l = addToken(l, TOKEN_EOF)
     return l
 }
