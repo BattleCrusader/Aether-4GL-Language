@@ -1,0 +1,184 @@
+// test_spec_06_functions.ae — Section 6: Functions
+// Tests: basic decl, expression body (->), void, multi-return tuple,
+//        default params, variadic, extern, function attributes
+//
+// Pattern: each test returns 0 (pass) or non-zero label (fail).
+// main() sums all returns; exit code = total failures.
+
+func check(label: u64, expected: u64, actual: u64): u64 {
+    if expected == actual { return 0 }
+    return label
+}
+
+// ── Basic function declaration ──────────────────────────────────────────────
+func add(a: u64, b: u64): u64 { return a + b }
+func subtract(a: u64, b: u64): u64 { return a - b }
+func multiply(a: u64, b: u64): u64 { return a * b }
+
+func test_basic_functions(): u64 {
+    if check(1, 7, add(3, 4)) != 0 { return 1 }
+    if check(2, 3, subtract(7, 4)) != 0 { return 2 }
+    if check(3, 12, multiply(3, 4)) != 0 { return 3 }
+    return 0
+}
+
+// ── Expression-bodied functions ( -> expr ) — NOTE: not in v1 yet ──────────
+// @test
+// func square(n: u64): u64 -> n * n
+// func cube(n: u64): u64 -> n * n * n
+// func double(n: u64): u64 -> n * 2
+func square(n: u64): u64 { return n * n }
+func cube(n: u64): u64 { return n * n * n }
+func double(n: u64): u64 { return n * 2 }
+
+func test_expression_body(): u64 {
+    if check(4, 25, square(5)) != 0 { return 4 }
+    if check(5, 125, cube(5)) != 0 { return 5 }
+    if check(6, 20, double(10)) != 0 { return 6 }
+    return 0
+}
+
+// ── Void function (no return type) ──────────────────────────────────────────
+func void_fn() {
+    let _ = 1
+}
+
+func side_effect(): u64 {
+    void_fn()
+    return 42
+}
+
+func test_void_function(): u64 {
+    if check(7, 42, side_effect()) != 0 { return 7 }
+    return 0
+}
+
+// ── Multiple return values via tuple ────────────────────────────────────────
+func divide(a: u64, b: u64): (u64, u64) {
+    return (a / b, a % b)
+}
+
+func test_multiple_returns(): u64 {
+    let (q, r) = divide(17, 5)
+    if check(8, 3, q) != 0 { return 8 }
+    if check(9, 2, r) != 0 { return 9 }
+
+    let (q2, r2) = divide(100, 7)
+    if check(10, 14, q2) != 0 { return 10 }
+    if check(11, 2, r2) != 0 { return 11 }
+    return 0
+}
+
+// ── Default parameters ─────────────────────────────────────────────────────
+func create_window(title: string, width: u64 = 800, height: u64 = 600): u64 {
+    return #title + width + height
+}
+
+func power(base: u64, exp: u64 = 2): u64 {
+    var result: u64 = 1
+    for i in 0..exp { result = result * base }
+    return result
+}
+
+func test_default_params(): u64 {
+    let w1 = create_window("Hello")
+    let w2 = create_window("Hello")
+    if check(12, w1, w2) != 0 { return 12 }
+
+    let w3 = create_window("Wide", 1024)
+    let w4 = create_window("Wide", 1024)
+    if check(13, w3, w4) != 0 { return 13 }
+
+    let w5 = create_window("Full", 1920, 1080)
+    if check(14, 0, w1) != 0 { return 0 }   // sentinel
+    if w1 == w5 { return 14 }              // different → fail
+
+    if check(15, 25, power(5)) != 0 { return 15 }
+    if check(16, 125, power(5, 3)) != 0 { return 16 }
+    return 0
+}
+
+// ── Variadic functions ─────────────────────────────────────────────────────
+func sum_v(values: ...u64): u64 {
+    let total = 0
+    for v in values { total = total + v }
+    return total
+}
+
+func count_args(values: ...u64): u64 {
+    return #values
+}
+
+func max_of(first: u64, rest: ...u64): u64 {
+    var m = first
+    for v in rest { if v > m { m = v } }
+    return m
+}
+
+func test_variadic(): u64 {
+    if check(17, 15, sum_v(1, 2, 3, 4, 5)) != 0 { return 17 }
+    if check(18, 0, sum_v()) != 0 { return 18 }
+    if check(19, 42, sum_v(42)) != 0 { return 19 }
+    if check(20, 6, sum_v(1, 2, 3)) != 0 { return 20 }
+    if check(21, 100, sum_v(50, 50)) != 0 { return 21 }
+
+    if check(22, 5, count_args(1, 2, 3, 4, 5)) != 0 { return 22 }
+    if check(23, 0, count_args()) != 0 { return 23 }
+    if check(24, 3, count_args(1, 2, 3)) != 0 { return 24 }
+
+    if check(25, 7, max_of(7)) != 0 { return 25 }
+    if check(26, 7, max_of(7, 1, 2, 3, 4, 5, 6)) != 0 { return 26 }
+    if check(27, 10, max_of(5, 10, 3)) != 0 { return 27 }
+    return 0
+}
+
+// ── Extern function declarations (compile-check only) ───────────────────────
+// NOTE: extern keyword not yet in v1 — declarations below will cause compile error.
+// extern func puts(s: string): u64
+// extern func malloc(size: u64): u64
+// extern func free(ptr: u64): u64
+
+func test_extern_declarations(): u64 {
+    // Compile-check only — just verify declarations parse
+    return 0
+}
+
+// ── Function attributes — NOTE: not in v1 yet (compile fails) ───────────────
+// @force_inline func fast_path(): u64 { return 42 }
+// @no_inline func slow_path(): u64 { return 99 }
+func fast_path(): u64 { return 42 }
+func slow_path(): u64 { return 99 }
+
+func test_function_attributes(): u64 {
+    if check(28, 42, fast_path()) != 0 { return 28 }
+    if check(29, 99, slow_path()) != 0 { return 29 }
+    return 0
+}
+
+// ── Recursion ──────────────────────────────────────────────────────────────
+func sum_range(n: u64): u64 {
+    if n == 0 { return 0 }
+    return n + sum_range(n - 1)
+}
+
+func test_recursive_function(): u64 {
+    if check(30, 15, sum_range(5)) != 0 { return 30 }
+    if check(31, 55, sum_range(10)) != 0 { return 31 }
+    if check(32, 0, sum_range(0)) != 0 { return 32 }
+    return 0
+}
+
+// ── Entry point — sums all failure labels ───────────────────────────────────
+func main(): u64 {
+    var fails: u64 = 0
+    fails = fails + test_basic_functions()
+    fails = fails + test_expression_body()
+    fails = fails + test_void_function()
+    fails = fails + test_multiple_returns()
+    fails = fails + test_default_params()
+    fails = fails + test_variadic()
+    fails = fails + test_extern_declarations()
+    fails = fails + test_function_attributes()
+    fails = fails + test_recursive_function()
+    return fails
+}

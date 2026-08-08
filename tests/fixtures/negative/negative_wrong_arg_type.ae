@@ -1,0 +1,11 @@
+// negative_wrong_arg_type.ae — Negative test: arg type mismatch
+// Calling f(u64) with a string must be a semantic error.
+
+func square(x: u64): u64 {
+    return x * x
+}
+
+func main(): u64 {
+    let s: string = "5"
+    return square(s)    // ERROR: expected u64, got string
+}

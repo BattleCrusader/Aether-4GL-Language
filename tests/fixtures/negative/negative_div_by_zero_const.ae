@@ -1,0 +1,8 @@
+// negative_div_by_zero_const.ae — Negative test: division by zero (constant-folded)
+// When both operands are constants, the compiler should reject divide-by-zero.
+// This is undefined behavior per spec §Appendix D.
+
+func main(): u64 {
+    let x: u64 = 100 / 0    // ERROR: division by zero
+    return x
+}

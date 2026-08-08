@@ -1,0 +1,21 @@
+// negative_private_field_access.ae — Negative test: private field from outside
+// private members are not accessible from outside the class.
+
+class Account {
+    private balance: u64
+
+    func new(b: u64): Account {
+        var a: Account
+        a.balance = b
+        return a
+    }
+
+    public func get_balance(): u64 {
+        return self.balance
+    }
+}
+
+func main(): u64 {
+    var acc: Account = Account::new(100)
+    return acc.balance    // ERROR: balance is private
+}

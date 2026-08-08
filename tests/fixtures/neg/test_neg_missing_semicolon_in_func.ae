@@ -1,0 +1,6 @@
+// test_neg_missing_semicolon_in_func.ae — function with missing body
+// Per the spec, every function must have a body (block or expression).
+//
+// Expected: parser error on missing `{` after the parameter list.
+
+func broken(a: u64, b: u64)

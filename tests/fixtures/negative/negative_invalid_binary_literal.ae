@@ -1,0 +1,7 @@
+// negative_invalid_binary_literal.ae — Negative test: malformed binary literal
+// '0b' followed by non-binary digit must be rejected.
+
+func main(): u64 {
+    let x: u64 = 0b2    // ERROR: 2 is not a valid binary digit
+    return x
+}

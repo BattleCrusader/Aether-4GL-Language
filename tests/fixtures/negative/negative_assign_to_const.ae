@@ -1,0 +1,9 @@
+// negative_assign_to_const.ae — Negative test: const cannot be reassigned
+// const is compile-time only, no runtime storage.
+
+const MAX = 100
+
+func main(): u64 {
+    MAX = 200    // ERROR: cannot assign to const
+    return 0
+}

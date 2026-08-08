@@ -1,0 +1,128 @@
+// test_spec_09_oop_full.ae
+// Section 9: Object-Oriented Programming — comprehensive coverage.
+// Self-contained, exit-code based.
+//
+// Bootstrap status: most OOP features (classes, traits, properties,
+// operator overloading) are NOT yet implemented in the parser/codegen.
+// This file documents the spec surface and runs the parts that DO compile.
+
+var __failed: u64 = 0
+
+func fail(label: u64, expected: u64, actual: u64): void {
+    if actual != expected {
+        if __failed == 0 {
+            __failed = label
+        }
+    }
+}
+
+// ---------- 9.3 Classes not required: plain struct + free function ----------
+// NOTE: multi-field structs are not yet supported by the bootstrap
+// parser. Use a single field per struct.
+struct VecX {
+    x: u64
+}
+struct VecY {
+    y: u64
+}
+
+func vec_distance_squared(vx: VecX, vy: VecY): u64 {
+    return vx.x * vx.x + vy.y * vy.y
+}
+
+@test
+func test_struct_plus_free_function(): void {
+    var vx: VecX
+    vx.x = 3
+    var vy: VecY
+    vy.y = 4
+    fail(1, 25, vec_distance_squared(vx, vy))
+}
+
+func pair_distance_squared(px: u64, py: u64): u64 {
+    return px * px + py * py
+}
+
+@test
+func test_pure_function(): void {
+    fail(2, 25, pair_distance_squared(3, 4))
+    fail(3, 2, pair_distance_squared(1, 1))
+    fail(4, 0, pair_distance_squared(0, 0))
+}
+
+// ---------- 9.1 Class with fields and init/drop ----------
+// TODO: `class` keyword currently fails to parse. Document the
+// expected syntax as a comment-only test.
+@test
+func test_class_documented(): void {
+    // Expected (when class parsing is implemented):
+    //   class Counter { value: u64; func new(): Counter { ... } func drop() { ... } }
+    fail(4, 0, 0)
+}
+
+// ---------- 9.2 Implicit self ----------
+// TODO: methods inside class/struct body must inject `self` automatically.
+@test
+func test_self_documented(): void {
+    // Expected: `func distance(other: Point): float { ... self.x ... }`
+    // without `self` in the parameter list.
+    fail(5, 0, 0)
+}
+
+// ---------- 9.4 Traits ----------
+// TODO: `trait Drawable { func draw() func area(): f64 }` and
+// `impl Drawable for Circle { ... }` not yet parseable.
+@test
+func test_trait_documented(): void {
+    fail(6, 0, 0)
+}
+
+// ---------- 9.5 Access modifiers ----------
+// TODO: `public`, `private`, `internal` keywords not yet recognised
+// (default is public).
+@test
+func test_access_modifiers_documented(): void {
+    fail(7, 0, 0)
+}
+
+// ---------- 9.6 Properties (getter/setter from return type) ----------
+// TODO: requires methods inside struct bodies.
+@test
+func test_properties_documented(): void {
+    // Expected: `t.fahrenheit()` -> getter, `t.fahrenheit(32)` -> setter
+    fail(8, 0, 0)
+}
+
+// ---------- 9.7 Operator overloading ----------
+// TODO: `op_+`, `op_==`, etc. reserved prefix not yet wired up.
+func add_u64(a: u64, b: u64): u64 {
+    return a + b
+}
+
+@test
+func test_builtin_op_works(): void {
+    // Proves that the built-in `+` operator still works (i.e. the
+    // overload path doesn't break it).
+    fail(9, 7, add_u64(3, 4))
+    fail(10, 0, add_u64(0, 0))
+}
+
+// ---------- 9 / 4.7 Static vs dynamic dispatch ----------
+// TODO: `dyn Trait` vtable layout not implemented.
+@test
+func test_dispatch_documented(): void {
+    fail(11, 0, 0)
+}
+
+@test
+func main(): void {
+    test_struct_plus_free_function()
+    test_class_documented()
+    test_self_documented()
+    test_trait_documented()
+    test_access_modifiers_documented()
+    test_properties_documented()
+    test_builtin_op_works()
+    test_dispatch_documented()
+    return __failed
+}

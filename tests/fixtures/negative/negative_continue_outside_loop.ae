@@ -1,0 +1,7 @@
+// negative_continue_outside_loop.ae — Negative test: continue outside any loop
+// continue must be inside a loop body.
+
+func main(): u64 {
+    continue    // ERROR: continue outside loop
+    return 0
+}

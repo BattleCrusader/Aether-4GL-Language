@@ -1,0 +1,7 @@
+// negative_integer_overflow_literal.ae — Negative test: integer literal overflow
+// 99999999999999999999 is too big for u64 (max 18446744073709551615).
+
+func main(): u64 {
+    let x: u64 = 99999999999999999999    // ERROR: literal overflow
+    return x
+}

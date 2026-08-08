@@ -1,0 +1,7 @@
+// negative_invalid_hex_literal.ae — Negative test: malformed hex literal
+// '0x' with no digits is invalid.
+
+func main(): u64 {
+    let x: u64 = 0x    // ERROR: invalid hex literal
+    return x
+}

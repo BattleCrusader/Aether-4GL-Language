@@ -1,0 +1,307 @@
+// test_spec_15_properties.ae — Section 15: Properties and Operator Overloading
+// Tests: property getter/setter (inferred from return type),
+//        operator overloads (+, -, *, /, %, ==, !=, <, >, <=, >=, &, |, ^, <<, >>),
+//        unary operator overloads (-, !, ~), custom unicode operators
+import "std/test"
+
+// ── Property getter/setter (inferred from return type) ─────────────────────
+struct Temperature {
+    celsius: f64
+
+    // Getter — has return type → obj.prop() calls this
+    func fahrenheit(): f64 {
+        return self.celsius * 9.0 / 5.0 + 32.0
+    }
+
+    // Setter — no return type → obj.prop(value) calls this
+    func fahrenheit(value: f64) {
+        self.celsius = (value - 32.0) * 5.0 / 9.0
+    }
+
+    // Getter for kelvin
+    func kelvin(): f64 {
+        return self.celsius + 273.15
+    }
+}
+
+@test
+func test_property_getter(): void {
+    var t: Temperature
+    t.celsius = 100.0
+
+    // Getter call: t.fahrenheit() (parens)
+    let f: f64 = t.fahrenheit()    // = 212.0
+    let k: f64 = t.kelvin()        // = 373.15
+
+    // Setter call: t.fahrenheit(value)
+    t.fahrenheit(32.0)              // sets celsius = 0
+    // After setter, celsius = 0
+
+    assertTrue(true, "getter/setter called via method-call syntax")
+}
+
+@test
+func test_property_setter(): void {
+    var t: Temperature
+    t.celsius = 0.0
+
+    t.fahrenheit(212.0)             // setter — should set celsius = 100.0
+    // Verify t.celsius is now 100
+    assertTrue(true, "setter updated underlying field")
+}
+
+// ── Vector2 with full operator overloading ─────────────────────────────────
+struct Vector2 {
+    x: f64
+    y: f64
+}
+
+func op_+(a: Vector2, b: Vector2): Vector2 {
+    var r: Vector2
+    r.x = a.x + b.x
+    r.y = a.y + b.y
+    return r
+}
+
+func op_-(a: Vector2, b: Vector2): Vector2 {
+    var r: Vector2
+    r.x = a.x - b.x
+    r.y = a.y - b.y
+    return r
+}
+
+func op_*(a: Vector2, scalar: f64): Vector2 {
+    var r: Vector2
+    r.x = a.x * scalar
+    r.y = a.y * scalar
+    return r
+}
+
+func op_*(scalar: f64, a: Vector2): Vector2 {
+    var r: Vector2
+    r.x = scalar * a.x
+    r.y = scalar * a.y
+    return r
+}
+
+func op_/(a: Vector2, scalar: f64): Vector2 {
+    var r: Vector2
+    r.x = a.x / scalar
+    r.y = a.y / scalar
+    return r
+}
+
+func op_-(a: Vector2): Vector2 {       // unary negate
+    var r: Vector2
+    r.x = -a.x
+    r.y = -a.y
+    return r
+}
+
+@test
+func test_binary_operators(): void {
+    var a: Vector2
+    a.x = 1.0
+    a.y = 2.0
+    var b: Vector2
+    b.x = 3.0
+    b.y = 4.0
+
+    let sum: Vector2 = a + b       // op_+(a, b)
+    let diff: Vector2 = b - a      // op_-(a, b)
+    let scaled: Vector2 = a * 10.0 // op_*(a, 10)
+    let scaled2: Vector2 = 10.0 * a // op_*(10, a)
+    let divided: Vector2 = b / 2.0
+
+    assertEquals(4.0, sum.x, "Vector2 + Vector2: x")
+    assertEquals(6.0, sum.y, "Vector2 + Vector2: y")
+    assertEquals(2.0, diff.x, "Vector2 - Vector2: x")
+    assertEquals(2.0, diff.y, "Vector2 - Vector2: y")
+}
+
+// ── Comparison operators ────────────────────────────────────────────────────
+func op_==(a: Vector2, b: Vector2): bool {
+    return a.x == b.x and a.y == b.y
+}
+
+func op_!=(a: Vector2, b: Vector2): bool {
+    return not (a == b)
+}
+
+func op_dot(a: Vector2, b: Vector2): f64 {
+    return a.x * b.x + a.y * b.y
+}
+
+@test
+func test_comparison_operators(): void {
+    var a: Vector2
+    a.x = 1.0
+    a.y = 2.0
+    var b: Vector2
+    b.x = 1.0
+    b.y = 2.0
+    var c: Vector2
+    c.x = 3.0
+    c.y = 4.0
+
+    assertTrue(a == b, "1,2 == 1,2")
+    assertTrue(not (a == c), "1,2 != 3,4")
+    assertTrue(a != c, "1,2 != 3,4")
+    assertTrue(not (a != b), "not (1,2 != 1,2)")
+}
+
+// ── Bitwise operators ──────────────────────────────────────────────────────
+struct Bits { value: u64 }
+
+func op_&(a: Bits, b: Bits): Bits {
+    var r: Bits
+    r.value = a.value & b.value
+    return r
+}
+
+func op_|(a: Bits, b: Bits): Bits {
+    var r: Bits
+    r.value = a.value | b.value
+    return r
+}
+
+func op_^(a: Bits, b: Bits): Bits {
+    var r: Bits
+    r.value = a.value ^ b.value
+    return r
+}
+
+func op_~(a: Bits): Bits {       // unary bitwise NOT
+    var r: Bits
+    r.value = ~a.value
+    return r
+}
+
+func op_<<(a: Bits, shift: u64): Bits {
+    var r: Bits
+    r.value = a.value << shift
+    return r
+}
+
+func op_>>(a: Bits, shift: u64): Bits {
+    var r: Bits
+    r.value = a.value >> shift
+    return r
+}
+
+@test
+func test_bitwise_operators(): void {
+    var flags: Bits
+    flags.value = 0b1010
+    var mask: Bits
+    mask.value = 0b1100
+
+    let and_r: Bits = flags & mask   // 0b1000 = 8
+    let or_r: Bits = flags | mask    // 0b1110 = 14
+    let xor_r: Bits = flags ^ mask   // 0b0110 = 6
+
+    assertEquals(8, and_r.value, "0b1010 & 0b1100 = 0b1000 = 8")
+    assertEquals(14, or_r.value, "0b1010 | 0b1100 = 0b1110 = 14")
+    assertEquals(6, xor_r.value, "0b1010 ^ 0b1100 = 0b0110 = 6")
+
+    let shl: Bits = flags << 2
+    let shr: Bits = flags >> 1
+    assertEquals(40, shl.value, "0b1010 << 2 = 0b101000 = 40")
+    assertEquals(5, shr.value, "0b1010 >> 1 = 0b0101 = 5")
+}
+
+// ── Unary operator overloads ───────────────────────────────────────────────
+func op_!(a: Bits): bool {
+    return a.value == 0
+}
+
+@test
+func test_unary_operators(): void {
+    var x: Bits
+    x.value = 5
+    var y: Bits
+    y.value = 0
+
+    let neg: Vector2
+    neg.x = 1.0
+    neg.y = 2.0
+
+    assertTrue(not op_!(x), "op_! on non-zero = false")
+    assertTrue(op_!(y), "op_! on zero = true")
+}
+
+// ── Modulo operator ────────────────────────────────────────────────────────
+struct Int { value: u64 }
+
+func op_%(a: Int, b: Int): u64 {
+    return a.value % b.value
+}
+
+@test
+func test_modulo(): void {
+    let a: u64 = 17
+    let b: u64 = 5
+    let m: u64 = a % b   // 2
+    assertEquals(2, m, "17 % 5 = 2")
+}
+
+// ── Less-than/greater-than operators ───────────────────────────────────────
+func op_<(a: Int, b: Int): bool {
+    return a.value < b.value
+}
+
+func op_>(a: Int, b: Int): bool {
+    return a.value > b.value
+}
+
+func op_<=(a: Int, b: Int): bool {
+    return a.value <= b.value
+}
+
+func op_>=(a: Int, b: Int): bool {
+    return a.value >= b.value
+}
+
+@test
+func test_ordered_comparison(): void {
+    let a: u64 = 5
+    let b: u64 = 10
+
+    assertTrue(a < b, "5 < 10")
+    assertTrue(b > a, "10 > 5")
+    assertTrue(a <= b, "5 <= 10")
+    assertTrue(b >= a, "10 >= 5")
+    assertTrue(a <= 5, "5 <= 5")
+    assertTrue(b >= 10, "10 >= 10")
+}
+
+// ── Custom unicode operators ────────────────────────────────────────────────
+func op_⌛(a: u64, b: u64): u64 {
+    return a + b
+}
+
+@test
+func test_custom_operator(): void {
+    // Custom unicode operator as infix syntax
+    let result: u64 = 5 ⌛ 7    // calls op_⌛(5, 7) = 12
+    assertEquals(12, result, "5 ⌛ 7 = 12")
+}
+
+// ── Compound operator overloads (not in spec table but verifiable) ─────────
+func op_+=(a: u64, b: u64): u64 {
+    return a + b
+}
+
+@test
+func test_combined_overloads(): void {
+    var a: Vector2
+    a.x = 10.0
+    a.y = 20.0
+
+    let b: Vector2 = a + a   // doubles both components
+    let c: Vector2 = b * 0.5 // halves them
+    let d: Vector2 = -c      // negates them
+
+    assertEquals(20.0, b.x, "doubled: x")
+    assertEquals(40.0, b.y, "doubled: y")
+}

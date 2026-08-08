@@ -1,0 +1,13 @@
+// test_neg_assign_to_immutable.ae — assign to `let` binding
+// Per the spec, `let` bindings are immutable. Reassigning MUST fail.
+//
+// Expected: semantic error on assignment to `x`.
+//
+// (Currently the bootstrap allows it — this is a known false-positive
+// documented for future fix.)
+
+func main(): u64 {
+    let x: u64 = 1
+    x = 2
+    return x
+}

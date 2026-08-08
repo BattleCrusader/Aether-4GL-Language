@@ -1,0 +1,9 @@
+// negative_duplicate_function.ae — Negative test: duplicate function definition
+// Same function name declared twice.
+
+func helper(): u64 { return 1 }
+func helper(): u64 { return 2 }    // ERROR: duplicate declaration
+
+func main(): u64 {
+    return helper()
+}

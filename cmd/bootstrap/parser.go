@@ -553,8 +553,10 @@ func (p *Parser) parseMatchStmt() Stmt {
 			mc := &MatchCase{pos: p.previous().Pos()}
 			mc.Pattern = p.parseExpression()
 			// Handle comma-separated patterns: case 32, 13, 9 ->
+			// Each pattern becomes its own MatchCase sharing the same body.
+			var extraPatterns []Expr
 			for p.match(TOKEN_COMMA) {
-				p.parseExpression()
+				extraPatterns = append(extraPatterns, p.parseExpression())
 			}
 			if p.match(TOKEN_ARROW) {
 				mc.Body = p.parseBlockOrStmt()
@@ -562,6 +564,9 @@ func (p *Parser) parseMatchStmt() Stmt {
 				mc.Body = p.parseBlockOrStmt()
 			}
 			ms.Cases = append(ms.Cases, mc)
+			for _, pat := range extraPatterns {
+				ms.Cases = append(ms.Cases, &MatchCase{pos: mc.Pos(), Pattern: pat, Body: mc.Body})
+			}
 		} else if p.match(TOKEN_KW_ELSE) {
 			mc := &MatchCase{pos: p.previous().Pos(), Pattern: &IdentExpr{Name: "_"}}
 			if p.match(TOKEN_ARROW) {
@@ -831,7 +836,7 @@ func (p *Parser) parseLiteral() Expr {
 		}
 		lit.Value = val
 	case TOKEN_STRING:
-		lit.Value = tok.Lexeme
+		lit.Value = tok.Literal.(string)
 	case TOKEN_CHAR:
 		lit.Value = tok.Lexeme
 	case TOKEN_KW_TRUE:
@@ -883,19 +888,26 @@ func (p *Parser) parseArrayLiteral() Expr {
 func (p *Parser) parseUnaryPrefix() Expr {
 	tok := p.advance()
 	op := tok.Lexeme
-	operand := p.parsePrecedence(PREC_UNARY)
+	// Parse the operand at PREC_CALL so postfix operators (., (), []) bind
+	// into the operand: -x.field = -(x.field), !a.b = !(a.b).
+	operand := p.parsePrecedence(PREC_CALL)
 	return &UnaryExpr{pos: tok.Pos(), Op: op, Operand: operand}
 }
 
 func (p *Parser) parsePrefixIncDec() Expr {
 	tok := p.advance()
 	op := tok.Lexeme
-	operand := p.parsePrecedence(PREC_UNARY)
+	operand := p.parsePrecedence(PREC_CALL)
 	return &UnaryExpr{pos: tok.Pos(), Op: op, Operand: operand, IsPostfix: false}
 }
 
 func (p *Parser) parseLengthPrefix() Expr {
 	tok := p.advance()
+	// Parse the operand at PREC_UNARY so #l.source = #(l.source), not (#l).source.
+	// The '.' postfix binds at PREC_CALL (13); parsing the operand at PREC_CALL
+	// (13) makes `13 < 13` false so '.' escapes to the outer loop, miscompiling
+	// the length of a struct field as a getter on the length result (NULL deref).
+	// PREC_UNARY (12) < PREC_CALL (13) lets the '.' postfix bind inside the operand.
 	operand := p.parsePrecedence(PREC_UNARY)
 	return &UnaryExpr{pos: tok.Pos(), Op: "#", Operand: operand}
 }
@@ -1027,8 +1039,8 @@ func (p *Parser) parseAssignmentInfix(left Expr) Expr {
 }
 
 func (p *Parser) parseBinaryInfix(left Expr) Expr {
+	prec := p.getPrecedence() // precedence of the CURRENT operator token
 	tok := p.advance()
-	prec := p.getPrecedence()
 	be := &BinaryExpr{pos: left.Pos(), Op: tok.Lexeme, Left: left}
 	be.Right = p.parsePrecedence(prec)
 	return be

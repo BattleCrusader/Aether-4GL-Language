@@ -1,0 +1,189 @@
+// test_spec_11_error_handling_full.ae
+// Section 11: Error Handling — comprehensive coverage.
+// Self-contained, exit-code based.
+//
+// Bootstrap status: `try / catch / finally / throw` are partially
+// implemented but the `throws` annotation on return types is NOT
+// yet recognised by the parser. This file tests the working subset
+// using the throw-via-internal-syntax pattern.
+
+var __failed: u64 = 0
+
+func fail(label: u64, expected: u64, actual: u64): void {
+    if actual != expected {
+        if __failed == 0 {
+            __failed = label
+        }
+    }
+}
+
+// ---------- 11.1 basic throw / try / catch (working syntax) ----------
+// Mirrors the pattern used by test_trycatch_finally_throw.ae and
+// test_trycatch.ae which DO compile with the bootstrap.
+func do_throw(): u64 {
+    throw 99
+    return 0
+}
+
+func do_no_throw(): u64 {
+    return 42
+}
+
+// ---------- 11.2 try / catch (typed) ----------
+func test_typed_catch(): u64 {
+    var result: u64 = 0
+    try {
+        result = do_throw()
+    } catch Error {
+        result = 42
+    }
+    return result
+}
+
+@test
+func test_catch_handles_throw(): void {
+    fail(1, 42, test_typed_catch())
+}
+
+// ---------- 11.2 happy path (no throw) ----------
+func test_happy_path(): u64 {
+    var result: u64 = 0
+    try {
+        result = do_no_throw()
+    } catch Error {
+        result = 999  // should NOT run
+    }
+    return result
+}
+
+@test
+func test_catch_not_triggered(): void {
+    fail(2, 42, test_happy_path())
+}
+
+// ---------- 11.4 catch-all (catch _) ----------
+func test_catch_all(): u64 {
+    var result: u64 = 0
+    try {
+        result = do_throw()
+    } catch _ {
+        result = 7
+    }
+    return result
+}
+
+@test
+func test_catch_all_match(): void {
+    fail(3, 7, test_catch_all())
+}
+
+// ---------- 11.2 finally ----------
+func test_finally_path(): u64 {
+    var result: u64 = 0
+    var finally_ran: u64 = 0
+    try {
+        result = do_throw()
+    } catch Error {
+        result = 100
+    } finally {
+        finally_ran = 1
+    }
+    return result + (finally_ran * 1000)
+}
+
+@test
+func test_finally_always_runs(): void {
+    fail(4, 1100, test_finally_path())
+}
+
+// ---------- 11.5 nested try ----------
+func test_nested_try(): u64 {
+    var result: u64 = 0
+    try {
+        try {
+            result = do_throw()
+        } catch Error {
+            result = 1
+        }
+    } catch Error {
+        result = 999  // outer catch should not fire (inner handled)
+    }
+    return result
+}
+
+@test
+func test_nested_inner_handles(): void {
+    fail(5, 1, test_nested_try())
+}
+
+// ---------- 11.2 catch with variable binding ----------
+func test_catch_var(): u64 {
+    var caught: u64 = 0
+    try {
+        do_throw()
+    } catch e Error {
+        caught = 1
+    }
+    return caught
+}
+
+@test
+func test_catch_with_var_binding(): void {
+    fail(6, 1, test_catch_var())
+}
+
+// ---------- 11.6 segfault inside try ----------
+// TODO: hardware-fault-to-exception requires kernel IDT plumbing.
+// On host targets this would need an OS signal handler.
+@test
+func test_segfault_in_try_documented(): void {
+    fail(7, 0, 0)
+}
+
+// ---------- EDGE: multiple catch arms ----------
+func test_multi_catch(): u64 {
+    var matched: u64 = 0
+    try {
+        do_throw()
+    } catch Error {
+        matched = 1
+    } catch _ {
+        matched = 2
+    }
+    return matched
+}
+
+@test
+func test_multi_catch_first_arm_wins(): void {
+    fail(8, 1, test_multi_catch())
+}
+
+// ---------- EDGE: no throw in try body ----------
+func test_no_throw(): u64 {
+    var ok: u64 = 0
+    try {
+        ok = 1
+    } catch Error {
+        ok = 999
+    }
+    return ok
+}
+
+@test
+func test_no_throw_runs_once(): void {
+    fail(9, 1, test_no_throw())
+}
+
+@test
+func main(): void {
+    test_catch_handles_throw()
+    test_catch_not_triggered()
+    test_catch_all_match()
+    test_finally_always_runs()
+    test_nested_inner_handles()
+    test_catch_with_var_binding()
+    test_segfault_in_try_documented()
+    test_multi_catch_first_arm_wins()
+    test_no_throw_runs_once()
+    return __failed
+}

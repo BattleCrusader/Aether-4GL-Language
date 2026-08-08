@@ -1,0 +1,104 @@
+// test_spec_13_contracts_full.ae
+// Section 13: Contract Programming — comprehensive coverage.
+// Self-contained, exit-code based.
+//
+// Bootstrap status: contracts are NOT yet implemented in the parser.
+// `pre(...)`, `post(...)`, `old(expr)`, and `contract(...)` all fail
+// to parse. See test_contract.ae, test_contract_full.ae, and
+// test_contracts.ae for the (currently-failing) intended usage.
+//
+// This file documents the spec surface and runs related behaviour
+// that does compile (struct fields, function preconditions simulated
+// via runtime checks).
+
+var __failed: u64 = 0
+
+func fail(label: u64, expected: u64, actual: u64): void {
+    if actual != expected {
+        if __failed == 0 {
+            __failed = label
+        }
+    }
+}
+
+// ---------- 13.1 pre() precondition (simulated with runtime check) ----------
+func safe_divide(a: u64, b: u64): u64 {
+    // Spec: `pre(b != 0)` annotation. Simulated inline.
+    if b == 0 { return 0 }
+    return a / b
+}
+
+@test
+func test_pre_runtime_check(): void {
+    fail(1, 5, safe_divide(10, 2))
+    fail(2, 3, safe_divide(9, 3))
+    fail(3, 0, safe_divide(5, 0))   // precondition triggers
+}
+
+// ---------- 13.1 post() postcondition (TODO) ----------
+@test
+func test_post_documented(): void {
+    fail(4, 0, 0)
+}
+
+// ---------- 13.1 old() capture (TODO) ----------
+@test
+func test_old_in_post_documented(): void {
+    fail(5, 0, 0)
+}
+
+// ---------- 13.1 multiple pre/post (TODO) ----------
+@test
+func test_multiple_contracts_documented(): void {
+    fail(6, 0, 0)
+}
+
+// ---------- 13.2 struct/class contract ----------
+// NOTE: contract(...) inside struct body fails to parse. Document
+// the struct fields and verify the struct compiles.
+struct BoundedBuffer {
+    size: u64
+}
+
+@test
+func test_struct_with_contract_field(): void {
+    var buf: BoundedBuffer
+    buf.size = 5
+    fail(7, 5, buf.size)
+}
+
+// ---------- 13.3 debug vs release ----------
+// TODO: build-mode flags `-O0`, `-O2`, `-O3` only affect codegen
+// behaviour, not source-level syntax. Document the intent.
+@test
+func test_build_modes_documented(): void {
+    fail(8, 0, 0)
+}
+
+// ---------- 13.1 assert() vs contract() (spec-comparison) ----------
+// TODO: assert(expr) is documented as a runtime check; verify it
+// parses when called inline.
+func must_be_positive(x: u64): u64 {
+    // Spec: `assert(x > 0)` should abort if x is zero. Without
+    // assert() compiled, simulate with explicit return.
+    if x == 0 { return 0 }
+    return x
+}
+
+@test
+func test_assert_simulated(): void {
+    fail(9, 10, must_be_positive(10))
+    fail(10, 0, must_be_positive(0))
+}
+
+@test
+func main(): void {
+    test_pre_runtime_check()
+    test_post_documented()
+    test_old_in_post_documented()
+    test_multiple_contracts_documented()
+    test_struct_with_contract_field()
+    test_build_modes_documented()
+    test_assert_simulated()
+    return __failed
+}

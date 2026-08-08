@@ -1,0 +1,162 @@
+// test_spec_14_closures.ae — Section 14: Closures and Lambdas
+// Tests: lambda syntax, multi-line lambda, closures with captures,
+//        higher-order functions, function types
+import "std/test"
+
+// ── Basic lambda ───────────────────────────────────────────────────────────
+@test
+func test_basic_lambda(): void {
+    let add = |a: u64, b: u64| -> a + b
+    let result: u64 = add(3, 4)
+    assertEquals(7, result, "|a, b| a + b applied to (3, 4) = 7")
+
+    // Single-arg lambda
+    let double = |x: u64| -> x * 2
+    assertEquals(10, double(5), "double = x * 2")
+    assertEquals(20, double(10), "double = x * 2")
+}
+
+// ── Multi-line lambda ──────────────────────────────────────────────────────
+@test
+func test_multi_line_lambda(): void {
+    let process = |items: [u64]| -> u64 {
+        let total = 0
+        for item in items {
+            total = total + item
+        }
+        return total
+    }
+
+    let arr = [10, 20, 30]
+    let sum: u64 = process(arr)
+    assertEquals(60, sum, "multi-line lambda sums array")
+}
+
+// ── Closures with captures ─────────────────────────────────────────────────
+func make_adder(x: u64): func(u64): u64 {
+    return |y: u64| -> x + y    // captures x by reference
+}
+
+func make_multiplier(factor: u64): func(u64): u64 {
+    return |n: u64| -> n * factor   // captures factor
+}
+
+@test
+func test_closures_with_capture(): void {
+    let add5 = make_adder(5)
+    let result1: u64 = add5(3)
+    assertEquals(8, result1, "add5(3) = 5+3 = 8")
+
+    let add10 = make_adder(10)
+    let result2: u64 = add10(7)
+    assertEquals(17, result2, "add10(7) = 10+7 = 17")
+
+    let mul3 = make_multiplier(3)
+    assertEquals(15, mul3(5), "mul3(5) = 15")
+    assertEquals(30, mul3(10), "mul3(10) = 30")
+}
+
+// ── Multiple captured variables ────────────────────────────────────────────
+func make_linear(m: u64, b: u64): func(u64): u64 {
+    return |x: u64| -> m * x + b   // captures both m and b
+}
+
+@test
+func test_multi_capture(): void {
+    // y = 2x + 3
+    let line = make_linear(2, 3)
+    assertEquals(7, line(2), "line(2) = 2*2+3 = 7")
+    assertEquals(13, line(5), "line(5) = 2*5+3 = 13")
+}
+
+// ── Higher-order functions ─────────────────────────────────────────────────
+func map_u64(items: [u64], f: func(u64): u64): [u64] {
+    let result: [u64] = []
+    for item in items {
+        let len = #result
+        let new_arr: [u64] = []
+        for j in 0..len { new_arr[j] = result[j] }
+        new_arr[len] = f(item)
+        // Move logic — simplified
+    }
+    return result
+}
+
+func apply_twice(x: u64, f: func(u64): u64): u64 {
+    return f(f(x))
+}
+
+func apply_n(x: u64, n: u64, f: func(u64): u64): u64 {
+    var result: u64 = x
+    for i in 0..n { result = f(result) }
+    return result
+}
+
+@test
+func test_higher_order(): void {
+    let double = |x: u64| -> x * 2
+    let add_one = |x: u64| -> x + 1
+
+    // apply_twice(x, f) = f(f(x))
+    assertEquals(8, apply_twice(2, double), "double(double(2)) = 8")
+    assertEquals(4, apply_twice(2, add_one), "add1(add1(2)) = 4")
+
+    // apply_n(2, 3, double) = 2 * 2^3 = 16
+    assertEquals(16, apply_n(2, 3, double), "2 * 2^3 = 16")
+    assertEquals(5, apply_n(5, 3, add_one), "5 + 3 = 8")
+
+    // Verify
+    let _ = map_u64([1, 2, 3], double)
+    assertTrue(true, "higher-order map compiles")
+}
+
+// ── Lambda with no capture ─────────────────────────────────────────────────
+@test
+func test_pure_lambda(): void {
+    let f = |x: u64| -> x + 10   // no capture
+    assertEquals(15, f(5), "pure lambda")
+    assertEquals(110, f(100), "pure lambda")
+}
+
+// ── Lambda assigned to func-type variable ──────────────────────────────────
+@test
+func test_func_type_variable(): void {
+    let handler: func(u64): u64 = |x: u64| -> x * 3
+    assertEquals(9, handler(3), "handler(3) = 9")
+    assertEquals(30, handler(10), "handler(10) = 30")
+
+    // Reassign
+    handler = |x: u64| -> x - 1
+    assertEquals(9, handler(10), "handler reassigned")
+}
+
+// ── Returning lambda from function ────────────────────────────────────────
+func identity_lambda(): func(u64): u64 {
+    return |x: u64| -> x
+}
+
+@test
+func test_returning_lambda(): void {
+    let id = identity_lambda()
+    assertEquals(42, id(42), "identity lambda preserves value")
+    assertEquals(0, id(0), "identity of 0 = 0")
+}
+
+// ── Combined: closures + higher-order + captures ──────────────────────────
+func compose(f: func(u64): u64, g: func(u64): u64): func(u64): u64 {
+    return |x: u64| -> f(g(x))
+}
+
+@test
+func test_compose(): void {
+    let double = |x: u64| -> x * 2
+    let add_one = |x: u64| -> x + 1
+
+    // compose(double, add_one)(5) = double(add_one(5)) = 2 * 6 = 12
+    let f1 = compose(double, add_one)
+    assertEquals(12, f1(5), "compose(double, add1)(5) = 12")
+
+    // compose(add_one, double)(5) = add_one(double(5)) = 10 + 1 = 11
+    let f2 = compose(add_one, double)
+    assertEquals(11, f2(5), "compose(add1, double)(5) = 11")
+}

@@ -1,0 +1,204 @@
+// test_spec_05_variables_bindings_full.ae
+// Section 5: Variables and Bindings — comprehensive coverage.
+// Self-contained: no imports. Uses exit code to signal pass/fail.
+//
+// Pass:   exit code 0
+// Fail:   exit code == label of first failing assertion
+//
+// Coverage:
+//   5.1 let / var / const / array literals
+//   5.2 scope blocks
+//   5.3 shadowing
+//   5.4 global let / const
+//   5.5 recursion (factorial, fibonacci)
+//   5.6 nested loops (placeholder for labeled break/continue)
+
+const CONST_VAL: u64 = 100
+let GLOBAL_X: u64 = 4242
+var __failed: u64 = 0
+
+func fail(label: u64, expected: u64, actual: u64): void {
+    if actual != expected {
+        if __failed == 0 {
+            __failed = label
+        }
+    }
+}
+
+// ---------- 5.1 let ----------
+@test
+func test_let_immutable(): void {
+    let x: u64 = 1
+    let y: u64 = 2
+    fail(1, 1, x)
+    fail(2, 2, y)
+}
+
+// ---------- 5.1 var ----------
+@test
+func test_var_mutable(): void {
+    var v: u64 = 1
+    v = 2
+    v = v + 3
+    fail(3, 5, v)
+}
+
+// ---------- 5.1 array literals ----------
+@test
+func test_array_literal(): void {
+    let arr = [10, 20, 30]
+    fail(4, 10, arr[0])
+    fail(5, 20, arr[1])
+    fail(6, 30, arr[2])
+}
+
+// ---------- 5.1 / 5.4 const + global ----------
+@test
+func test_const_global(): void {
+    fail(7, 100, CONST_VAL)
+}
+
+@test
+func test_global_let(): void {
+    fail(8, 4242, GLOBAL_X)
+}
+
+// ---------- 5.2 scope ----------
+@test
+func test_scope(): void {
+    let outer: u64 = 10
+    {
+        let inner: u64 = 20
+        fail(9, 20, inner)
+    }
+    fail(10, 10, outer)
+}
+
+// ---------- 5.3 shadowing ----------
+@test
+func test_shadowing(): void {
+    let sx: u64 = 10
+    let sx: u64 = sx + 5
+    fail(11, 15, sx)
+}
+
+// ---------- 5.5 recursion ----------
+func factorial(n: u64): u64 {
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
+}
+
+@test
+func test_factorial(): void {
+    fail(12, 1, factorial(1))
+    fail(13, 120, factorial(5))
+    fail(14, 720, factorial(6))
+}
+
+func fib(n: u64): u64 {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+@test
+func test_fib(): void {
+    fail(15, 0, fib(0))
+    fail(16, 1, fib(1))
+    fail(17, 13, fib(7))
+    fail(18, 55, fib(10))
+}
+
+// ---------- 5.6 nested loops (TODO labeled break) ----------
+// NOTE: `for i in 0..10` currently hangs in the bootstrap; use a
+// while-loop instead until that codegen bug is fixed.
+@test
+func test_nested_loop(): void {
+    var found: u64 = 0
+    var i: u64 = 0
+    while i < 10 {
+        var j: u64 = 0
+        while j < 10 {
+            if i == 3 and j == 5 {
+                found = 1
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    fail(19, 1, found)
+}
+
+// ---------- edge: max literals (boundary check) ----------
+// TODO when u64-max literal is supported: assertEquals(20, 18446744073709551615, MAX_U64)
+@test
+func test_max_u32_literal(): void {
+    fail(20, 4294967295, 4294967295)
+}
+
+@test
+func test_max_i32_literal(): void {
+    fail(21, 2147483647, 2147483647)
+}
+
+// ---------- edge: wrapping arithmetic ----------
+@test
+func test_wrapping_arithmetic(): void {
+    let two31: u64 = 2147483648
+    fail(22, 4294967296, two31 + two31)
+}
+
+@test
+func test_zero_arithmetic(): void {
+    let z: u64 = 0
+    fail(23, 0, z + 0)
+    fail(24, 0, z * 99)
+}
+
+// ---------- edge: compound assignment ----------
+@test
+func test_compound_assignment(): void {
+    var x: u64 = 10
+    x += 5
+    fail(25, 15, x)
+    x -= 3
+    fail(26, 12, x)
+    x *= 2
+    fail(27, 24, x)
+    x /= 4
+    fail(28, 6, x)
+    x %= 4
+    fail(29, 2, x)
+}
+
+// ---------- edge: bitwise ----------
+@test
+func test_bitwise_ops(): void {
+    let a: u64 = 0b1100
+    let b: u64 = 0b1010
+    fail(30, 0b1000, a & b)
+    fail(31, 0b1110, a | b)
+    fail(32, 0b0110, a ^ b)
+    fail(33, 0b11000, a << 1)
+    fail(34, 0b0110, a >> 1)
+}
+
+@test
+func main(): void {
+    test_let_immutable()
+    test_var_mutable()
+    test_array_literal()
+    test_const_global()
+    test_global_let()
+    test_scope()
+    test_shadowing()
+    test_factorial()
+    test_fib()
+    test_nested_loop()
+    test_max_u32_literal()
+    test_max_i32_literal()
+    test_wrapping_arithmetic()
+    test_zero_arithmetic()
+    test_compound_assignment()
+    test_bitwise_ops()
+    return __failed
+}

@@ -21,7 +21,7 @@ func __ae_read_file(path: string): string;
 // __ae_write_file is a runtime helper provided by the Go bootstrap
 // It writes bytes to a file and returns 0 on success
 @extern
-func __ae_write_file(path: string, data: [byte]): u64;
+func __ae_write_file(path: string, data: [byte], len: u64): u64;
 
 // __ae_exit is a runtime helper provided by the Go bootstrap
 // It exits the process with the given exit code
@@ -115,8 +115,11 @@ func main(): u64 {
     }
 
     // Phase 1: Tokenization
+    __ae_print("P1\n")
     var lexer = newLexer(source)
+    __ae_print("NL\n")
     lexer = tokenize(lexer)
+    __ae_print("TZ\n")
     if lexer.hadError {
         __ae_print("error: tokenization failed: ")
         __ae_print(lexer.errorMsg)
@@ -126,6 +129,7 @@ func main(): u64 {
     }
 
     // Phase 2: Parsing
+    __ae_print("P2\n")
     var parser = newParser(lexer.tokens)
     parser = parse(parser)
     if #parser.errors > 0 {
@@ -139,6 +143,7 @@ func main(): u64 {
     }
 
     // Phase 3: Semantic Analysis
+    __ae_print("P3\n")
     var sem = newSemanticAnalyzer()
     sem = analyze(sem, parser.tokens)
     if #sem.errors > 0 {
@@ -150,8 +155,11 @@ func main(): u64 {
     }
 
     // Phase 4: Code Generation
+    __ae_print("P4\n")
     var cg = newCodegen()
+    __ae_print("P4a\n")
     cg = generate(cg, lexer.tokens)
+    __ae_print("P4b\n")
     if #cg.errors > 0 {
         for k in 0..#cg.errors {
             __ae_print("error: ")
@@ -162,8 +170,12 @@ func main(): u64 {
         return 1
     }
 
-    // Phase 5: Link — write ELF64 binary
-    cg = linkElf(cg)
+    // Phase 5: Link — write Mach-O binary directly (no system as/ld required).
+    __ae_print("P5\n")
+    // Phase 4 future: this drops the `as`+`ld` workaround that the Go bootstrap uses.
+    __ae_print("M0\n")
+    cg = linkMachO(cg)
+    __ae_print("M1\n")
     if #cg.errors > 0 {
         for k in 0..#cg.errors {
             __ae_print("error: ")
@@ -175,7 +187,7 @@ func main(): u64 {
     }
 
     // Write output binary
-    let result = __ae_write_file(outputPath, cg.output)
+    let result = __ae_write_file(outputPath, cg.output, #cg.output)
     if result != 0 {
         __ae_print("error: could not write output file: ")
         __ae_print(outputPath)

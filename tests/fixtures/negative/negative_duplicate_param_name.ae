@@ -1,0 +1,10 @@
+// negative_duplicate_param_name.ae — Negative test: duplicate parameter names
+// Function parameters must be unique.
+
+func add(x: u64, x: u64): u64 {    // ERROR: duplicate parameter 'x'
+    return x + x
+}
+
+func main(): u64 {
+    return add(1, 2)
+}

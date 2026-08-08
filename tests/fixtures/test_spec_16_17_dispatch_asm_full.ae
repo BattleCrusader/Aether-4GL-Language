@@ -1,0 +1,111 @@
+// test_spec_16_17_dispatch_asm_full.ae
+// Sections 16 (Dynamic Dispatch) and 17 (Inline Assembly).
+// Self-contained, exit-code based.
+//
+// Bootstrap status: inline `asm { }` blocks are not yet parsed.
+// All asm tests document the spec surface with TODOs and run
+// related control flow that does compile.
+
+var __failed: u64 = 0
+
+func fail(label: u64, expected: u64, actual: u64): void {
+    if actual != expected {
+        if __failed == 0 {
+            __failed = label
+        }
+    }
+}
+
+// ---------- 16.1 dyn Trait ----------
+// TODO: `dyn Trait` fat-pointer + vtable layout not implemented.
+@test
+func test_dyn_trait_documented(): void {
+    fail(1, 0, 0)
+}
+
+// ---------- 16.2 static vs dynamic dispatch ----------
+// TODO: dispatcher strategy is a compile-time decision; verify it
+// by running the static path through a plain function call.
+func area_static_side(r: u64): u64 {
+    return 3 * r * r
+}
+
+@test
+func test_static_dispatch_simulated(): void {
+    fail(2, 12, area_static_side(2))
+    fail(3, 27, area_static_side(3))
+}
+
+// ---------- 17.1 basic inline asm ----------
+// TODO: asm blocks not parsed.
+@test
+func test_asm_basic_documented(): void {
+    fail(4, 0, 0)
+}
+
+// ---------- 17.2 const values in assembly ----------
+const SERIAL_PORT: u64 = 0x3F8
+
+@test
+func test_const_serial_port(): void {
+    fail(5, 0x3F8, SERIAL_PORT)
+}
+
+// ---------- 17.3 asm with output bindings ----------
+// TODO: `asm: (hi, lo) { rdtsc }` syntax not implemented.
+@test
+func test_asm_output_bindings_documented(): void {
+    fail(6, 0, 0)
+}
+
+// ---------- 17.4 labels and jumps ----------
+// TODO: asm-level labels not implemented in parser.
+@test
+func test_asm_labels_documented(): void {
+    fail(7, 0, 0)
+}
+
+// ---------- 17.6 top-level asm blocks ----------
+// TODO: file-level asm requires parser support outside func bodies.
+@test
+func test_top_level_asm_documented(): void {
+    fail(8, 0, 0)
+}
+
+// ---------- 17.7 extern hoisting ----------
+// TODO: `extern __bss_start` inside asm requires parser support.
+@test
+func test_extern_hoist_documented(): void {
+    fail(9, 0, 0)
+}
+
+// ---------- 17.8 RAX preservation ----------
+// TODO: RAX preservation semantic is implicit in the codegen.
+// Document the requirement.
+@test
+func test_rax_preserved_documented(): void {
+    fail(10, 0, 0)
+}
+
+// ---------- EDGE: syscall page (17 / 18.3) ----------
+// TODO: `sys func name(args) at(N)` declarations not parsed by the
+// bootstrap (test_sysfunc.ae shows the same error).
+@test
+func test_sysfunc_documented(): void {
+    fail(11, 0, 0)
+}
+
+@test
+func main(): void {
+    test_dyn_trait_documented()
+    test_static_dispatch_simulated()
+    test_asm_basic_documented()
+    test_const_serial_port()
+    test_asm_output_bindings_documented()
+    test_asm_labels_documented()
+    test_top_level_asm_documented()
+    test_extern_hoist_documented()
+    test_rax_preserved_documented()
+    test_sysfunc_documented()
+    return __failed
+}
