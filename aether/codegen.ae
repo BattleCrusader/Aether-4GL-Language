@@ -755,9 +755,7 @@ func generate(c: codegen, tokens: [Token]): codegen {
     // Emit _start entry point FIRST so it's at text offset 0
     // (LC_UNIXTHREAD entry RIP = textVMAddr + textFileOff, which points
     // to the start of the text section — _start must be there).
-    __ae_print("G1\n")
     ctx.c = emitStart(ctx.c)
-    __ae_print("G2\n")
     // Emit all user functions
     while not ctxIsAtEnd(ctx, tokens) {
         while ctxCheck(ctx, tokens, TOKEN_AT) {
@@ -772,9 +770,7 @@ func generate(c: codegen, tokens: [Token]): codegen {
         else { ctx = ctxAdvance(ctx, tokens) }
     }
     // Emit string data (so rodata size is known for labelData)
-    __ae_print("G3\n")
     ctx.c = emitStringData(ctx.c)
-    __ae_print("G4\n")
     // Emit runtime helpers (includes emitRuntimeData inside, matching Go bootstrap order)
     ctx.c = emitRuntimeHelpers(ctx.c)
 
@@ -1509,16 +1505,11 @@ func emitRuntimeHelpers(c: codegen): codegen {
 
 func emitRuntimeData(c: codegen): codegen {
     c = label(c, "__ae_saved_argc")
-    __ae_print("RD0a\n")
     for i in 0..8 { c.text = push(c.text, 0) }
-    __ae_print("RD0b\n")
     c = label(c, "__ae_saved_argv")
     for i in 0..8 { c.text = push(c.text, 0) }
-    __ae_print("RD0c\n")
     c = label(c, "__ae_read_buf")
-    __ae_print("RB0\n")
     for i in 0..4096 { c.text = push(c.text, 0) }
-    __ae_print("RB1\n")
     c = label(c, "__ae_empty_str")
     c.text = push(c.text, 0)
     // /bin/sh path for __ae_system
@@ -1531,9 +1522,7 @@ func emitRuntimeData(c: codegen): codegen {
     c.text = push(c.text, 99)  // 'c'
     c.text = push(c.text, 0)
     c = label(c, "__ae_heap_start")
-    __ae_print("RD1\n")
     for i in 0..65536 { c.text = push(c.text, 0) }
-    __ae_print("RD2\n")
     c = label(c, "__ae_heap_ptr")
     for i in 0..8 { c.text = push(c.text, 0) }
     return c
@@ -1639,8 +1628,12 @@ func emitAeSystem(c: codegen): codegen {
     // argv[3] = NULL
     c = emitXorR64R64(c, "rax", "rax")
     c = emitMovR64ToAddr(c, "rax", "r12", 24)
-    // envp = NULL
-    c = emitXorR64R64(c, "r13", "r13")
+    // envp = pointer to empty array [NULL] (macOS execve rejects NULL envp)
+    c = emitSubR64Imm8(c, "rsp", 8)
+    c = emitMovR64R64(c, "rdi", "rsp")
+    c = emitXorR64R64(c, "rax", "rax")
+    c = emitMovR64ToAddr(c, "rax", "rdi", 0)
+    c = emitMovR64R64(c, "r13", "rdi")
     // fork()
     c = emitMovR64Imm64(c, "rax", 0x2000002)
     c = emitSyscall(c)
@@ -1649,7 +1642,8 @@ func emitAeSystem(c: codegen): codegen {
     // fork failed: return -1 (rax = 0 - 1)
     c = emitXorR64R64(c, "rax", "rax")
     c = emitSubR64Imm8(c, "rax", 1)
-    c = emitAddR64Imm8(c, "rsp", 32)
+    c = emitAddR64Imm8(c, "rsp", 8)   // free envp slot
+    c = emitAddR64Imm8(c, "rsp", 32)  // free argv array
     c = emitPop(c, "r15"); c = emitPop(c, "r14"); c = emitPop(c, "r13")
     c = emitPop(c, "r12"); c = emitPop(c, "rbx"); c = emitPop(c, "rbp")
     c = emitRet(c)
@@ -1678,8 +1672,9 @@ func emitAeSystem(c: codegen): codegen {
     c = emitXorR64R64(c, "rcx", "rcx")
     c = emitMovR64Imm64(c, "rax", 0x2000007)
     c = emitSyscall(c)
-    c = emitAddR64Imm8(c, "rsp", 8)
-    c = emitAddR64Imm8(c, "rsp", 32)
+    c = emitAddR64Imm8(c, "rsp", 8)   // free status slot
+    c = emitAddR64Imm8(c, "rsp", 8)   // free envp slot
+    c = emitAddR64Imm8(c, "rsp", 32)  // free argv array
     c = emitPop(c, "r15"); c = emitPop(c, "r14"); c = emitPop(c, "r13")
     c = emitPop(c, "r12"); c = emitPop(c, "rbx"); c = emitPop(c, "rbp")
     c = emitRet(c)
@@ -2323,7 +2318,6 @@ func linkElf(c: codegen): codegen {
         let refSize = c.labelRefSizes[i]
         let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
         if not hasLabel(c.labels, refName) and refName != "" {
-            __ae_print("UNDEF=[")
             __ae_print(refName)
             __ae_print("]\n")
             c.errors = push(c.errors, "undefined label: " + refName)
@@ -2717,501 +2711,275 @@ func linkElf(c: codegen): codegen {
 // ============================================================
 
 func linkMachO(c: codegen): codegen {
-    // Patch all label references in the text buffer
-    // Labels in __TEXT use #c.text offsets, labels in __DATA use labelData offsets
-    // We need to convert to virtual addresses for correct RIP-relative displacement
+    // Patch all label references in the text buffer using virtual addresses.
     var patchedText: [byte] = c.text
-    __ae_print("LAB0=[")
-    __ae_print(c.labels[0])
-    __ae_print("] REF0=[")
-    __ae_print(c.labelRefs[0])
-    __ae_print("]\n")
     for i in 0..#c.labelRefs {
         let refName = c.labelRefs[i]
         let refOffset = c.labelRefOffsets[i]
         let refSize = c.labelRefSizes[i]
         let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
         if not hasLabel(c.labels, refName) and refName != "" {
-            __ae_print("UNDEF=[")
-            __ae_print(refName)
-            __ae_print("]\n")
             c.errors = push(c.errors, "undefined label: " + refName)
         } else {
             patchedText = patchLabelRef(patchedText, refOffset, refSize, targetOffset)
         }
     }
 
-    // Combine text + rodata into __TEXT section
-    var textSection: [byte] = patchedText
-    for i in 0..#c.rodata { textSection = push(textSection, c.rodata[i]) }
+    // Combine text + rodata into a single code section.
+    var codeSection: [byte] = patchedText
+    for i in 0..#c.rodata { codeSection = push(codeSection, c.rodata[i]) }
+    // Append data section too (all data lives in __TEXT).
+    for i in 0..#c.data { codeSection = push(codeSection, c.data[i]) }
 
-    let textSize = #textSection
-    let dataSize = #c.data
+    let codeSize = #codeSection
 
-    // Page-align text vmsize (Mach-O requires segment vmsize to be page-aligned).
-    // 0x1000 = 4096. alignUp(n) = ((n + 0xFFF) / 0x1000) * 0x1000
-    let textVmsize = ((textSize + 0xFFF) / 0x1000) * 0x1000
-
-    // Mach-O header + load commands.
-    // Layout: mach_header(32) + LC_SEGMENT_64 __PAGEZERO(72)
-    //       + LC_SEGMENT_64 __TEXT(152, 1 section_64=80)
-    //       + LC_SEGMENT_64 __DATA(152, 1 section_64=80)
-    //       + LC_SEGMENT_64 __LINKEDIT(72, 0 sections)
-    //       + LC_DYLD_INFO_ONLY(48)
-    //       + LC_LOAD_DYLINKER(28)
-    //       + LC_UUID(24)
-    //       + LC_BUILD_VERSION(32, macOS 14.0 + ld 1234.0)
-    //       + LC_MAIN(24)
-    //       + LC_CODE_SIGNATURE(16)
-    // section_64 is 80 bytes (16+16+8+8+4*7 = 76, but 16+16+8+8+4+4+4+4+4+4+4 = 80).
-    // LC_SEGMENT_64 header is 72 bytes; + 1 section = 152. (Common pitfall: 144 is wrong.)
-    // Total cmds: 620 bytes. Total header+cmds: 652 bytes.
+    // Mach-O layout: header(32) + load_commands(664) + padding + code + __LINKEDIT
+    // __TEXT segment fileoff=0 (header is INSIDE __TEXT, required by codesign).
+    let ncmds: u64 = 14
+    let sizeofcmds: u64 = 664
     let headerSize: u64 = 32
-    let pagezeroSize: u64 = 72
-    let textSegSize: u64 = 152
-    let dataSegSize: u64 = 152
-    let linkeditSegSize: u64 = 72
-    let dyldSize: u64 = 48
-    let loadDylinkerSize: u64 = 28
-    let uuidSize: u64 = 24
-    let buildVersionSize: u64 = 32
-    let mainSize: u64 = 24
-    let codeSigSize: u64 = 16
-    let loadCommandsSize = pagezeroSize + textSegSize + dataSegSize + linkeditSegSize + dyldSize + loadDylinkerSize + uuidSize + buildVersionSize + mainSize + codeSigSize
-    let totalHeaderSize = headerSize + loadCommandsSize
+    let codeFileOff = headerSize + sizeofcmds
+    // Align code start to 8 bytes
+    let codeFileOffAligned = (codeFileOff + 7) / 8 * 8
 
-    let textFileOff: u64 = totalHeaderSize
-    let dataFileOff = textFileOff + textSize
+    // Page-align text vmsize (Mach-O requires segment vmsize page-aligned).
+    let textVmsize = ((codeFileOffAligned + codeSize + 0xFFF) / 0x1000) * 0x1000
+    let textFilesize = codeFileOffAligned + codeSize
 
     let textVMAddr: u64 = 0x100000000
-    let dataVMAddr = textVMAddr + textVmsize
+    let mainVA = textVMAddr + codeFileOffAligned
+
+    // __LINKEDIT starts after __TEXT (page-aligned).
+    let linkeditFileOff = textVmsize
+    let linkeditVmsize: u64 = 0x1000
+
+    // Build __LINKEDIT data: symbol table (2 entries * 16 bytes = 32) + string table (32 bytes).
+    // Symbol 0: __mh_execute_header at textVMAddr
+    // Symbol 1: _main at mainVA
+    // nlist_64: strx(u32), type(u8), sect(u8), desc(u16), value(u64) = 16 bytes each
+    var linkedit: [byte] = []
+    // sym[0]: strx=2, type=0x0F (N_SECT|N_EXT), sect=1, desc=0x0010 (N_DESC_DISCARDED), value=textVMAddr
+    linkedit = push(linkedit, 2); linkedit = push(linkedit, 0); linkedit = push(linkedit, 0); linkedit = push(linkedit, 0)
+    linkedit = push(linkedit, 0x0F); linkedit = push(linkedit, 1); linkedit = push(linkedit, 0x10); linkedit = push(linkedit, 0)
+    for i in 0..8 { linkedit = push(linkedit, (textVMAddr >> (i * 8)) & 0xFF) }
+    // sym[1]: strx=22, type=0x0F, sect=1, desc=0, value=mainVA
+    linkedit = push(linkedit, 22); linkedit = push(linkedit, 0); linkedit = push(linkedit, 0); linkedit = push(linkedit, 0)
+    linkedit = push(linkedit, 0x0F); linkedit = push(linkedit, 1); linkedit = push(linkedit, 0); linkedit = push(linkedit, 0)
+    for i in 0..8 { linkedit = push(linkedit, (mainVA >> (i * 8)) & 0xFF) }
+    // String table: " \0__mh_execute_header\0_main\0\0\0\0\0" (32 bytes)
+    // Byte 0: 0x20 (space), 1: 0x00, 2-21: "__mh_execute_header", 22: 0x00, 23-27: "_main", 28: 0x00, 29-31: 0x00
+    let strTab: [byte] = [32, 0, 95, 95, 109, 104, 95, 101, 120, 101, 99, 117, 116, 101, 95, 104, 101, 97, 100, 101, 114, 0, 95, 109, 97, 105, 110, 0, 0, 0, 0, 0]
+    for i in 0..#strTab { linkedit = push(linkedit, strTab[i]) }
+    let linkeditSize = #linkedit
+
+    let symoff = linkeditFileOff  // symbol table at start of LINKEDIT
+    let stroff = symoff + 32      // string table after 2 symbols
+    let funcStartsOff = stroff + 32  // function starts (empty)
+
+    // Total file size
+    let totalFileSize = linkeditFileOff + linkeditSize
+    var buf: [byte] = []
+    for i in 0..totalFileSize { buf = push(buf, 0) }
+
+    var off: u64 = 0
+
+    // Mach-O Header (32 bytes)
+    buf[off] = 0xCF; off = off + 1; buf[off] = 0xFA; off = off + 1; buf[off] = 0xED; off = off + 1; buf[off] = 0xFE; off = off + 1
+    buf[off] = 0x07; off = off + 1; buf[off] = 0x00; off = off + 1; buf[off] = 0x00; off = off + 1; buf[off] = 0x01; off = off + 1  // cputype x86_64
+    buf[off] = 0x03; off = off + 1; buf[off] = 0x00; off = off + 1; buf[off] = 0x00; off = off + 1; buf[off] = 0x00; off = off + 1  // cpusubtype
+    buf[off] = 0x02; off = off + 1; buf[off] = 0x00; off = off + 1; buf[off] = 0x00; off = off + 1; buf[off] = 0x00; off = off + 1  // filetype MH_EXECUTE
+    // ncmds = 14
+    buf[off] = 14; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    // sizeofcmds = 664
+    for i in 0..4 { buf[off] = (sizeofcmds >> (i * 8)) & 0xFF; off = off + 1 }
+    // flags = 0x00200085
+    buf[off] = 0x85; off = off + 1; buf[off] = 0x00; off = off + 1; buf[off] = 0x20; off = off + 1; buf[off] = 0x00; off = off + 1
+    // reserved = 0
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+
+    // LC_SEGMENT_64 __PAGEZERO (72 bytes)
+    buf[off] = 0x19; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x48; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=72
+    buf[off] = 0x5F; off = off + 1; buf[off] = 0x5F; off = off + 1; buf[off] = 0x50; off = off + 1; buf[off] = 0x41  // __PA
+    off = off + 1; buf[off] = 0x47; off = off + 1; buf[off] = 0x45; off = off + 1; buf[off] = 0x5A; off = off + 1; buf[off] = 0x45  // GEZE
+    off = off + 1; buf[off] = 0x52; off = off + 1; buf[off] = 0x4F; off = off + 1
+    for i in 0..6 { buf[off] = 0; off = off + 1 }
+    // vmaddr=0 (8 bytes), vmsize=0x100000000 (8 bytes)
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 1; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    // fileoff=0, filesize=0, maxprot=0, initprot=0, nsects=0, flags=0
+    for i in 0..32 { buf[off] = 0; off = off + 1 }
+
+    // LC_SEGMENT_64 __TEXT (152 bytes: 72 header + 80 section_64) — RWX
+    buf[off] = 0x19; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x98; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=152
+    buf[off] = 0x5F; off = off + 1; buf[off] = 0x5F; off = off + 1; buf[off] = 0x54; off = off + 1; buf[off] = 0x45; off = off + 1  // __TE
+    buf[off] = 0x58; off = off + 1; buf[off] = 0x54; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    // vmaddr = textVMAddr (8 bytes)
+    for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    // vmsize = textVmsize (8 bytes)
+    for i in 0..8 { buf[off] = (textVmsize >> (i * 8)) & 0xFF; off = off + 1 }
+    // fileoff = 0 (header is INSIDE __TEXT — critical for codesign)
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    // filesize = textFilesize
+    for i in 0..8 { buf[off] = (textFilesize >> (i * 8)) & 0xFF; off = off + 1 }
+    // maxprot=7 (RWX), initprot=7 (RWX), nsects=1, flags=0
+    buf[off] = 7; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 7; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 1; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
+    // Section __text (80 bytes)
+    buf[off] = 0x5F; off = off + 1; buf[off] = 0x5F; off = off + 1; buf[off] = 0x74; off = off + 1; buf[off] = 0x65; off = off + 1  // __te
+    buf[off] = 0x78; off = off + 1; buf[off] = 0x74; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    buf[off] = 0x5F; off = off + 1; buf[off] = 0x5F; off = off + 1; buf[off] = 0x54; off = off + 1; buf[off] = 0x45; off = off + 1  // __TE
+    buf[off] = 0x58; off = off + 1; buf[off] = 0x54; off = off + 1
+    for i in 0..10 { buf[off] = 0; off = off + 1 }
+    // addr = mainVA
+    for i in 0..8 { buf[off] = (mainVA >> (i * 8)) & 0xFF; off = off + 1 }
+    // size = codeSize
+    for i in 0..8 { buf[off] = (codeSize >> (i * 8)) & 0xFF; off = off + 1 }
+    // offset (uint32) = codeFileOffAligned
+    for i in 0..4 { buf[off] = (codeFileOffAligned >> (i * 8)) & 0xFF; off = off + 1 }
+    // align, reloff, nreloc = 0 (12 bytes)
+    for i in 0..12 { buf[off] = 0; off = off + 1 }
+    // flags = 0x80000400 (S_REGULAR | S_ATTR_SOME_INSTRUCTIONS)
+    buf[off] = 0; off = off + 1; buf[off] = 4; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0x80; off = off + 1
+    // reserved1, reserved2, reserved3 (12 bytes)
+    for i in 0..12 { buf[off] = 0; off = off + 1 }
+
+    // LC_SEGMENT_64 __LINKEDIT (72 bytes)
+    buf[off] = 0x19; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x48; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=72
+    buf[off] = 0x5F; off = off + 1; buf[off] = 0x5F; off = off + 1; buf[off] = 0x4C; off = off + 1; buf[off] = 0x49  // __LI
+    off = off + 1; buf[off] = 0x4E; off = off + 1; buf[off] = 0x4B; off = off + 1; buf[off] = 0x45; off = off + 1; buf[off] = 0x44  // NKED
+    off = off + 1; buf[off] = 0x49; off = off + 1; buf[off] = 0x54; off = off + 1
+    for i in 0..6 { buf[off] = 0; off = off + 1 }
+    // vmaddr = textVMAddr + textVmsize
+    let linkeditVMAddr = textVMAddr + textVmsize
+    for i in 0..8 { buf[off] = (linkeditVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    // vmsize = linkeditVmsize
+    for i in 0..8 { buf[off] = (linkeditVmsize >> (i * 8)) & 0xFF; off = off + 1 }
+    // fileoff = linkeditFileOff
+    for i in 0..8 { buf[off] = (linkeditFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    // filesize = linkeditSize
+    for i in 0..8 { buf[off] = (linkeditSize >> (i * 8)) & 0xFF; off = off + 1 }
+    // maxprot=1 (R), initprot=1 (R), nsects=0, flags=0
+    buf[off] = 1; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 1; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+
+    // LC_DYLD_INFO_ONLY (48 bytes) — all offsets zero (no rebase/bind/export)
+    buf[off] = 0x22; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0x80; off = off + 1  // cmd=0x80000022
+    buf[off] = 0x30; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=48
+    for i in 0..40 { buf[off] = 0; off = off + 1 }
+
+    // LC_LOAD_DYLINKER (32 bytes)
+    buf[off] = 0x0E; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x20; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=32
+    buf[off] = 0x0C; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // name.offset=12
+    buf[off] = 0x2F; off = off + 1; buf[off] = 0x75; off = off + 1; buf[off] = 0x73; off = off + 1; buf[off] = 0x72; off = off + 1  // /usr
+    buf[off] = 0x2F; off = off + 1; buf[off] = 0x6C; off = off + 1; buf[off] = 0x69; off = off + 1; buf[off] = 0x62; off = off + 1  // /lib
+    buf[off] = 0x2F; off = off + 1; buf[off] = 0x64; off = off + 1; buf[off] = 0x79; off = off + 1; buf[off] = 0x6C; off = off + 1  // /dyl
+    buf[off] = 0x64; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // d   
+    for i in 0..4 { buf[off] = 0; off = off + 1 }  // pad to cmdsize=32
+
+    // LC_UUID (24 bytes)
+    buf[off] = 0x1B; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x18; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=24
+    for i in 0..16 { buf[off] = 0; off = off + 1 }
+
+    // LC_BUILD_VERSION (32 bytes)
+    buf[off] = 0x32; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x20; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=32
+    buf[off] = 1; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // platform=MACOS
+    buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0x0E; off = off + 1; buf[off] = 0; off = off + 1  // minos=14.0
+    buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0x0E; off = off + 1; buf[off] = 0; off = off + 1  // sdk=14.0
+    buf[off] = 1; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // ntools=1
+    buf[off] = 3; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // tool=LD
+    buf[off] = 0xD2; off = off + 1; buf[off] = 0x04; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // version=1234.0
+
+    // LC_MAIN (24 bytes)
+    buf[off] = 0x28; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0x80; off = off + 1  // cmd=0x80000028
+    buf[off] = 0x18; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=24
+    for i in 0..8 { buf[off] = (codeFileOffAligned >> (i * 8)) & 0xFF; off = off + 1 }  // entryoff
+    for i in 0..8 { buf[off] = 0; off = off + 1 }  // stacksize=0
+
+    // LC_SYMTAB (24 bytes)
+    buf[off] = 0x02; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x18; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=24
+    for i in 0..4 { buf[off] = (symoff >> (i * 8)) & 0xFF; off = off + 1 }    // symoff
+    buf[off] = 2; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // nsyms=2
+    for i in 0..4 { buf[off] = (stroff >> (i * 8)) & 0xFF; off = off + 1 }   // stroff
+    buf[off] = 32; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // strsize=32
+
+    // LC_DYSYMTAB (80 bytes)
+    buf[off] = 0x0B; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x50; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=80
+    // ilocalsym=0, nlocalsym=0, iextdefsym=0, nextdefsym=2
+    for i in 0..12 { buf[off] = 0; off = off + 1 }
+    buf[off] = 2; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // nextdefsym=2
+    // iundefsym=2, nundefsym=0, rest=0
+    buf[off] = 2; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // iundefsym=2
+    for i in 0..52 { buf[off] = 0; off = off + 1 }
+
+    // LC_LOAD_DYLIB (56 bytes) — /usr/lib/libSystem.B.dylib
+    buf[off] = 0x0C; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x38; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=56
+    buf[off] = 0x18; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // name.offset=24
+    buf[off] = 2; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // timestamp=2
+    buf[off] = 0; off = off + 1; buf[off] = 0x01; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // current_version=0x10000
+    buf[off] = 0; off = off + 1; buf[off] = 0x01; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // compat_version=0x10000
+    // path "/usr/lib/libSystem.B.dylib"
+    let dylibPath = "/usr/lib/libSystem.B.dylib"
+    for i in 0..#dylibPath { buf[off] = dylibPath[i]; off = off + 1 }
+    for i in 0..6 { buf[off] = 0; off = off + 1 }  // null + padding
+
+    // LC_FUNCTION_STARTS (16 bytes) — empty
+    buf[off] = 0x26; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x10; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=16
+    for i in 0..4 { buf[off] = (funcStartsOff >> (i * 8)) & 0xFF; off = off + 1 }  // dataoff
+    for i in 0..4 { buf[off] = 0; off = off + 1 }  // datasize=0
+
+    // LC_DATA_IN_CODE (16 bytes) — empty
+    buf[off] = 0x29; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x10; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    for i in 0..4 { buf[off] = (funcStartsOff >> (i * 8)) & 0xFF; off = off + 1 }  // dataoff
+    for i in 0..4 { buf[off] = 0; off = off + 1 }  // datasize=0
+
+    // LC_SOURCE_VERSION (16 bytes)
+    buf[off] = 0x2A; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    buf[off] = 0x10; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
+    for i in 0..8 { buf[off] = 0; off = off + 1 }  // version=0.0
 
     // Re-patch label references using virtual addresses
-    // refVMAddr = textVMAddr + refOffset (all refs are in __TEXT)
-    // targetVMAddr = textVMAddr + targetOffset if target < textSize
-    // targetVMAddr = dataVMAddr + (targetOffset - textSize) if target >= textSize
+    // refVMAddr = textVMAddr + codeFileOffAligned + refOffset
+    // targetVMAddr = textVMAddr + codeFileOffAligned + targetOffset (if target < textSize)
+    // targetVMAddr = textVMAddr + codeFileOffAligned + targetOffset (data is also in __TEXT)
     for i in 0..#c.labelRefs {
         let refName = c.labelRefs[i]
         let refOffset = c.labelRefOffsets[i]
         let refSize = c.labelRefSizes[i]
         let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
         if hasLabel(c.labels, refName) and refName != "" {
-            let refVMAddr = textVMAddr + refOffset
-            var targetVMAddr: u64 = 0
-            if targetOffset < textSize {
-                targetVMAddr = textVMAddr + targetOffset
-            } else {
-                let dataOffset = targetOffset - textSize
-                targetVMAddr = dataVMAddr + dataOffset
-            }
+            let refVMAddr = textVMAddr + codeFileOffAligned + refOffset
+            let targetVMAddr = textVMAddr + codeFileOffAligned + targetOffset
             let disp = targetVMAddr - (refVMAddr + refSize)
-            textSection[refOffset] = disp & 0xFF
-            textSection[refOffset + 1] = (disp >> 8) & 0xFF
-            textSection[refOffset + 2] = (disp >> 16) & 0xFF
-            textSection[refOffset + 3] = (disp >> 24) & 0xFF
+            codeSection[refOffset] = disp & 0xFF
+            codeSection[refOffset + 1] = (disp >> 8) & 0xFF
+            codeSection[refOffset + 2] = (disp >> 16) & 0xFF
+            codeSection[refOffset + 3] = (disp >> 24) & 0xFF
         }
     }
 
-    let linkeditVMAddr = dataVMAddr + dataSize
-    let linkeditFileOff = dataFileOff + dataSize
-    let linkeditVmsize: u64 = 0x1000
-    let linkeditFilesize: u64 = linkeditVmsize  // reserve space for codesign
-    let totalFileSize = totalHeaderSize + textSize + dataSize + linkeditVmsize
-    let writeFileSize = totalHeaderSize + textSize + dataSize + linkeditVmsize
-    __ae_print("LM1\n")
-    var buf: [byte] = []
-    for i in 0..writeFileSize { buf = push(buf, 0) }
-    __ae_print("LM2\n")
-
-    var off: u64 = 0
-    __ae_print("LMa\n")
-
-    // Mach-O Header (32 bytes)
-    buf[off] = 0xCF; off = off + 1
-    buf[off] = 0xFA; off = off + 1
-    buf[off] = 0xED; off = off + 1
-    buf[off] = 0xFE; off = off + 1
-    buf[off] = 0x07; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1
-    buf[off] = 0x03; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x02; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x0A; off = off + 1  // ncmds = 10 (PAGEZERO, TEXT, DATA, LINKEDIT, DYLD_INFO, DYLINKER, UUID, BUILD_VERSION, MAIN, CODE_SIG)
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = loadCommandsSize & 0xFF; off = off + 1
-    buf[off] = (loadCommandsSize >> 8) & 0xFF; off = off + 1
-    buf[off] = (loadCommandsSize >> 16) & 0xFF; off = off + 1
-    buf[off] = (loadCommandsSize >> 24) & 0xFF; off = off + 1
-    buf[off] = 0x85; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x20; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-
-    // LC_SEGMENT_64 __PAGEZERO (72 bytes)
-    buf[off] = 0x19; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x48; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x50; off = off + 1
-    buf[off] = 0x41; off = off + 1
-    buf[off] = 0x47; off = off + 1
-    buf[off] = 0x45; off = off + 1
-    buf[off] = 0x5A; off = off + 1
-    buf[off] = 0x45; off = off + 1
-    buf[off] = 0x52; off = off + 1
-    buf[off] = 0x4F; off = off + 1
-    for i in 0..6 { buf[off] = 0; off = off + 1 }
-    // vmaddr = 0 (8 bytes)
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    // vmsize = 0x100000000 (4GB) — little-endian: 00 00 00 00 01 00 00 00
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-
-    // LC_SEGMENT_64 __TEXT (152 bytes: 72 header + 80 section_64) — RX
-    __ae_print("LMb\n")
-    buf[off] = 0x19; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x98; off = off + 1  // cmdsize = 152 (was 0x90 = 144; BUG caused rollback)
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x54; off = off + 1
-    buf[off] = 0x45; off = off + 1
-    buf[off] = 0x58; off = off + 1
-    buf[off] = 0x54; off = off + 1
-    for i in 0..10 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (textVmsize >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
-    buf[off] = 0x07; off = off + 1  // maxprot = RWX (needed for bump allocator)
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x07; off = off + 1  // initprot = RWX
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1  // nsects = 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // Section __text (80 bytes: 16+16+8+8+4+4+4+4+4+4+4 = 76, padded to 80 by 4 bytes of zeros at end)
-    // CORRECT layout per <mach-o/loader.h>: offset is uint32 (4 bytes), not uint64.
-    // Aether's earlier version wrote offset as u64, which shifted all trailing fields by 4 bytes,
-    // putting flags=0x80000400 in reserved1's slot. codesign rejects that as "strict validation failed".
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x74; off = off + 1
-    buf[off] = 0x65; off = off + 1
-    buf[off] = 0x78; off = off + 1
-    buf[off] = 0x74; off = off + 1
-    for i in 0..10 { buf[off] = 0; off = off + 1 }
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x54; off = off + 1
-    buf[off] = 0x45; off = off + 1
-    buf[off] = 0x58; off = off + 1
-    buf[off] = 0x54; off = off + 1
-    for i in 0..10 { buf[off] = 0; off = off + 1 }
-    // Section __text: addr = textVMAddr + textFileOff (header at vmaddr, text at fileoff)
-    let textSectAddr = textVMAddr + textFileOff
-    for i in 0..8 { buf[off] = (textSectAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
-    // offset (uint32, 4 bytes — was incorrectly u64 in prior version)
-    for i in 0..4 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    // align (uint32, 4 bytes)
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // reloff (uint32, 4 bytes)
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // nreloc (uint32, 4 bytes)
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // flags (uint32) = S_REGULAR | S_ATTR_SOME_INSTRUCTIONS = 0x80000400
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x04; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x80; off = off + 1
-    // reserved1 + reserved2 (uint32 each)
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    // Pad to 80-byte section_64 (alignment to 8 bytes per loader.h)
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-
-    // LC_SEGMENT_64 __DATA (152 bytes: 72 header + 80 section_64) — RW
-    __ae_print("LMc\n")
-    buf[off] = 0x19; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x98; off = off + 1  // cmdsize = 152 (was 0x90 = 144; same bug as TEXT)
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x44; off = off + 1
-    buf[off] = 0x41; off = off + 1
-    buf[off] = 0x54; off = off + 1
-    buf[off] = 0x41; off = off + 1
-    for i in 0..10 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
-    buf[off] = 0x07; off = off + 1  // maxprot = RWX
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x03; off = off + 1  // initprot = RW
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // Section __data (80 bytes)
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x64; off = off + 1
-    buf[off] = 0x61; off = off + 1
-    buf[off] = 0x74; off = off + 1
-    buf[off] = 0x61; off = off + 1
-    for i in 0..10 { buf[off] = 0; off = off + 1 }
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x5F; off = off + 1
-    buf[off] = 0x44; off = off + 1
-    buf[off] = 0x41; off = off + 1
-    buf[off] = 0x54; off = off + 1
-    buf[off] = 0x41; off = off + 1
-    for i in 0..10 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (dataSize >> (i * 8)) & 0xFF; off = off + 1 }
-    // offset (uint32, 4 bytes — corrected from u64)
-    for i in 0..4 { buf[off] = (dataFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    // align (uint32, 4 bytes)
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // reloff (uint32, 4 bytes)
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // nreloc (uint32, 4 bytes)
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-    // flags (uint32) = S_REGULAR = 0 (or S_ZEROFILL = 1 for empty data)
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    // reserved1 + reserved2 (uint32 each)
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    // Pad to 80-byte section_64 (alignment to 8 bytes per loader.h)
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-
-    // LC_SEGMENT_64 __LINKEDIT (72 bytes, 0 sections) — required for code signing.
-    // codesign needs this segment to store the signature blob.
-    buf[off] = 0x19; off = off + 1  // cmd = LC_SEGMENT_64
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x48; off = off + 1  // cmdsize = 72
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    // segname __LINKEDIT (16 bytes)
-    buf[off] = 0x5F; off = off + 1  // _
-    buf[off] = 0x5F; off = off + 1  // _
-    buf[off] = 0x4C; off = off + 1  // L
-    buf[off] = 0x49; off = off + 1  // I
-    buf[off] = 0x4E; off = off + 1  // N
-    buf[off] = 0x4B; off = off + 1  // K
-    buf[off] = 0x45; off = off + 1  // E
-    buf[off] = 0x44; off = off + 1  // D
-    buf[off] = 0x49; off = off + 1  // I
-    buf[off] = 0x54; off = off + 1  // T
-    for i in 0..6 { buf[off] = 0; off = off + 1 }
-    // vmaddr (8 bytes)
-    for i in 0..8 { buf[off] = (linkeditVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    // vmsize (8 bytes)
-    for i in 0..8 { buf[off] = (linkeditVmsize >> (i * 8)) & 0xFF; off = off + 1 }
-    // fileoff (8 bytes)
-    for i in 0..8 { buf[off] = (linkeditFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    // filesize (8 bytes)
-    for i in 0..8 { buf[off] = (linkeditFilesize >> (i * 8)) & 0xFF; off = off + 1 }
-    // maxprot = R (0x01)
-    buf[off] = 0x01; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    // initprot = R (0x01)
-    buf[off] = 0x01; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    // nsects = 0
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    // flags (4 bytes)
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-
-    // LC_DYLD_INFO_ONLY (48 bytes) — cmd = LC_DYLD_INFO_ONLY (0x22 | LC_REQ_DYLD = 0x80000022)
-    // Was 0x1B (incorrect); should be 0x22. codesign rejects the wrong cmd.
-    __ae_print("LMe\n")
-    buf[off] = 0x22; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x80; off = off + 1
-    buf[off] = 0x30; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    for i in 0..40 { buf[off] = 0; off = off + 1 }
-
-    // LC_LOAD_DYLINKER (28 bytes) — cmd = 0x0E (14), NOT 0x0F (LC_ID_DYLINKER).
-    // LC_LOAD_DYLINKER tells dyld to load /usr/lib/dyld; LC_ID_DYLINKER is for
-    // identifying the dylinker binary itself and is wrong for an executable.
-    buf[off] = 0x0E; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x1C; off = off + 1  // cmdsize = 28
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x0C; off = off + 1  // name.offset = 12
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    // path "/usr/lib/dyld" + null + 2 pad = 16 bytes
-    buf[off] = 0x2F; off = off + 1  // /
-    buf[off] = 0x75; off = off + 1  // u
-    buf[off] = 0x73; off = off + 1  // s
-    buf[off] = 0x72; off = off + 1  // r
-    buf[off] = 0x2F; off = off + 1  // /
-    buf[off] = 0x6C; off = off + 1  // l
-    buf[off] = 0x69; off = off + 1  // i
-    buf[off] = 0x62; off = off + 1  // b
-    buf[off] = 0x2F; off = off + 1  // /
-    buf[off] = 0x64; off = off + 1  // d
-    buf[off] = 0x79; off = off + 1  // y
-    buf[off] = 0x6C; off = off + 1  // l
-    buf[off] = 0x64; off = off + 1  // d
-    buf[off] = 0x00; off = off + 1  // null
-    buf[off] = 0x00; off = off + 1  // pad
-    buf[off] = 0x00; off = off + 1  // pad
-
-    // LC_UUID (24 bytes)
-    buf[off] = 0x1B; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x18; off = off + 1  // cmdsize = 24
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    for i in 0..16 { buf[off] = 0; off = off + 1 }
-
-    // LC_BUILD_VERSION (32 bytes) — required on macOS 10.14+ to launch.
-    // cmd = 0x32 (50), cmdsize = 32, platform = 1 (MACOS), minos = 14.0, sdk = 14.0,
-    // ntools = 1, tool = 3 (LD), version = 1234.0
-    buf[off] = 0x32; off = off + 1  // cmd = LC_BUILD_VERSION
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x20; off = off + 1  // cmdsize = 32
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1  // platform = MACOS
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1  // minos = 14.0 (0x000E0000)
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x0E; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1  // sdk = 14.0 (0x000E0000)
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x0E; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1  // ntools = 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x03; off = off + 1  // tool = LD
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0xD2; off = off + 1  // version = 1234.0 (0x000004D2)
-    buf[off] = 0x04; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-
-
-    // LC_MAIN (24 bytes)
-    buf[off] = 0x28; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x80; off = off + 1  // cmd = 0x80000028
-    buf[off] = 0x18; off = off + 1  // cmdsize = 24
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-
-    // LC_CODE_SIGNATURE (16 bytes)
-    buf[off] = 0x1D; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x10; off = off + 1  // cmdsize = 16
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    for i in 0..4 { buf[off] = (linkeditFileOff >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..4 { buf[off] = 0; off = off + 1 }
-
-    // Write section data
-    __ae_print("LMf\n")
-    for i in 0..#textSection { buf[textFileOff + i] = textSection[i] }
-    for i in 0..#c.data { buf[dataFileOff + i] = c.data[i] }
-    __ae_print("LMg\n")
+    // Write code section into buffer
+    for i in 0..#codeSection { buf[codeFileOffAligned + i] = codeSection[i] }
+    // Write __LINKEDIT data
+    for i in 0..#linkedit { buf[linkeditFileOff + i] = linkedit[i] }
 
     c.output = buf
-    __ae_print("LMh\n")
     return c
-    __ae_print("LMi\n")
 }
+
