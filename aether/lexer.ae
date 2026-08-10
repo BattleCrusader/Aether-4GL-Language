@@ -29,7 +29,6 @@ func newLexer(source: string): Lexer {
 }
 
 func lexerIsAtEnd(l: Lexer): bool {
-    __ae_print("IAE\n")
     return l.current >= #l.source
 }
 
@@ -174,13 +173,10 @@ func number(l: Lexer): Lexer {
 }
 
 func identifier(l: Lexer): Lexer {
-    __ae_print("ID0\n")
     while isAlphaNumeric(lexerPeek(l)) {
         l = lexerAdvance(l)
     }
-    __ae_print("ID1\n")
     let lexeme = l.source[l.start:l.current]
-    __ae_print("ID2\n")
     // Keyword lookup via static chain (global arrays are not yet emitted
     // by the bootstrap; a chain keeps the self-hosted compiler correct).
     if lexeme == "and"
@@ -329,13 +325,9 @@ func identifier(l: Lexer): Lexer {
 }
 
 func scanToken(l: Lexer): Lexer {
-    __ae_print("ST0\n")
     let al = lexerAdvance(l)
-    __ae_print("ST1\n")
     let c = al.source[al.current - 1]
-    __ae_print("ST2\n")
     l = al
-    __ae_print("ST3\n")
     match c {
         case 40 -> l = addToken(l, TOKEN_LPAREN)  // (
         case 41 -> l = addToken(l, TOKEN_RPAREN)  // )
@@ -500,11 +492,9 @@ func scanToken(l: Lexer): Lexer {
         case 34 -> l = string(l)  // "
         case 39 -> l = char(l)  // '
         else -> {
-            __ae_print("EL0\n")
             if isDigit(c) {
                 l = number(l)
             } else if isAlpha(c) {
-                __ae_print("EL1\n")
                 l = identifier(l)
             } else {
                 l.hadError = true
@@ -516,17 +506,13 @@ func scanToken(l: Lexer): Lexer {
 }
 
 func tokenize(l: Lexer): Lexer {
-    __ae_print("TZ0\n")
-    __ae_print("CALL\n")
     while not lexerIsAtEnd(l) {
-        __ae_print("TZ1\n")
         l.start = l.current
         l = scanToken(l)
         if l.hadError {
             return l
         }
     }
-    __ae_print("TZ2\n")
     l = addToken(l, TOKEN_EOF)
     return l
 }

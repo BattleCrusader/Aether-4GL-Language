@@ -35,7 +35,6 @@ struct SemanticAnalyzer {
 }
 
 func newSemanticAnalyzer(): SemanticAnalyzer {
-    __ae_print("AN0\n")
     var s: SemanticAnalyzer
     s.scopes = []
     s.errors = []
@@ -46,7 +45,6 @@ func newSemanticAnalyzer(): SemanticAnalyzer {
     var gs: scope
     gs.symbols = []
     s.scopes = push(s.scopes, gs)
-    __ae_print("AN1\n")
     return s
 }
 
@@ -240,24 +238,17 @@ func makeSymbol(name: string, symType: string, kind: u64, isLet: bool, line: u64
 
 // analyze — walk the token stream and perform semantic analysis
 func analyze(s: SemanticAnalyzer, tokens: [Token]): SemanticAnalyzer {
-    __ae_print("AN2 n=")
     var i: u64 = 0
-    __ae_print("AN3\n")
     while i < #tokens {
-        __ae_print("W0\n")
         let tok = tokens[i]
         s.currentLine = tok.line
         s.currentCol = tok.column
 
         // Track function declarations
-        __ae_print("W1\n")
         if tok.typ == TOKEN_KW_FUNC {
-            __ae_print("W1f\n")
             if i + 1 < #tokens {
                 let nameTok = tokens[i + 1]
-                __ae_print("W1g\n")
                 if nameTok.typ == TOKEN_IDENT or isTypeToken(nameTok.typ) {
-                    __ae_print("W1h\n")
                     for j in 0..#s.funcs {
                         if s.funcs[j] == nameTok.lexeme {
                             s = semanticAddErrorAt(s, nameTok.line, nameTok.column, "duplicate function: " + nameTok.lexeme)
@@ -321,7 +312,6 @@ func analyze(s: SemanticAnalyzer, tokens: [Token]): SemanticAnalyzer {
 
         // Check identifier references
         if tok.typ == TOKEN_IDENT {
-            __ae_print("W2a\n")
             let isDecl = false
             if i > 0 {
                 let prev = tokens[i - 1]
