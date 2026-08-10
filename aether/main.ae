@@ -64,6 +64,12 @@ func __ae_wait4(pid: i64, status: [byte], options: u64, rusage: u64): i64;
 @extern
 func __ae_pipe(fds: [u64]): i64;
 
+// __ae_system is a runtime helper provided by the Go bootstrap
+// It runs a shell command via fork + execve("/bin/sh", ["sh","-c",cmd]) + wait4.
+// Returns the child's exit status, or -1 on fork error.
+@extern
+func __ae_system(cmd: string): i64;
+
 // Entry point for the Aether compiler
 @entry
 func main(): u64 {

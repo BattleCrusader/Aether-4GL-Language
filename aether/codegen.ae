@@ -1497,6 +1497,7 @@ func emitRuntimeHelpers(c: codegen): codegen {
     c = emitAePrint(c); c = emitAeExit(c); c = emitAeWriteFile(c)
     c = emitAeReadFile(c); c = emitAeGetArg(c); c = emitAeArgc(c)
     c = emitAeFork(c); c = emitAeExecve(c); c = emitAeWait4(c); c = emitAePipe(c)
+    c = emitAeSystem(c)
     c = emitAeLen(c); c = emitAeIndex(c); c = emitAeIndexSet(c)
     c = emitAeSlice(c)
     c = emitAeAlloc(c)
@@ -1519,6 +1520,15 @@ func emitRuntimeData(c: codegen): codegen {
     for i in 0..4096 { c.text = push(c.text, 0) }
     __ae_print("RB1\n")
     c = label(c, "__ae_empty_str")
+    c.text = push(c.text, 0)
+    // /bin/sh path for __ae_system
+    c = label(c, "__ae_sh_path")
+    for i in 0..#"/bin/sh" { c.text = push(c.text, "/bin/sh"[i]) }
+    c.text = push(c.text, 0)
+    // "-c" flag for __ae_system
+    c = label(c, "__ae_sh_c")
+    c.text = push(c.text, 45)  // '-'
+    c.text = push(c.text, 99)  // 'c'
     c.text = push(c.text, 0)
     c = label(c, "__ae_heap_start")
     __ae_print("RD1\n")
@@ -1602,6 +1612,77 @@ func emitAePipe(c: codegen): codegen {
     c = emitMovR64Imm64(c, "rax", 0x200002A)
     c = emitSyscall(c)
     c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeSystem(c: codegen): codegen {
+    // __ae_system: run a shell command via fork + execve("/bin/sh", ["sh","-c",cmd]) + wait4.
+    // rdi = pointer to null-terminated command string.
+    // Returns the child's exit status (wait4 status) in rax, or -1 on fork error.
+    c = label(c, "__ae_system")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitPush(c, "rbx"); c = emitPush(c, "r12"); c = emitPush(c, "r13")
+    c = emitPush(c, "r14"); c = emitPush(c, "r15")
+    // rbx = cmd pointer
+    c = emitMovR64R64(c, "rbx", "rdi")
+    // Build argv array: [sh, -c, cmd, NULL] — 4 pointers (32 bytes) on stack
+    c = emitSubR64Imm8(c, "rsp", 32)
+    c = emitMovR64R64(c, "r12", "rsp")
+    // argv[0] = "/bin/sh"
+    c = emitLeaR64Label(c, "rax", "__ae_sh_path")
+    c = emitMovR64ToAddr(c, "rax", "r12", 0)
+    // argv[1] = "-c"
+    c = emitLeaR64Label(c, "rax", "__ae_sh_c")
+    c = emitMovR64ToAddr(c, "rax", "r12", 8)
+    // argv[2] = cmd
+    c = emitMovR64ToAddr(c, "rbx", "r12", 16)
+    // argv[3] = NULL
+    c = emitXorR64R64(c, "rax", "rax")
+    c = emitMovR64ToAddr(c, "rax", "r12", 24)
+    // envp = NULL
+    c = emitXorR64R64(c, "r13", "r13")
+    // fork()
+    c = emitMovR64Imm64(c, "rax", 0x2000002)
+    c = emitSyscall(c)
+    c = emitTestR64R64(c, "rax", "rax")
+    c = emitJnsLabel(c, "__ae_system_fork_ok")
+    // fork failed: return -1 (rax = 0 - 1)
+    c = emitXorR64R64(c, "rax", "rax")
+    c = emitSubR64Imm8(c, "rax", 1)
+    c = emitAddR64Imm8(c, "rsp", 32)
+    c = emitPop(c, "r15"); c = emitPop(c, "r14"); c = emitPop(c, "r13")
+    c = emitPop(c, "r12"); c = emitPop(c, "rbx"); c = emitPop(c, "rbp")
+    c = emitRet(c)
+    // Child path
+    c = label(c, "__ae_system_fork_ok")
+    c = emitMovR64R64(c, "r14", "rax")
+    c = emitTestR64R64(c, "rax", "rax")
+    c = emitJnzLabel(c, "__ae_system_parent")
+    // Child: execve("/bin/sh", argv, envp)
+    c = emitLeaR64Label(c, "rdi", "__ae_sh_path")
+    c = emitMovR64R64(c, "rsi", "r12")
+    c = emitMovR64R64(c, "rdx", "r13")
+    c = emitMovR64Imm64(c, "rax", 0x200003B)
+    c = emitSyscall(c)
+    // execve failed: _exit(127)
+    c = emitMovR64Imm64(c, "rdi", 127)
+    c = emitMovR64Imm64(c, "rax", 0x2000001)
+    c = emitSyscall(c)
+    // Parent: wait4(pid, &status, 0, NULL)
+    c = label(c, "__ae_system_parent")
+    c = emitSubR64Imm8(c, "rsp", 8)
+    c = emitMovR64R64(c, "r15", "rsp")
+    c = emitMovR64R64(c, "rdi", "r14")
+    c = emitMovR64R64(c, "rsi", "r15")
+    c = emitXorR64R64(c, "rdx", "rdx")
+    c = emitXorR64R64(c, "rcx", "rcx")
+    c = emitMovR64Imm64(c, "rax", 0x2000007)
+    c = emitSyscall(c)
+    c = emitAddR64Imm8(c, "rsp", 8)
+    c = emitAddR64Imm8(c, "rsp", 32)
+    c = emitPop(c, "r15"); c = emitPop(c, "r14"); c = emitPop(c, "r13")
+    c = emitPop(c, "r12"); c = emitPop(c, "rbx"); c = emitPop(c, "rbp")
+    c = emitRet(c)
     return c
 }
 
