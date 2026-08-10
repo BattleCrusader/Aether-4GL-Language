@@ -1716,28 +1716,36 @@ func (c *Codegen) patchRelocs() {
 // ============================================================
 
 // mov [addrReg], src  (store src at address in addrReg)
-func (c *Codegen) emitMovR64ToAddr(src, addrReg string, offset int8) {
-	// REX.W + 89 + modrm(00/01, src, addrReg) + [optional disp8]
+func (c *Codegen) emitMovR64ToAddr(src, addrReg string, offset int) {
+	// REX.W + 89 + modrm(00/01/10, src, addrReg) + [disp8/disp32]
 	c.emitRexWRB(regCodes[src], regCodes[addrReg])
 	c.emitByte(0x89)
 	if offset == 0 {
 		c.emitByte(c.modRM(0, regCodes[src], regCodes[addrReg]))
-	} else {
+	} else if offset >= -128 && offset <= 127 {
 		c.emitByte(c.modRM(1, regCodes[src], regCodes[addrReg]))
 		c.emitByte(byte(offset))
+	} else {
+		// disp32 encoding for large offsets
+		c.emitByte(c.modRM(2, regCodes[src], regCodes[addrReg]))
+		c.emitU32(uint32(int32(offset)))
 	}
 }
 
 // mov dst, [addrReg]  (load dst from address in addrReg)
-func (c *Codegen) emitMovFromAddr(dst, addrReg string, offset int8) {
-	// REX.W + 8B + modrm(00/01, dst, addrReg) + [optional disp8]
+func (c *Codegen) emitMovFromAddr(dst, addrReg string, offset int) {
+	// REX.W + 8B + modrm(00/01/10, dst, addrReg) + [disp8/disp32]
 	c.emitRexWRB(regCodes[dst], regCodes[addrReg])
 	c.emitByte(0x8B)
 	if offset == 0 {
 		c.emitByte(c.modRM(0, regCodes[dst], regCodes[addrReg]))
-	} else {
+	} else if offset >= -128 && offset <= 127 {
 		c.emitByte(c.modRM(1, regCodes[dst], regCodes[addrReg]))
 		c.emitByte(byte(offset))
+	} else {
+		// disp32 encoding for large offsets
+		c.emitByte(c.modRM(2, regCodes[dst], regCodes[addrReg]))
+		c.emitU32(uint32(int32(offset)))
 	}
 }
 
@@ -2757,7 +2765,7 @@ func (c *Codegen) emitStructFieldHelpers() {
 			if f.Offset == 0 {
 				c.emitMovFromAddr("rax", "rdi", 0)
 			} else {
-				c.emitMovFromAddr("rax", "rdi", int8(f.Offset))
+				c.emitMovFromAddr("rax", "rdi", f.Offset)
 			}
 			c.emitPop("rbp")
 			c.emitRet()
@@ -2770,7 +2778,7 @@ func (c *Codegen) emitStructFieldHelpers() {
 			if f.Offset == 0 {
 				c.emitMovR64ToAddr("rsi", "rdi", 0)
 			} else {
-				c.emitMovR64ToAddr("rsi", "rdi", int8(f.Offset))
+				c.emitMovR64ToAddr("rsi", "rdi", f.Offset)
 			}
 			c.emitPop("rbp")
 			c.emitRet()

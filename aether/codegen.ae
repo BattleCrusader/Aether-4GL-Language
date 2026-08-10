@@ -219,12 +219,12 @@ func emitMovR64Imm64(c: codegen, reg: string, val: u64): codegen {
 func emitMovR64R64(c: codegen, dst: string, src: string): codegen {
     c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x89)
-    // 0x89: MOV r/m64, r64 — reg field = source, rm field = destination
+    // 0x89: MOV r/m64, r64 -- reg field = source, rm field = destination
     c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
     return c
 }
 
-// lea rax, [label] — RIP-relative (records label reference for linker)
+// lea rax, [label] -- RIP-relative (records label reference for linker)
 func emitLeaR64Label(c: codegen, reg: string, labelName: string): codegen {
     c = emitRexWRB(c, regCode(reg), 5)
     c = emitByte(c, 0x8D)
@@ -245,7 +245,7 @@ func emitLeaR64Label(c: codegen, reg: string, labelName: string): codegen {
 func emitAddR64R64(c: codegen, dst: string, src: string): codegen {
     c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x01)
-    // 0x01: ADD r/m64, r64 — reg field = source, rm field = destination
+    // 0x01: ADD r/m64, r64 -- reg field = source, rm field = destination
     c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
     return c
 }
@@ -263,7 +263,7 @@ func emitAddR64Imm8(c: codegen, reg: string, imm: byte): codegen {
 func emitSubR64R64(c: codegen, dst: string, src: string): codegen {
     c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x29)
-    // 0x29: SUB r/m64, r64 — reg field = source, rm field = destination
+    // 0x29: SUB r/m64, r64 -- reg field = source, rm field = destination
     c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
     return c
 }
@@ -343,7 +343,7 @@ func emitTestR64R64(c: codegen, dst: string, src: string): codegen {
 func emitCmpR64R64(c: codegen, dst: string, src: string): codegen {
     c = emitRexWRB(c, regCode(src), regCode(dst))
     c = emitByte(c, 0x39)
-    // 0x39: CMP r/m64, r64 — computes r/m64 - r64
+    // 0x39: CMP r/m64, r64 -- computes r/m64 - r64
     // reg field = r64 (source), rm field = r/m64 (destination)
     // modRM(3, regCode(src), regCode(dst)) gives "cmp dst, src" = dst - src
     c = emitByte(c, modRM(3, regCode(src), regCode(dst)))
@@ -748,13 +748,30 @@ func ctxExpect(ctx: genCtx, tokens: [Token], typ: u64, msg: string): genCtx {
     return ctx
 }
 
+// isTypeKeyword -- check if a token type is a type keyword (u64, i64, bool, etc.)
+func isTypeKeyword(typ: u64): bool {
+    return typ == TOKEN_KW_BOOL or typ == TOKEN_KW_BYTE or typ == TOKEN_KW_CHAR
+        or typ == TOKEN_KW_STRING or typ == TOKEN_KW_VOID
+        or typ == TOKEN_KW_INT or typ == TOKEN_KW_FLOAT or typ == TOKEN_KW_DOUBLE
+        or typ == TOKEN_KW_U8 or typ == TOKEN_KW_U16 or typ == TOKEN_KW_U32
+        or typ == TOKEN_KW_U64 or typ == TOKEN_KW_U128
+        or typ == TOKEN_KW_I8 or typ == TOKEN_KW_I16 or typ == TOKEN_KW_I32 or typ == TOKEN_KW_I64
+}
+
+// ctxIsTypeKeyword -- true if the current token is a type keyword (u64, i64, etc.)
+// Used alongside TOKEN_IDENT checks for type annotations after ':'.
+func ctxIsTypeKeyword(ctx: genCtx, tokens: [Token]): bool {
+    if ctxIsAtEnd(ctx, tokens) { return false }
+    return isTypeKeyword(tokens[ctx.pos].typ)
+}
+
 func generate(c: codegen, tokens: [Token]): codegen {
     var ctx: genCtx
     ctx.c = c
     ctx.pos = 0
     // Emit _start entry point FIRST so it's at text offset 0
     // (LC_UNIXTHREAD entry RIP = textVMAddr + textFileOff, which points
-    // to the start of the text section — _start must be there).
+    // to the start of the text section -- _start must be there).
     ctx.c = emitStart(ctx.c)
     // Emit all user functions
     while not ctxIsAtEnd(ctx, tokens) {
@@ -886,7 +903,12 @@ func skipConstDecl(ctx: genCtx, tokens: [Token]): genCtx {
     if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
     if ctxCheck(ctx, tokens, TOKEN_COLON) {
         ctx = ctxAdvance(ctx, tokens)
-        if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+        // Handle array types: [ElementType]
+        if ctxCheck(ctx, tokens, TOKEN_LBRACKET) {
+            ctx = ctxAdvance(ctx, tokens)
+            if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) { ctx = ctxAdvance(ctx, tokens) }
+            if ctxCheck(ctx, tokens, TOKEN_RBRACKET) { ctx = ctxAdvance(ctx, tokens) }
+        } else if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) { ctx = ctxAdvance(ctx, tokens) }
     }
     if ctxCheck(ctx, tokens, TOKEN_EQUAL) {
         ctx = ctxAdvance(ctx, tokens)
@@ -926,7 +948,15 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
                 var ptype = ""
                 if ctxCheck(ctx, tokens, TOKEN_COLON) {
                     ctx = ctxAdvance(ctx, tokens)
-                    if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+                    // Handle array types: [ElementType]
+                    if ctxCheck(ctx, tokens, TOKEN_LBRACKET) {
+                        ctx = ctxAdvance(ctx, tokens)
+                        if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) {
+                            ptype = tokens[ctx.pos].lexeme
+                            ctx = ctxAdvance(ctx, tokens)
+                        }
+                        if ctxCheck(ctx, tokens, TOKEN_RBRACKET) { ctx = ctxAdvance(ctx, tokens) }
+                    } else if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) {
                         ptype = tokens[ctx.pos].lexeme
                         ctx = ctxAdvance(ctx, tokens)
                     }
@@ -939,7 +969,12 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
     }
     if ctxCheck(ctx, tokens, TOKEN_COLON) {
         ctx = ctxAdvance(ctx, tokens)
-        if ctxCheck(ctx, tokens, TOKEN_IDENT) { ctx = ctxAdvance(ctx, tokens) }
+        // Handle array types in return type: [ElementType]
+        if ctxCheck(ctx, tokens, TOKEN_LBRACKET) {
+            ctx = ctxAdvance(ctx, tokens)
+            if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) { ctx = ctxAdvance(ctx, tokens) }
+            if ctxCheck(ctx, tokens, TOKEN_RBRACKET) { ctx = ctxAdvance(ctx, tokens) }
+        } else if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) { ctx = ctxAdvance(ctx, tokens) }
     }
     if not ctxCheck(ctx, tokens, TOKEN_LBRACE) { return ctx }
     ctx.c.funcName = funcName
@@ -954,7 +989,7 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
     // First pass: walk body to find local var/let declarations and assign slots.
     // Parameters are pre-allocated BEFORE collectLocals runs so locals continue
     // from the next free offset. We start at offset 8 (NOT 0) so the first param
-    // slot is [rbp-8] rather than [rbp-0] = [rbp] — [rbp] is the slot holding
+    // slot is [rbp-8] rather than [rbp-0] = [rbp] -- [rbp] is the slot holding
     // the caller's saved rbp and must not be clobbered by parameters.
     ctx.c.stackSize = 8
     // Register parameters as stack variables so they can be loaded by name.
@@ -1044,7 +1079,15 @@ func collectLocalsWalk(ctx: genCtx, tokens: [Token]): genCtx {
                 var vtype = ""
                 if ctxCheck(ctx, tokens, TOKEN_COLON) {
                     ctx = ctxAdvance(ctx, tokens)
-                    if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+                    // Handle array types: [ElementType]
+                    if ctxCheck(ctx, tokens, TOKEN_LBRACKET) {
+                        ctx = ctxAdvance(ctx, tokens)
+                        if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) {
+                            vtype = tokens[ctx.pos].lexeme
+                            ctx = ctxAdvance(ctx, tokens)
+                        }
+                        if ctxCheck(ctx, tokens, TOKEN_RBRACKET) { ctx = ctxAdvance(ctx, tokens) }
+                    } else if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) {
                         vtype = tokens[ctx.pos].lexeme
                         ctx = ctxAdvance(ctx, tokens)
                     }
@@ -1110,6 +1153,26 @@ func genStmt(ctx: genCtx, tokens: [Token]): genCtx {
         return ctx
     }
     if ctxCheck(ctx, tokens, TOKEN_LBRACE) { return genBlock(ctx, tokens) }
+    // Check for assignment: ident = expr
+    // Use ctxPeek to look at current token, and check if the token AFTER
+    // the next IDENT is EQUAL. We do this by advancing past IDENT and checking
+    // for EQUAL, without needing to peek at ctx.pos + 1 (which requires
+    // struct field access on ctx).
+    if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+        let name = tokens[ctx.pos].lexeme
+        // Look ahead: is the NEXT token EQUAL?
+        let nextPos = ctx.pos + 1
+        if nextPos < #tokens and tokens[nextPos].typ == TOKEN_EQUAL {
+            ctx = ctxAdvance(ctx, tokens)  // skip ident
+            ctx = ctxAdvance(ctx, tokens)  // skip =
+            ctx = genExpr(ctx, tokens)
+            if isStackVar(ctx.c, name) {
+                let offset = findStackOffset(ctx.c, name)
+                ctx.c = emitMovR64Stack(ctx.c, "rax", offset)
+            }
+            return ctx
+        }
+    }
     ctx = genExpr(ctx, tokens)
     return ctx
 }
@@ -1122,7 +1185,15 @@ func genVarDecl(ctx: genCtx, tokens: [Token]): genCtx {
         var typeName = ""
         if ctxCheck(ctx, tokens, TOKEN_COLON) {
             ctx = ctxAdvance(ctx, tokens)
-            if ctxCheck(ctx, tokens, TOKEN_IDENT) {
+            // Handle array types: [ElementType]
+            if ctxCheck(ctx, tokens, TOKEN_LBRACKET) {
+                ctx = ctxAdvance(ctx, tokens)
+                if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) {
+                    typeName = tokens[ctx.pos].lexeme
+                    ctx = ctxAdvance(ctx, tokens)
+                }
+                if ctxCheck(ctx, tokens, TOKEN_RBRACKET) { ctx = ctxAdvance(ctx, tokens) }
+            } else if ctxCheck(ctx, tokens, TOKEN_IDENT) or ctxIsTypeKeyword(ctx, tokens) {
                 typeName = tokens[ctx.pos].lexeme
                 ctx = ctxAdvance(ctx, tokens)
             }
@@ -1313,6 +1384,7 @@ func isBinaryOp(typ: u64): bool {
     if typ == TOKEN_AMPERSAND_AMPERSAND or typ == TOKEN_PIPE_PIPE { return true }
     if typ == TOKEN_AMPERSAND or typ == TOKEN_PIPE or typ == TOKEN_CARET { return true }
     if typ == TOKEN_LESS_LESS or typ == TOKEN_GREATER_GREATER { return true }
+    if typ == TOKEN_KW_AND or typ == TOKEN_KW_OR { return true }
     return false
 }
 
@@ -1487,7 +1559,7 @@ func u64ToString(val: u64): string {
 // ============================================================
 
 func emitRuntimeHelpers(c: codegen): codegen {
-    // Data section: saved argc/argv, read buffer, heap — emitted FIRST
+    // Data section: saved argc/argv, read buffer, heap -- emitted FIRST
     // (matching Go bootstrap order: emitRuntimeData is called inside emitRuntimeHelpers)
     c = emitRuntimeData(c)
     c = emitAePrint(c); c = emitAeExit(c); c = emitAeWriteFile(c)
@@ -1614,7 +1686,7 @@ func emitAeSystem(c: codegen): codegen {
     c = emitPush(c, "r14"); c = emitPush(c, "r15")
     // rbx = cmd pointer
     c = emitMovR64R64(c, "rbx", "rdi")
-    // Build argv array: [sh, -c, cmd, NULL] — 4 pointers (32 bytes) on stack
+    // Build argv array: [sh, -c, cmd, NULL] -- 4 pointers (32 bytes) on stack
     c = emitSubR64Imm8(c, "rsp", 32)
     c = emitMovR64R64(c, "r12", "rsp")
     // argv[0] = "/bin/sh"
@@ -2452,7 +2524,7 @@ func linkElf(c: codegen): codegen {
     buf[offset+3] = 0
     offset = offset + 4
 
-    // p_flags = PF_R | PF_W | PF_X (7) — RWX for runtime data writes
+    // p_flags = PF_R | PF_W | PF_X (7) -- RWX for runtime data writes
     buf[offset] = 7
     buf[offset+1] = 0
     buf[offset+2] = 0
@@ -2811,7 +2883,7 @@ func linkMachO(c: codegen): codegen {
     // fileoff=0, filesize=0, maxprot=0, initprot=0, nsects=0, flags=0
     for i in 0..32 { buf[off] = 0; off = off + 1 }
 
-    // LC_SEGMENT_64 __TEXT (152 bytes: 72 header + 80 section_64) — RWX
+    // LC_SEGMENT_64 __TEXT (152 bytes: 72 header + 80 section_64) -- RWX
     buf[off] = 0x19; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
     buf[off] = 0x98; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=152
     buf[off] = 0x5F; off = off + 1; buf[off] = 0x5F; off = off + 1; buf[off] = 0x54; off = off + 1; buf[off] = 0x45; off = off + 1  // __TE
@@ -2821,7 +2893,7 @@ func linkMachO(c: codegen): codegen {
     for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
     // vmsize = textVmsize (8 bytes)
     for i in 0..8 { buf[off] = (textVmsize >> (i * 8)) & 0xFF; off = off + 1 }
-    // fileoff = 0 (header is INSIDE __TEXT — critical for codesign)
+    // fileoff = 0 (header is INSIDE __TEXT -- critical for codesign)
     for i in 0..8 { buf[off] = 0; off = off + 1 }
     // filesize = textFilesize
     for i in 0..8 { buf[off] = (textFilesize >> (i * 8)) & 0xFF; off = off + 1 }
@@ -2871,7 +2943,7 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 1; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
     for i in 0..8 { buf[off] = 0; off = off + 1 }
 
-    // LC_DYLD_INFO_ONLY (48 bytes) — all offsets zero (no rebase/bind/export)
+    // LC_DYLD_INFO_ONLY (48 bytes) -- all offsets zero (no rebase/bind/export)
     buf[off] = 0x22; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0x80; off = off + 1  // cmd=0x80000022
     buf[off] = 0x30; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=48
     for i in 0..40 { buf[off] = 0; off = off + 1 }
@@ -2925,7 +2997,7 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 2; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // iundefsym=2
     for i in 0..52 { buf[off] = 0; off = off + 1 }
 
-    // LC_LOAD_DYLIB (56 bytes) — /usr/lib/libSystem.B.dylib
+    // LC_LOAD_DYLIB (56 bytes) -- /usr/lib/libSystem.B.dylib
     buf[off] = 0x0C; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
     buf[off] = 0x38; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=56
     buf[off] = 0x18; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // name.offset=24
@@ -2937,13 +3009,13 @@ func linkMachO(c: codegen): codegen {
     for i in 0..#dylibPath { buf[off] = dylibPath[i]; off = off + 1 }
     for i in 0..6 { buf[off] = 0; off = off + 1 }  // null + padding
 
-    // LC_FUNCTION_STARTS (16 bytes) — empty
+    // LC_FUNCTION_STARTS (16 bytes) -- empty
     buf[off] = 0x26; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
     buf[off] = 0x10; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1  // cmdsize=16
     for i in 0..4 { buf[off] = (funcStartsOff >> (i * 8)) & 0xFF; off = off + 1 }  // dataoff
     for i in 0..4 { buf[off] = 0; off = off + 1 }  // datasize=0
 
-    // LC_DATA_IN_CODE (16 bytes) — empty
+    // LC_DATA_IN_CODE (16 bytes) -- empty
     buf[off] = 0x29; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
     buf[off] = 0x10; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1; buf[off] = 0; off = off + 1
     for i in 0..4 { buf[off] = (funcStartsOff >> (i * 8)) & 0xFF; off = off + 1 }  // dataoff

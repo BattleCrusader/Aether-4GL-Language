@@ -1,4 +1,4 @@
-// semantic.ae — Type checker and name resolver for Aether
+// semantic.ae -- Type checker and name resolver for Aether
 // Written in Aether v1
 //
 // Walks the AST and checks types, tracks scopes, reports errors with line/column.
@@ -236,7 +236,7 @@ func makeSymbol(name: string, symType: string, kind: u64, isLet: bool, line: u64
     return sym
 }
 
-// analyze — walk the token stream and perform semantic analysis
+// analyze -- walk the token stream and perform semantic analysis
 func analyze(s: SemanticAnalyzer, tokens: [Token]): SemanticAnalyzer {
     var i: u64 = 0
     while i < #tokens {

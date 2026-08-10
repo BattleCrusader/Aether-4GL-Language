@@ -1,8 +1,8 @@
-// main.ae — Aether compiler entry point
+// main.ae -- Aether compiler entry point
 // Written in Aether v1
 //
 // The Go bootstrap compiler compiles this file into a native binary.
-// This binary is the Aether compiler — it reads .ae source files,
+// This binary is the Aether compiler -- it reads .ae source files,
 // tokenizes, parses, semantically analyzes, and generates x86_64 code,
 // then writes an ELF64 binary.
 
@@ -100,7 +100,7 @@ func main(): u64 {
             if sourcePath == "" {
                 sourcePath = arg
             } else {
-                // Multiple source files — concatenate
+                // Multiple source files -- concatenate
                 // For now, just use the first one
             }
         }
@@ -188,7 +188,7 @@ func main(): u64 {
         return 1
     }
 
-    // Phase 5: Link — write Mach-O binary directly (no system as/ld required).
+    // Phase 5: Link -- write Mach-O binary directly (no system as/ld required).
     // Phase 4 future: this drops the `as`+`ld` workaround that the Go bootstrap uses.
     cg = linkMachO(cg)
     if #cg.errors > 0 {

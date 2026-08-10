@@ -1,4 +1,4 @@
-// ast.ae — AST node definitions for the Aether compiler
+// ast.ae -- AST node definitions for the Aether compiler
 // Written in Aether v1
 
 // Source position

@@ -1,4 +1,4 @@
-// parser.ae — Recursive descent + Pratt parser for Aether
+// parser.ae -- Recursive descent + Pratt parser for Aether
 // Written in Aether v1
 
 import "tokenizer.ae"
@@ -83,11 +83,34 @@ func errorAt(p: Parser, tok: Token, msg: string): Parser {
     return p
 }
 
-// parseExpression — entry point for expression parsing
+// parseExpression -- entry point for expression parsing
+// Simplified token-skipping parser: consumes identifiers, literals, function calls,
+// binary expressions, member access, indexing, etc.
 func parseExpression(p: Parser): Parser {
-    // Simplified: just parse a single identifier or literal
+    // Parse prefix (identifier, literal, parenthesized expr, unary)
     if check(p, TOKEN_IDENT) {
         p = parserAdvance(p)
+        // Handle function call: ident(args)
+        while check(p, TOKEN_LPAREN) {
+            p = parserAdvance(p)
+            var parenDepth = 1
+            while parenDepth > 0 and not parserIsAtEnd(p) {
+                if check(p, TOKEN_LPAREN) { parenDepth = parenDepth + 1 }
+                if check(p, TOKEN_RPAREN) { parenDepth = parenDepth - 1 }
+                p = parserAdvance(p)
+            }
+        }
+        // Handle member access: obj.field, indexing: obj[i]
+        while check(p, TOKEN_DOT) or check(p, TOKEN_LBRACKET) {
+            if check(p, TOKEN_DOT) {
+                p = parserAdvance(p)
+                if check(p, TOKEN_IDENT) { p = parserAdvance(p) }
+            } else {
+                p = parserAdvance(p)
+                p = parseExpression(p)
+                if check(p, TOKEN_RBRACKET) { p = parserAdvance(p) }
+            }
+        }
     } else if check(p, TOKEN_INTEGER) or check(p, TOKEN_FLOAT) or check(p, TOKEN_STRING) or check(p, TOKEN_CHAR) {
         p = parserAdvance(p)
     } else if check(p, TOKEN_KW_TRUE) or check(p, TOKEN_KW_FALSE) or check(p, TOKEN_KW_NONE) {
@@ -98,13 +121,41 @@ func parseExpression(p: Parser): Parser {
         if check(p, TOKEN_RPAREN) {
             p = parserAdvance(p)
         }
+    } else if check(p, TOKEN_MINUS) or check(p, TOKEN_EXCLAIM) or check(p, TOKEN_TILDE) or check(p, TOKEN_KW_NOT) {
+        // Unary prefix operators
+        p = parserAdvance(p)
+        p = parseExpression(p)
+    } else if check(p, TOKEN_HASH) {
+        // # operator (length)
+        p = parserAdvance(p)
+        p = parseExpression(p)
+    } else if isTypeKeyword(parserPeek(p).typ) {
+        // Type keyword used as expression (e.g. i64 in cast)
+        p = parserAdvance(p)
     } else {
         p = errorAt(p, parserPeek(p), "expected expression")
+    }
+    // Consume binary operators and their RHS expressions
+    while not parserIsAtEnd(p) {
+        let t = parserPeek(p).typ
+        if t == TOKEN_PLUS or t == TOKEN_MINUS or t == TOKEN_STAR or t == TOKEN_SLASH
+            or t == TOKEN_PERCENT or t == TOKEN_AMPERSAND or t == TOKEN_PIPE or t == TOKEN_CARET
+            or t == TOKEN_LESS or t == TOKEN_GREATER or t == TOKEN_EQUAL_EQUAL or t == TOKEN_EXCLAIM_EQUAL
+            or t == TOKEN_LESS_EQUAL or t == TOKEN_GREATER_EQUAL
+            or t == TOKEN_AMPERSAND_AMPERSAND or t == TOKEN_PIPE_PIPE
+            or t == TOKEN_LESS_LESS or t == TOKEN_GREATER_GREATER
+            or t == TOKEN_KW_AND or t == TOKEN_KW_OR or t == TOKEN_KW_AS
+            or t == TOKEN_DOT_DOT {
+            p = parserAdvance(p)
+            p = parseExpression(p)
+        } else {
+            break
+        }
     }
     return p
 }
 
-// parseStatement — parse a single statement
+// parseStatement -- parse a single statement
 func parseStatement(p: Parser): Parser {
     if check(p, TOKEN_KW_LET) or check(p, TOKEN_KW_VAR) {
         p = parserAdvance(p)
@@ -272,7 +323,7 @@ func isTypeKeyword(typ: u64): bool {
         or typ == TOKEN_KW_I8 or typ == TOKEN_KW_I16 or typ == TOKEN_KW_I32 or typ == TOKEN_KW_I64
 }
 
-// parseFuncDecl — parse a function declaration
+// parseFuncDecl -- parse a function declaration
 func parseFuncDecl(p: Parser): Parser {
     p = parserAdvance(p)  // consume 'func'
     if check(p, TOKEN_IDENT) {
@@ -286,11 +337,26 @@ func parseFuncDecl(p: Parser): Parser {
             }
             if check(p, TOKEN_COLON) {
                 p = parserAdvance(p)
-                if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                // Handle array types: [ElementType]
+                if check(p, TOKEN_LBRACKET) {
+                    p = parserAdvance(p)
+                    if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                        p = parserAdvance(p)
+                    }
+                    if check(p, TOKEN_RBRACKET) {
+                        p = parserAdvance(p)
+                    }
+                } else if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
                     p = parserAdvance(p)
                 }
             }
             if check(p, TOKEN_COMMA) {
+                p = parserAdvance(p)
+            }
+            // Advance past any unrecognized token to avoid infinite loop
+            if not check(p, TOKEN_RPAREN) and not check(p, TOKEN_IDENT)
+                and not check(p, TOKEN_COLON) and not check(p, TOKEN_COMMA)
+                and not parserIsAtEnd(p) {
                 p = parserAdvance(p)
             }
         }
@@ -300,7 +366,16 @@ func parseFuncDecl(p: Parser): Parser {
     }
     if check(p, TOKEN_COLON) {
         p = parserAdvance(p)
-        if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+        // Handle array types in return type: [ElementType]
+        if check(p, TOKEN_LBRACKET) {
+            p = parserAdvance(p)
+            if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                p = parserAdvance(p)
+            }
+            if check(p, TOKEN_RBRACKET) {
+                p = parserAdvance(p)
+            }
+        } else if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
             p = parserAdvance(p)
         }
     }
@@ -310,7 +385,7 @@ func parseFuncDecl(p: Parser): Parser {
     return p
 }
 
-// parseDecl — parse a top-level declaration
+// parseDecl -- parse a top-level declaration
 func parseDecl(p: Parser): Parser {
     // Collect attributes
     while check(p, TOKEN_AT) {
@@ -335,11 +410,26 @@ func parseDecl(p: Parser): Parser {
                 }
                 if check(p, TOKEN_COLON) {
                     p = parserAdvance(p)
-                    if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                    // Handle array types: [ElementType]
+                    if check(p, TOKEN_LBRACKET) {
+                        p = parserAdvance(p)
+                        if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
+                            p = parserAdvance(p)
+                        }
+                        if check(p, TOKEN_RBRACKET) {
+                            p = parserAdvance(p)
+                        }
+                    } else if check(p, TOKEN_IDENT) or isTypeKeyword(parserPeek(p).typ) {
                         p = parserAdvance(p)
                     }
                 }
                 if check(p, TOKEN_COMMA) {
+                    p = parserAdvance(p)
+                }
+                // Advance past unrecognized tokens to avoid infinite loop
+                if not check(p, TOKEN_RBRACE) and not check(p, TOKEN_IDENT)
+                    and not check(p, TOKEN_COLON) and not check(p, TOKEN_COMMA)
+                    and not parserIsAtEnd(p) {
                     p = parserAdvance(p)
                 }
             }
@@ -416,7 +506,7 @@ func parseDecl(p: Parser): Parser {
     return p
 }
 
-// parse — parse a complete program
+// parse -- parse a complete program
 func parse(p: Parser): Parser {
     while not parserIsAtEnd(p) {
         p = parseDecl(p)
