@@ -837,9 +837,17 @@ func (c *Codegen) emitBinary(be *BinaryExpr) {
 	case "*":
 		c.emitMulR64("rbx")
 	case "/":
+		// rax = right, rbx = left; div rbx does rax = rax/rbx = right/left.
+		// Swap: mov rax->rcx, rbx->rax, rcx->rbx, then div rbx.
+		c.emitMovR64R64("rcx", "rax")
+		c.emitMovR64R64("rax", "rbx")
+		c.emitMovR64R64("rbx", "rcx")
 		c.emitDivR64("rbx")
 	case "%":
-		// div puts remainder in rdx
+		// Same swap as division, then rax = rdx (remainder).
+		c.emitMovR64R64("rcx", "rax")
+		c.emitMovR64R64("rax", "rbx")
+		c.emitMovR64R64("rbx", "rcx")
 		c.emitDivR64("rbx")
 		c.emitMovR64R64("rax", "rdx")
 	case "==":
@@ -901,9 +909,16 @@ func (c *Codegen) emitBinary(be *BinaryExpr) {
 	case "^":
 		c.emitXorR64R64("rax", "rbx")
 	case "<<":
+		// Shift amount is in rax (right operand); rbx = left operand.
+		// shl/shr use CL as the count, so move rax -> rcx first.
+		c.emitMovR64R64("rcx", "rax")
 		c.emitShlR64("rbx")
+		c.emitMovR64R64("rax", "rbx")
 	case ">>":
+		// Same: shift amount in rax -> rcx, value in rbx.
+		c.emitMovR64R64("rcx", "rax")
 		c.emitShrR64("rbx")
+		c.emitMovR64R64("rax", "rbx")
 	}
 }
 
@@ -1744,6 +1759,12 @@ func (c *Codegen) emitRuntimeHelpers() {
 	c.emitAeGetArg()
 	c.emitAeArgc()
 
+	// Process/syscall helpers for shelling out to as/ld (self-hosting)
+	c.emitAeFork()
+	c.emitAeExecve()
+	c.emitAeWait4()
+	c.emitAePipe()
+
 	// Additional runtime helpers needed by the Aether compiler source
 	c.emitAeLen()
 	c.emitAeSlice()
@@ -1844,6 +1865,56 @@ func (c *Codegen) emitAeExit() {
 	c.emitMovR64R64("rbp", "rsp")
 	c.emitMovR64Imm64("rax", 0x2000001) // exit syscall
 	// rdi already has exit code
+	c.emitSyscall()
+	c.emitPop("rbp")
+	c.emitRet()
+}
+
+// __ae_fork: fork() syscall (macOS x86_64: 0x2000002)
+// No args. Returns child PID in parent, 0 in child, -1 on error.
+func (c *Codegen) emitAeFork() {
+	c.label("__ae_fork")
+	c.emitPush("rbp")
+	c.emitMovR64R64("rbp", "rsp")
+	c.emitMovR64Imm64("rax", 0x2000002) // fork syscall
+	c.emitSyscall()
+	c.emitPop("rbp")
+	c.emitRet()
+}
+
+// __ae_execve: execve(path, argv, envp) syscall (macOS x86_64: 0x200003B)
+// rdi = path pointer, rsi = argv array pointer, rdx = envp pointer.
+// Never returns on success; returns -1 on error.
+func (c *Codegen) emitAeExecve() {
+	c.label("__ae_execve")
+	c.emitPush("rbp")
+	c.emitMovR64R64("rbp", "rsp")
+	c.emitMovR64Imm64("rax", 0x200003B) // execve syscall
+	c.emitSyscall()
+	c.emitPop("rbp")
+	c.emitRet()
+}
+
+// __ae_wait4: wait4(pid, status, options, rusage) syscall (macOS x86_64: 0x2000007)
+// rdi = pid, rsi = status pointer, rdx = options, rcx = rusage pointer.
+// Returns child PID.
+func (c *Codegen) emitAeWait4() {
+	c.label("__ae_wait4")
+	c.emitPush("rbp")
+	c.emitMovR64R64("rbp", "rsp")
+	c.emitMovR64Imm64("rax", 0x2000007) // wait4 syscall
+	c.emitSyscall()
+	c.emitPop("rbp")
+	c.emitRet()
+}
+
+// __ae_pipe: pipe(fds) syscall (macOS x86_64: 0x200002A)
+// rdi = pointer to int[2]. Returns 0 on success, -1 on error.
+func (c *Codegen) emitAePipe() {
+	c.label("__ae_pipe")
+	c.emitPush("rbp")
+	c.emitMovR64R64("rbp", "rsp")
+	c.emitMovR64Imm64("rax", 0x200002A) // pipe syscall
 	c.emitSyscall()
 	c.emitPop("rbp")
 	c.emitRet()

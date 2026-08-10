@@ -752,16 +752,13 @@ func generate(c: codegen, tokens: [Token]): codegen {
     var ctx: genCtx
     ctx.c = c
     ctx.pos = 0
-    // Emit string data first so rodata size is known for labelData
+    // Emit _start entry point FIRST so it's at text offset 0
+    // (LC_UNIXTHREAD entry RIP = textVMAddr + textFileOff, which points
+    // to the start of the text section — _start must be there).
     __ae_print("G1\n")
-    ctx.c = emitStringData(ctx.c)
-    __ae_print("G2\n")
-    // Emit runtime data (uses labelData which needs rodata size)
-    ctx.c = emitRuntimeData(ctx.c)
-    __ae_print("G3\n")
-    // Emit _start entry point
     ctx.c = emitStart(ctx.c)
-    __ae_print("G4\n")
+    __ae_print("G2\n")
+    // Emit all user functions
     while not ctxIsAtEnd(ctx, tokens) {
         while ctxCheck(ctx, tokens, TOKEN_AT) {
             ctx = ctxAdvance(ctx, tokens)
@@ -774,7 +771,11 @@ func generate(c: codegen, tokens: [Token]): codegen {
         elif ctxCheck(ctx, tokens, TOKEN_KW_CONST) { ctx = skipConstDecl(ctx, tokens) }
         else { ctx = ctxAdvance(ctx, tokens) }
     }
-    // Emit runtime helper functions
+    // Emit string data (so rodata size is known for labelData)
+    __ae_print("G3\n")
+    ctx.c = emitStringData(ctx.c)
+    __ae_print("G4\n")
+    // Emit runtime helpers (includes emitRuntimeData inside, matching Go bootstrap order)
     ctx.c = emitRuntimeHelpers(ctx.c)
 
     return ctx.c
@@ -1355,8 +1356,14 @@ func genBinaryOp(ctx: genCtx, tokens: [Token]): genCtx {
     }
     if op == TOKEN_PLUS { ctx.c = emitAddR64R64(ctx.c, "rax", "rbx") }
     elif op == TOKEN_MINUS { ctx.c = emitSubR64R64(ctx.c, "rbx", "rax"); ctx.c = emitMovR64R64(ctx.c, "rax", "rbx") }
-    elif op == TOKEN_STAR { ctx.c = emitMulR64(ctx.c, "rax") }
-    elif op == TOKEN_SLASH { ctx.c = emitMovR64R64(ctx.c, "rax", "rbx"); ctx.c = emitDivR64(ctx.c, "rax") }
+    elif op == TOKEN_STAR { ctx.c = emitMulR64(ctx.c, "rbx") }
+    elif op == TOKEN_SLASH {
+        // rax=right, rbx=left; swap via rcx then div rbx -> rax = left/right
+        ctx.c = emitMovR64R64(ctx.c, "rcx", "rax")
+        ctx.c = emitMovR64R64(ctx.c, "rax", "rbx")
+        ctx.c = emitMovR64R64(ctx.c, "rbx", "rcx")
+        ctx.c = emitDivR64(ctx.c, "rbx")
+    }
     elif op == TOKEN_EQUAL_EQUAL { ctx.c = emitCmpR64R64(ctx.c, "rbx", "rax"); ctx.c = emitSete(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al") }
     elif op == TOKEN_EXCLAIM_EQUAL { ctx.c = emitCmpR64R64(ctx.c, "rbx", "rax"); ctx.c = emitSetne(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al") }
     elif op == TOKEN_LESS { ctx.c = emitCmpR64R64(ctx.c, "rbx", "rax"); ctx.c = emitSetl(ctx.c, "al"); ctx.c = emitMovzxR64R8(ctx.c, "rax", "al") }
@@ -1366,6 +1373,18 @@ func genBinaryOp(ctx: genCtx, tokens: [Token]): genCtx {
     elif op == TOKEN_AMPERSAND { ctx.c = emitAndR64R64(ctx.c, "rax", "rbx") }
     elif op == TOKEN_PIPE { ctx.c = emitOrR64R64(ctx.c, "rax", "rbx") }
     elif op == TOKEN_CARET { ctx.c = emitXorR64R64(ctx.c, "rax", "rbx") }
+    elif op == TOKEN_LESS_LESS {
+        // Shift amount in rax -> rcx; value in rbx. shl rbx, cl.
+        ctx.c = emitMovR64R64(ctx.c, "rcx", "rax")
+        ctx.c = emitShlR64(ctx.c, "rbx")
+        ctx.c = emitMovR64R64(ctx.c, "rax", "rbx")
+    }
+    elif op == TOKEN_GREATER_GREATER {
+        // Shift amount in rax -> rcx; value in rbx. shr rbx, cl.
+        ctx.c = emitMovR64R64(ctx.c, "rcx", "rax")
+        ctx.c = emitShrR64(ctx.c, "rbx")
+        ctx.c = emitMovR64R64(ctx.c, "rax", "rbx")
+    }
     else { ctx.c = emitMovR64R64(ctx.c, "rax", "rbx") }
     return ctx
 }
@@ -1472,8 +1491,12 @@ func u64ToString(val: u64): string {
 // ============================================================
 
 func emitRuntimeHelpers(c: codegen): codegen {
+    // Data section: saved argc/argv, read buffer, heap — emitted FIRST
+    // (matching Go bootstrap order: emitRuntimeData is called inside emitRuntimeHelpers)
+    c = emitRuntimeData(c)
     c = emitAePrint(c); c = emitAeExit(c); c = emitAeWriteFile(c)
     c = emitAeReadFile(c); c = emitAeGetArg(c); c = emitAeArgc(c)
+    c = emitAeFork(c); c = emitAeExecve(c); c = emitAeWait4(c); c = emitAePipe(c)
     c = emitAeLen(c); c = emitAeIndex(c); c = emitAeIndexSet(c)
     c = emitAeSlice(c)
     c = emitAeAlloc(c)
@@ -1531,6 +1554,52 @@ func emitAeExit(c: codegen): codegen {
     c = label(c, "__ae_exit")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
     c = emitMovR64Imm64(c, "rax", 0x2000001)
+    c = emitSyscall(c)
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeFork(c: codegen): codegen {
+    // __ae_fork: fork() syscall (macOS x86_64: 0x2000002)
+    // No args. Returns child PID in parent, 0 in child, -1 on error.
+    c = label(c, "__ae_fork")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitMovR64Imm64(c, "rax", 0x2000002)
+    c = emitSyscall(c)
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeExecve(c: codegen): codegen {
+    // __ae_execve: execve(path, argv, envp) syscall (macOS x86_64: 0x200003B)
+    // rdi = path pointer, rsi = argv array pointer, rdx = envp pointer.
+    // Never returns on success; returns -1 on error.
+    c = label(c, "__ae_execve")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitMovR64Imm64(c, "rax", 0x200003B)
+    c = emitSyscall(c)
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAeWait4(c: codegen): codegen {
+    // __ae_wait4: wait4(pid, status, options, rusage) syscall (macOS x86_64: 0x2000007)
+    // rdi = pid, rsi = status pointer, rdx = options, rcx = rusage pointer.
+    // Returns child PID.
+    c = label(c, "__ae_wait4")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitMovR64Imm64(c, "rax", 0x2000007)
+    c = emitSyscall(c)
+    c = emitPop(c, "rbp"); c = emitRet(c)
+    return c
+}
+
+func emitAePipe(c: codegen): codegen {
+    // __ae_pipe: pipe(fds) syscall (macOS x86_64: 0x200002A)
+    // rdi = pointer to int[2]. Returns 0 on success, -1 on error.
+    c = label(c, "__ae_pipe")
+    c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
+    c = emitMovR64Imm64(c, "rax", 0x200002A)
     c = emitSyscall(c)
     c = emitPop(c, "rbp"); c = emitRet(c)
     return c
@@ -2598,31 +2667,43 @@ func linkMachO(c: codegen): codegen {
     let textSize = #textSection
     let dataSize = #c.data
 
+    // Page-align text vmsize (Mach-O requires segment vmsize to be page-aligned).
+    // 0x1000 = 4096. alignUp(n) = ((n + 0xFFF) / 0x1000) * 0x1000
+    let textVmsize = ((textSize + 0xFFF) / 0x1000) * 0x1000
+
     // Mach-O header + load commands.
     // Layout: mach_header(32) + LC_SEGMENT_64 __PAGEZERO(72)
     //       + LC_SEGMENT_64 __TEXT(152, 1 section_64=80)
     //       + LC_SEGMENT_64 __DATA(152, 1 section_64=80)
-    //       + LC_UNIXTHREAD(184, x86_THREAD_STATE64)
+    //       + LC_SEGMENT_64 __LINKEDIT(72, 0 sections)
     //       + LC_DYLD_INFO_ONLY(48)
+    //       + LC_LOAD_DYLINKER(28)
+    //       + LC_UUID(24)
     //       + LC_BUILD_VERSION(32, macOS 14.0 + ld 1234.0)
+    //       + LC_MAIN(24)
+    //       + LC_CODE_SIGNATURE(16)
     // section_64 is 80 bytes (16+16+8+8+4*7 = 76, but 16+16+8+8+4+4+4+4+4+4+4 = 80).
     // LC_SEGMENT_64 header is 72 bytes; + 1 section = 152. (Common pitfall: 144 is wrong.)
-    // Total cmds: 640 bytes. Total header+cmds: 672 bytes.
+    // Total cmds: 620 bytes. Total header+cmds: 652 bytes.
     let headerSize: u64 = 32
     let pagezeroSize: u64 = 72
     let textSegSize: u64 = 152
     let dataSegSize: u64 = 152
-    let threadSize: u64 = 184
+    let linkeditSegSize: u64 = 72
     let dyldSize: u64 = 48
+    let loadDylinkerSize: u64 = 28
+    let uuidSize: u64 = 24
     let buildVersionSize: u64 = 32
-    let loadCommandsSize = pagezeroSize + textSegSize + dataSegSize + threadSize + dyldSize + buildVersionSize
+    let mainSize: u64 = 24
+    let codeSigSize: u64 = 16
+    let loadCommandsSize = pagezeroSize + textSegSize + dataSegSize + linkeditSegSize + dyldSize + loadDylinkerSize + uuidSize + buildVersionSize + mainSize + codeSigSize
     let totalHeaderSize = headerSize + loadCommandsSize
 
     let textFileOff: u64 = totalHeaderSize
     let dataFileOff = textFileOff + textSize
 
     let textVMAddr: u64 = 0x100000000
-    let dataVMAddr = textVMAddr + textSize
+    let dataVMAddr = textVMAddr + textVmsize
 
     // Re-patch label references using virtual addresses
     // refVMAddr = textVMAddr + refOffset (all refs are in __TEXT)
@@ -2650,10 +2731,15 @@ func linkMachO(c: codegen): codegen {
         }
     }
 
-    let totalFileSize = totalHeaderSize + textSize + dataSize
+    let linkeditVMAddr = dataVMAddr + dataSize
+    let linkeditFileOff = dataFileOff + dataSize
+    let linkeditVmsize: u64 = 0x1000
+    let linkeditFilesize: u64 = linkeditVmsize  // reserve space for codesign
+    let totalFileSize = totalHeaderSize + textSize + dataSize + linkeditVmsize
+    let writeFileSize = totalHeaderSize + textSize + dataSize + linkeditVmsize
     __ae_print("LM1\n")
     var buf: [byte] = []
-    for i in 0..totalFileSize { buf = push(buf, 0) }
+    for i in 0..writeFileSize { buf = push(buf, 0) }
     __ae_print("LM2\n")
 
     var off: u64 = 0
@@ -2676,7 +2762,7 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x06; off = off + 1  // ncmds = 6 (PAGEZERO, TEXT, DATA, UNIXTHREAD, DYLD_INFO, BUILD_VERSION)
+    buf[off] = 0x0A; off = off + 1  // ncmds = 10 (PAGEZERO, TEXT, DATA, LINKEDIT, DYLD_INFO, DYLINKER, UUID, BUILD_VERSION, MAIN, CODE_SIG)
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -2710,15 +2796,17 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x52; off = off + 1
     buf[off] = 0x4F; off = off + 1
     for i in 0..6 { buf[off] = 0; off = off + 1 }
+    // vmaddr = 0 (8 bytes)
     for i in 0..8 { buf[off] = 0; off = off + 1 }
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
-    buf[off] = 0x00; off = off + 1
+    // vmsize = 0x100000000 (4GB) — little-endian: 00 00 00 00 01 00 00 00
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x01; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
     for i in 0..8 { buf[off] = 0; off = off + 1 }
     for i in 0..8 { buf[off] = 0; off = off + 1 }
     for i in 0..4 { buf[off] = 0; off = off + 1 }
@@ -2744,18 +2832,18 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x54; off = off + 1
     for i in 0..10 { buf[off] = 0; off = off + 1 }
     for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = (textVmsize >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
-    buf[off] = 0x05; off = off + 1  // maxprot = RX
+    buf[off] = 0x07; off = off + 1  // maxprot = RWX (needed for bump allocator)
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x05; off = off + 1  // initprot = RX
+    buf[off] = 0x07; off = off + 1  // initprot = RWX
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x01; off = off + 1
+    buf[off] = 0x01; off = off + 1  // nsects = 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
@@ -2778,7 +2866,9 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x58; off = off + 1
     buf[off] = 0x54; off = off + 1
     for i in 0..10 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    // Section __text: addr = textVMAddr + textFileOff (header at vmaddr, text at fileoff)
+    let textSectAddr = textVMAddr + textFileOff
+    for i in 0..8 { buf[off] = (textSectAddr >> (i * 8)) & 0xFF; off = off + 1 }
     for i in 0..8 { buf[off] = (textSize >> (i * 8)) & 0xFF; off = off + 1 }
     // offset (uint32, 4 bytes — was incorrectly u64 in prior version)
     for i in 0..4 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
@@ -2867,45 +2957,53 @@ func linkMachO(c: codegen): codegen {
     // Pad to 80-byte section_64 (alignment to 8 bytes per loader.h)
     for i in 0..4 { buf[off] = 0; off = off + 1 }
 
-    // LC_UNIXTHREAD (184 bytes)
-    __ae_print("LMd\n")
-    buf[off] = 0x05; off = off + 1
+    // LC_SEGMENT_64 __LINKEDIT (72 bytes, 0 sections) — required for code signing.
+    // codesign needs this segment to store the signature blob.
+    buf[off] = 0x19; off = off + 1  // cmd = LC_SEGMENT_64
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0xB8; off = off + 1
+    buf[off] = 0x48; off = off + 1  // cmdsize = 72
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x04; off = off + 1
+    // segname __LINKEDIT (16 bytes)
+    buf[off] = 0x5F; off = off + 1  // _
+    buf[off] = 0x5F; off = off + 1  // _
+    buf[off] = 0x4C; off = off + 1  // L
+    buf[off] = 0x49; off = off + 1  // I
+    buf[off] = 0x4E; off = off + 1  // N
+    buf[off] = 0x4B; off = off + 1  // K
+    buf[off] = 0x45; off = off + 1  // E
+    buf[off] = 0x44; off = off + 1  // D
+    buf[off] = 0x49; off = off + 1  // I
+    buf[off] = 0x54; off = off + 1  // T
+    for i in 0..6 { buf[off] = 0; off = off + 1 }
+    // vmaddr (8 bytes)
+    for i in 0..8 { buf[off] = (linkeditVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
+    // vmsize (8 bytes)
+    for i in 0..8 { buf[off] = (linkeditVmsize >> (i * 8)) & 0xFF; off = off + 1 }
+    // fileoff (8 bytes)
+    for i in 0..8 { buf[off] = (linkeditFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    // filesize (8 bytes)
+    for i in 0..8 { buf[off] = (linkeditFilesize >> (i * 8)) & 0xFF; off = off + 1 }
+    // maxprot = R (0x01)
+    buf[off] = 0x01; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    buf[off] = 0x2A; off = off + 1
+    // initprot = R (0x01)
+    buf[off] = 0x01; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = (textVMAddr >> (i * 8)) & 0xFF; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
-    for i in 0..8 { buf[off] = 0; off = off + 1 }
+    // nsects = 0
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    // flags (4 bytes)
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
 
     // LC_DYLD_INFO_ONLY (48 bytes) — cmd = LC_DYLD_INFO_ONLY (0x22 | LC_REQ_DYLD = 0x80000022)
     // Was 0x1B (incorrect); should be 0x22. codesign rejects the wrong cmd.
@@ -2919,6 +3017,48 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     for i in 0..40 { buf[off] = 0; off = off + 1 }
+
+    // LC_LOAD_DYLINKER (28 bytes)
+    buf[off] = 0x0F; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x1C; off = off + 1  // cmdsize = 28
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x0C; off = off + 1  // name.offset = 12
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    // path "/usr/lib/dyld" + null + 2 pad = 16 bytes
+    buf[off] = 0x2F; off = off + 1  // /
+    buf[off] = 0x75; off = off + 1  // u
+    buf[off] = 0x73; off = off + 1  // s
+    buf[off] = 0x72; off = off + 1  // r
+    buf[off] = 0x2F; off = off + 1  // /
+    buf[off] = 0x6C; off = off + 1  // l
+    buf[off] = 0x69; off = off + 1  // i
+    buf[off] = 0x62; off = off + 1  // b
+    buf[off] = 0x2F; off = off + 1  // /
+    buf[off] = 0x64; off = off + 1  // d
+    buf[off] = 0x79; off = off + 1  // y
+    buf[off] = 0x6C; off = off + 1  // l
+    buf[off] = 0x64; off = off + 1  // d
+    buf[off] = 0x00; off = off + 1  // null
+    buf[off] = 0x00; off = off + 1  // pad
+    buf[off] = 0x00; off = off + 1  // pad
+
+    // LC_UUID (24 bytes)
+    buf[off] = 0x1B; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x18; off = off + 1  // cmdsize = 24
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..16 { buf[off] = 0; off = off + 1 }
 
     // LC_BUILD_VERSION (32 bytes) — required on macOS 10.14+ to launch.
     // cmd = 0x32 (50), cmdsize = 32, platform = 1 (MACOS), minos = 14.0, sdk = 14.0,
@@ -2955,6 +3095,31 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x04; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
+
+
+    // LC_MAIN (24 bytes)
+    buf[off] = 0x28; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x80; off = off + 1  // cmd = 0x80000028
+    buf[off] = 0x18; off = off + 1  // cmdsize = 24
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..8 { buf[off] = (textFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..8 { buf[off] = 0; off = off + 1 }
+
+    // LC_CODE_SIGNATURE (16 bytes)
+    buf[off] = 0x1D; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x10; off = off + 1  // cmdsize = 16
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    buf[off] = 0x00; off = off + 1
+    for i in 0..4 { buf[off] = (linkeditFileOff >> (i * 8)) & 0xFF; off = off + 1 }
+    for i in 0..4 { buf[off] = 0; off = off + 1 }
 
     // Write section data
     __ae_print("LMf\n")

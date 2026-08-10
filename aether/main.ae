@@ -44,6 +44,26 @@ func __ae_argc(): u64;
 @extern
 func __ae_print(s: string);
 
+// __ae_fork is a runtime helper provided by the Go bootstrap
+// It calls fork() and returns child PID in parent, 0 in child, -1 on error
+@extern
+func __ae_fork(): i64;
+
+// __ae_execve is a runtime helper provided by the Go bootstrap
+// It calls execve(path, argv, envp). Never returns on success.
+@extern
+func __ae_execve(path: string, argv: [string], envp: [string]): i64;
+
+// __ae_wait4 is a runtime helper provided by the Go bootstrap
+// It calls wait4(pid, status, options, rusage) and returns child PID.
+@extern
+func __ae_wait4(pid: i64, status: [byte], options: u64, rusage: u64): i64;
+
+// __ae_pipe is a runtime helper provided by the Go bootstrap
+// It calls pipe(fds) and returns 0 on success, -1 on error.
+@extern
+func __ae_pipe(fds: [u64]): i64;
+
 // Entry point for the Aether compiler
 @entry
 func main(): u64 {
