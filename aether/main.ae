@@ -44,6 +44,32 @@ func __ae_argc(): u64;
 @extern
 func __ae_print(s: string);
 
+// __ae_fork is a runtime helper provided by the Go bootstrap
+// It calls fork() and returns child PID in parent, 0 in child, -1 on error
+@extern
+func __ae_fork(): i64;
+
+// __ae_execve is a runtime helper provided by the Go bootstrap
+// It calls execve(path, argv, envp). Never returns on success.
+@extern
+func __ae_execve(path: string, argv: [string], envp: [string]): i64;
+
+// __ae_wait4 is a runtime helper provided by the Go bootstrap
+// It calls wait4(pid, status, options, rusage) and returns child PID.
+@extern
+func __ae_wait4(pid: i64, status: [byte], options: u64, rusage: u64): i64;
+
+// __ae_pipe is a runtime helper provided by the Go bootstrap
+// It calls pipe(fds) and returns 0 on success, -1 on error.
+@extern
+func __ae_pipe(fds: [u64]): i64;
+
+// __ae_system is a runtime helper provided by the Go bootstrap
+// It runs a shell command via fork + execve("/bin/sh", ["sh","-c",cmd]) + wait4.
+// Returns the child's exit status, or -1 on fork error.
+@extern
+func __ae_system(cmd: string): i64;
+
 // Entry point for the Aether compiler
 @entry
 func main(): u64 {
@@ -115,11 +141,8 @@ func main(): u64 {
     }
 
     // Phase 1: Tokenization
-    __ae_print("P1\n")
     var lexer = newLexer(source)
-    __ae_print("NL\n")
     lexer = tokenize(lexer)
-    __ae_print("TZ\n")
     if lexer.hadError {
         __ae_print("error: tokenization failed: ")
         __ae_print(lexer.errorMsg)
@@ -129,7 +152,6 @@ func main(): u64 {
     }
 
     // Phase 2: Parsing
-    __ae_print("P2\n")
     var parser = newParser(lexer.tokens)
     parser = parse(parser)
     if #parser.errors > 0 {
@@ -143,7 +165,6 @@ func main(): u64 {
     }
 
     // Phase 3: Semantic Analysis
-    __ae_print("P3\n")
     var sem = newSemanticAnalyzer()
     sem = analyze(sem, parser.tokens)
     if #sem.errors > 0 {
@@ -155,11 +176,8 @@ func main(): u64 {
     }
 
     // Phase 4: Code Generation
-    __ae_print("P4\n")
     var cg = newCodegen()
-    __ae_print("P4a\n")
     cg = generate(cg, lexer.tokens)
-    __ae_print("P4b\n")
     if #cg.errors > 0 {
         for k in 0..#cg.errors {
             __ae_print("error: ")
@@ -171,11 +189,8 @@ func main(): u64 {
     }
 
     // Phase 5: Link — write Mach-O binary directly (no system as/ld required).
-    __ae_print("P5\n")
     // Phase 4 future: this drops the `as`+`ld` workaround that the Go bootstrap uses.
-    __ae_print("M0\n")
     cg = linkMachO(cg)
-    __ae_print("M1\n")
     if #cg.errors > 0 {
         for k in 0..#cg.errors {
             __ae_print("error: ")
