@@ -3018,8 +3018,10 @@ func linkMachO(c: codegen): codegen {
     buf[off] = 0x00; off = off + 1
     for i in 0..40 { buf[off] = 0; off = off + 1 }
 
-    // LC_LOAD_DYLINKER (28 bytes)
-    buf[off] = 0x0F; off = off + 1
+    // LC_LOAD_DYLINKER (28 bytes) — cmd = 0x0E (14), NOT 0x0F (LC_ID_DYLINKER).
+    // LC_LOAD_DYLINKER tells dyld to load /usr/lib/dyld; LC_ID_DYLINKER is for
+    // identifying the dylinker binary itself and is wrong for an executable.
+    buf[off] = 0x0E; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
     buf[off] = 0x00; off = off + 1
