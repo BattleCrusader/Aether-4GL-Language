@@ -129,54 +129,14 @@ func main(): u64 {
         }
     }
 
-    // Read and concatenate all source files
-    var source = ""
-    var k: u64 = 1
-    var seenFirst = false
-    while k < argc {
-        let arg = __ae_get_arg(k)
-        if arg == "-o" {
-            k = k + 2
-        } else {
-            if not seenFirst {
-                seenFirst = true
-                k = k + 1
-            } else {
-                let content = __ae_read_file(arg)
-                if content == "" {
-                    __ae_print("error: could not read source file: ")
-                    __ae_print(arg)
-                    __ae_print("\n")
-                    __ae_exit(1)
-                    return 1
-                }
-                source = source + content + "\n"
-                k = k + 1
-            }
-        }
-    }
-
-    // If only one source file, read it directly (avoids concat overhead)
+    // Read the source file
+    let source = __ae_read_file(sourcePath)
     if source == "" {
-        source = __ae_read_file(sourcePath)
-        if source == "" {
-            __ae_print("error: could not read source file: ")
-            __ae_print(sourcePath)
-            __ae_print("\n")
-            __ae_exit(1)
-            return 1
-        }
-    } else {
-        // Prepend first file content to the concatenated rest
-        let firstContent = __ae_read_file(sourcePath)
-        if firstContent == "" {
-            __ae_print("error: could not read source file: ")
-            __ae_print(sourcePath)
-            __ae_print("\n")
-            __ae_exit(1)
-            return 1
-        }
-        source = firstContent + "\n" + source
+        __ae_print("error: could not read source file: ")
+        __ae_print(sourcePath)
+        __ae_print("\n")
+        __ae_exit(1)
+        return 1
     }
 
     // Phase 1: Tokenization
