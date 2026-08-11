@@ -1,4 +1,4 @@
-// lexer.ae — Lexer for the Aether compiler
+// lexer.ae -- Lexer for the Aether compiler
 // Tokenizes Aether source into a stream of tokens
 // Written in Aether v1
 
@@ -338,7 +338,8 @@ func scanToken(l: Lexer): Lexer {
         case 44 -> l = addToken(l, TOKEN_COMMA)  // ,
         case 59 -> l = addToken(l, TOKEN_SEMICOLON)  // ;
         case 58 -> {  // :
-            if lexerMatch(l, 58).current > l.current {  // ::
+            if lexerPeek(l) == 58 {  // ::
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_COLON_COLON)
             } else {
                 l = addToken(l, TOKEN_COLON)
@@ -348,10 +349,13 @@ func scanToken(l: Lexer): Lexer {
         case 64 -> l = addToken(l, TOKEN_AT)  // @
         case 35 -> l = addToken(l, TOKEN_HASH)  // #
         case 46 -> {  // .
-            if lexerMatch(l, 46).current > l.current {  // ..
-                if lexerMatch(l, 46).current > l.current {  // ...
+            if lexerPeek(l) == 46 {  // ..
+                l = lexerAdvance(l)  // consume second .
+                if lexerPeek(l) == 46 {  // ...
+                    l = lexerAdvance(l)
                     l = addToken(l, TOKEN_DOT_DOT_DOT)
-                } else if lexerMatch(l, 61).current > l.current {  // ..=
+                } else if lexerPeek(l) == 61 {  // ..=
+                    l = lexerAdvance(l)
                     l = addToken(l, TOKEN_DOT_DOT_EQUAL)
                 } else {
                     l = addToken(l, TOKEN_DOT_DOT)
@@ -361,38 +365,44 @@ func scanToken(l: Lexer): Lexer {
             }
         }
         case 43 -> {  // +
-            if lexerMatch(l, 43).current > l.current {  // ++
+            if lexerPeek(l) == 43 {  // ++
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_PLUS_PLUS)
-            } else if lexerMatch(l, 61).current > l.current {  // +=
+            } else if lexerPeek(l) == 61 {  // +=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_PLUS_EQUAL)
             } else {
                 l = addToken(l, TOKEN_PLUS)
             }
         }
         case 45 -> {  // -
-            if lexerMatch(l, 45).current > l.current {  // --
+            if lexerPeek(l) == 45 {  // --
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_MINUS_MINUS)
-            } else if lexerMatch(l, 61).current > l.current {  // -=
+            } else if lexerPeek(l) == 61 {  // -=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_MINUS_EQUAL)
-            } else if lexerMatch(l, 62).current > l.current {  // ->
+            } else if lexerPeek(l) == 62 {  // ->
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_ARROW)
             } else {
                 l = addToken(l, TOKEN_MINUS)
             }
         }
         case 42 -> {  // *
-            if lexerMatch(l, 61).current > l.current {  // *=
+            if lexerPeek(l) == 61 {  // *=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_STAR_EQUAL)
             } else {
                 l = addToken(l, TOKEN_STAR)
             }
         }
         case 47 -> {  // /
-            if lexerMatch(l, 47).current > l.current {  // // comment
+            if lexerPeek(l) == 47 {  // // comment
                 while lexerPeek(l) != 10 and not lexerIsAtEnd(l) {
                     l = lexerAdvance(l)
                 }
-            } else if lexerMatch(l, 42).current > l.current {  // /* comment
+            } else if lexerPeek(l) == 42 {  // /* comment
                 while not lexerIsAtEnd(l) {
                     if lexerPeek(l) == 42 and lexerPeekNext(l) == 47 {
                         l = lexerAdvance(l)
@@ -405,39 +415,46 @@ func scanToken(l: Lexer): Lexer {
                     }
                     l = lexerAdvance(l)
                 }
-            } else if lexerMatch(l, 61).current > l.current {  // /=
+            } else if lexerPeek(l) == 61 {  // /=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_SLASH_EQUAL)
             } else {
                 l = addToken(l, TOKEN_SLASH)
             }
         }
         case 37 -> {  // %
-            if lexerMatch(l, 61).current > l.current {  // %=
+            if lexerPeek(l) == 61 {  // %=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_PERCENT_EQUAL)
             } else {
                 l = addToken(l, TOKEN_PERCENT)
             }
         }
         case 38 -> {  // &
-            if lexerMatch(l, 38).current > l.current {  // &&
+            if lexerPeek(l) == 38 {  // &&
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_AMPERSAND_AMPERSAND)
-            } else if lexerMatch(l, 61).current > l.current {  // &=
+            } else if lexerPeek(l) == 61 {  // &=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_AMPERSAND_EQUAL)
             } else {
                 l = addToken(l, TOKEN_AMPERSAND)
             }
         }
         case 124 -> {  // |
-            if lexerMatch(l, 124).current > l.current {  // ||
+            if lexerPeek(l) == 124 {  // ||
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_PIPE_PIPE)
-            } else if lexerMatch(l, 61).current > l.current {  // |=
+            } else if lexerPeek(l) == 61 {  // |=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_PIPE_EQUAL)
             } else {
                 l = addToken(l, TOKEN_PIPE)
             }
         }
         case 94 -> {  // ^
-            if lexerMatch(l, 61).current > l.current {  // ^=
+            if lexerPeek(l) == 61 {  // ^=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_CARET_EQUAL)
             } else {
                 l = addToken(l, TOKEN_CARET)
@@ -445,46 +462,54 @@ func scanToken(l: Lexer): Lexer {
         }
         case 126 -> l = addToken(l, TOKEN_TILDE)  // ~
         case 33 -> {  // !
-            if lexerMatch(l, 61).current > l.current {  // !=
+            if lexerPeek(l) == 61 {  // !=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_EXCLAIM_EQUAL)
             } else {
                 l = addToken(l, TOKEN_EXCLAIM)
             }
         }
         case 60 -> {  // <
-            if lexerMatch(l, 60).current > l.current {  // <<
-                if lexerMatch(l, 61).current > l.current {  // <<=
+            if lexerPeek(l) == 60 {  // <<
+                l = lexerAdvance(l)  // consume second <
+                if lexerPeek(l) == 61 {  // <<=
+                    l = lexerAdvance(l)
                     l = addToken(l, TOKEN_LESS_LESS_EQUAL)
                 } else {
                     l = addToken(l, TOKEN_LESS_LESS)
                 }
-            } else if lexerMatch(l, 61).current > l.current {  // <=
+            } else if lexerPeek(l) == 61 {  // <=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_LESS_EQUAL)
             } else {
                 l = addToken(l, TOKEN_LESS)
             }
         }
         case 62 -> {  // >
-            if lexerMatch(l, 62).current > l.current {  // >>
-                if lexerMatch(l, 61).current > l.current {  // >>=
+            if lexerPeek(l) == 62 {  // >>
+                l = lexerAdvance(l)  // consume second >
+                if lexerPeek(l) == 61 {  // >>=
+                    l = lexerAdvance(l)
                     l = addToken(l, TOKEN_GREATER_GREATER_EQUAL)
                 } else {
                     l = addToken(l, TOKEN_GREATER_GREATER)
                 }
-            } else if lexerMatch(l, 61).current > l.current {  // >=
+            } else if lexerPeek(l) == 61 {  // >=
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_GREATER_EQUAL)
             } else {
                 l = addToken(l, TOKEN_GREATER)
             }
         }
         case 61 -> {  // =
-            if lexerMatch(l, 61).current > l.current {  // ==
+            if lexerPeek(l) == 61 {  // ==
+                l = lexerAdvance(l)
                 l = addToken(l, TOKEN_EQUAL_EQUAL)
             } else {
                 l = addToken(l, TOKEN_EQUAL)
             }
         }
-        case 32, 13, 9 -> {}  // space, CR, tab — skip
+        case 32, 13, 9 -> {}  // space, CR, tab -- skip
         case 10 -> {  // newline
             l.line = l.line + 1
             l.column = 1
