@@ -81,9 +81,10 @@ func main(): u64 {
         return 1
     }
 
-    // Parse args
+    // Parse args: first non-flag is canonical source path; all non-flag args are concatenated.
     var sourcePath = ""
     var outputPath = ""
+    var hasSource = false
     var i: u64 = 1
     while i < argc {
         let arg = __ae_get_arg(i)
@@ -96,18 +97,16 @@ func main(): u64 {
                 __ae_exit(1)
                 return 1
             }
-        } else if arg[0] != 45 {  // not '-'
-            if sourcePath == "" {
+        } else {
+            if not hasSource {
                 sourcePath = arg
-            } else {
-                // Multiple source files -- concatenate
-                // For now, just use the first one
+                hasSource = true
             }
         }
         i = i + 1
     }
 
-    if sourcePath == "" {
+    if not hasSource {
         __ae_print("error: no source file specified\n")
         __ae_exit(1)
         return 1
@@ -130,14 +129,54 @@ func main(): u64 {
         }
     }
 
-    // Read the source file
-    let source = __ae_read_file(sourcePath)
+    // Read and concatenate all source files
+    var source = ""
+    var k: u64 = 1
+    var seenFirst = false
+    while k < argc {
+        let arg = __ae_get_arg(k)
+        if arg == "-o" {
+            k = k + 2
+        } else {
+            if not seenFirst {
+                seenFirst = true
+                k = k + 1
+            } else {
+                let content = __ae_read_file(arg)
+                if content == "" {
+                    __ae_print("error: could not read source file: ")
+                    __ae_print(arg)
+                    __ae_print("\n")
+                    __ae_exit(1)
+                    return 1
+                }
+                source = source + content + "\n"
+                k = k + 1
+            }
+        }
+    }
+
+    // If only one source file, read it directly (avoids concat overhead)
     if source == "" {
-        __ae_print("error: could not read source file: ")
-        __ae_print(sourcePath)
-        __ae_print("\n")
-        __ae_exit(1)
-        return 1
+        source = __ae_read_file(sourcePath)
+        if source == "" {
+            __ae_print("error: could not read source file: ")
+            __ae_print(sourcePath)
+            __ae_print("\n")
+            __ae_exit(1)
+            return 1
+        }
+    } else {
+        // Prepend first file content to the concatenated rest
+        let firstContent = __ae_read_file(sourcePath)
+        if firstContent == "" {
+            __ae_print("error: could not read source file: ")
+            __ae_print(sourcePath)
+            __ae_print("\n")
+            __ae_exit(1)
+            return 1
+        }
+        source = firstContent + "\n" + source
     }
 
     // Phase 1: Tokenization

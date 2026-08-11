@@ -775,10 +775,16 @@ func (c *Codegen) emitBinary(be *BinaryExpr) {
 		if t := c.inferType(e); t == "string" {
 			return true
 		}
-		// labels[i] where labels is [string]
+		// labels[i] where labels is [string] (IdentExpr or MemberExpr)
 		if ie, ok := e.(*IndexExpr); ok {
-			if obj, ok := ie.Object.(*IdentExpr); ok {
-				if ot := c.inferType(obj); ot == "[string]" {
+			if ot := c.inferType(ie.Object); ot == "[string]" {
+				return true
+			}
+		}
+		// ctx.lastType == "string" — used by self-hosted genBinaryOp
+		if me, ok := e.(*MemberExpr); ok {
+			if me.Member == "lastType" && me.Object != nil {
+				if id, ok := me.Object.(*IdentExpr); ok && id.Name == "ctx" {
 					return true
 				}
 			}
@@ -2493,6 +2499,7 @@ func (c *Codegen) emitAeStrConcat() {
 	c.emitPush("rbx")
 	c.emitPush("r12")
 	c.emitPush("r13")
+	c.emitPush("r14")
 
 	// Save strings
 	c.emitMovR64R64("rbx", "rdi") // first
@@ -2506,15 +2513,62 @@ func (c *Codegen) emitAeStrConcat() {
 	// Compute length of second string
 	c.emitMovR64R64("rdi", "r12")
 	c.emitCall("__ae_len")
-	c.emitMovR64R64("rsi", "rax") // len2
+	c.emitMovR64R64("r14", "rax") // len2
 
-	// Total length = len1 + len2
-	c.emitAddR64R64("rsi", "r13")
+	// Total length = len1 + len2 (into rdi, keep len2 in r14)
+	c.emitMovR64R64("rdi", "r14")
+	c.emitAddR64R64("rdi", "r13")
+	c.emitAddR64Imm8("rdi", 1)
+	c.emitCall("__ae_alloc")
 
-	// For now, just return the first string (simplified)
-	// In a real implementation, we'd allocate and copy
-	c.emitMovR64R64("rax", "rbx")
+	// Copy first string
+	c.emitXorR64R64("r8", "r8")
+	c.label("__ae_str_concat_copy1")
+	c.emitCmpR64R64("r8", "r13")
+	c.emitJz("__ae_str_concat_copy2")
+	c.emitMovR64R64("r9", "rbx")
+	c.emitAddR64R64("r9", "r8")
+	c.emitByte(0x41) // mov cl, byte [r9]
+	c.emitByte(0x8A)
+	c.emitByte(0x09)
+	c.emitMovR64R64("r10", "rax")
+	c.emitAddR64R64("r10", "r8")
+	c.emitByte(0x41) // mov byte [r10], cl
+	c.emitByte(0x88)
+	c.emitByte(0x0A)
+	c.emitAddR64Imm8("r8", 1)
+	c.emitJmp("__ae_str_concat_copy1")
 
+	// Copy second string
+	c.label("__ae_str_concat_copy2")
+	c.emitXorR64R64("r8", "r8")
+	c.label("__ae_str_concat_copy2_loop")
+	c.emitCmpR64R64("r8", "r14")
+	c.emitJz("__ae_str_concat_done")
+	c.emitMovR64R64("r9", "r12")
+	c.emitAddR64R64("r9", "r8")
+	c.emitByte(0x41) // mov cl, byte [r9]
+	c.emitByte(0x8A)
+	c.emitByte(0x09)
+	c.emitMovR64R64("r10", "rax")
+	c.emitAddR64R64("r10", "r13")
+	c.emitAddR64R64("r10", "r8")
+	c.emitByte(0x41) // mov byte [r10], cl
+	c.emitByte(0x88)
+	c.emitByte(0x0A)
+	c.emitAddR64Imm8("r8", 1)
+	c.emitJmp("__ae_str_concat_copy2_loop")
+
+	// Null terminate
+	c.label("__ae_str_concat_done")
+	c.emitMovR64R64("rcx", "rax")
+	c.emitAddR64R64("rcx", "r13")
+	c.emitAddR64R64("rcx", "r14")
+	c.emitXorR64R64("rdx", "rdx")
+	c.emitByte(0x88) // mov byte [rcx], dl
+	c.emitByte(0x11)
+
+	c.emitPop("r14")
 	c.emitPop("r13")
 	c.emitPop("r12")
 	c.emitPop("rbx")

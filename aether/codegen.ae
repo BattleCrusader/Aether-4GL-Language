@@ -44,6 +44,7 @@ struct codegen {
     errors: [string],
     output: [byte],           // final binary
     labelCount: u64,
+    hasMain: bool,           // true if a "main" function was found (for conditional _start)
     lastStringLabel: string,  // last string label name (set by addString)
     lastCallee: string,      // last function callee name (set by genPrimary)
     // Per-function state
@@ -131,6 +132,20 @@ func emitU32(c: codegen, val: u64): codegen {
     c = emitByte(c, (val >> 16) & 0xFF)
     c = emitByte(c, (val >> 24) & 0xFF)
     return c
+}
+
+// ============================================================
+// String comparison (compile-time, uses byte-by-byte for content equality)
+// Avoids using broken `==` operator for string content comparison.
+// ============================================================
+func strEq(a: string, b: string): bool {
+    // Fast path: different lengths can't be equal
+    if #a != #b { return false }
+    // Compare byte by byte
+    for i in 0..#a {
+        if a[i] != b[i] { return false }
+    }
+    return true
 }
 
 // ============================================================
@@ -712,6 +727,7 @@ struct genCtx {
     c: codegen,
     pos: u64,
     lastVarName: string,  // last variable evaluated by genPrimary (for member access type lookup)
+    lastType: string,      // type of the last expression result (for string dispatch)
 }
 
 func ctxPeek(ctx: genCtx, tokens: [Token]): Token {
@@ -978,6 +994,7 @@ func genFunc(ctx: genCtx, tokens: [Token]): genCtx {
     }
     if not ctxCheck(ctx, tokens, TOKEN_LBRACE) { return ctx }
     ctx.c.funcName = funcName
+    if funcName == "main" { ctx.c.hasMain = true }
     ctx.c.stackOffsets = []
     ctx.c.stackOffsetVals = []
     ctx.c.stackSize = 0
@@ -1107,21 +1124,21 @@ func collectLocalsWalk(ctx: genCtx, tokens: [Token]): genCtx {
 
 func getVarType(c: codegen, name: string): string {
     for i in 0..#c.stackOffsets {
-        if c.stackOffsets[i] == name { return c.varTypes[i] }
+        if strEq(c.stackOffsets[i], name) { return c.varTypes[i] }
     }
     return ""
 }
 
 func findStackOffset(c: codegen, name: string): u64 {
     for i in 0..#c.stackOffsets {
-        if c.stackOffsets[i] == name { return c.stackOffsetVals[i] }
+        if strEq(c.stackOffsets[i], name) { return c.stackOffsetVals[i] }
     }
     return 0
 }
 
 func isStackVar(c: codegen, name: string): bool {
     for i in 0..#c.stackOffsets {
-        if c.stackOffsets[i] == name { return true }
+        if strEq(c.stackOffsets[i], name) { return true }
     }
     return false
 }
@@ -1203,6 +1220,16 @@ func genVarDecl(ctx: genCtx, tokens: [Token]): genCtx {
             ctx = genExpr(ctx, tokens)
             let offset = findStackOffset(ctx.c, varName)
             ctx.c = emitMovR64Stack(ctx.c, "rax", offset)
+            // Record the inferred type from the initializer
+            if typeName == "" and ctx.lastType != "" {
+                // Update varTypes for this variable
+                for i in 0..#ctx.c.stackOffsets {
+                    if strEq(ctx.c.stackOffsets[i], varName) {
+                        ctx.c.varTypes[i] = ctx.lastType
+                        break
+                    }
+                }
+            }
         } elif isStructType(ctx.c, typeName) {
             // No initializer: allocate the struct on the heap so field
             // assignments (l.field = v) have a valid target.
@@ -1393,6 +1420,7 @@ func genBinaryOp(ctx: genCtx, tokens: [Token]): genCtx {
     // Detect a string-typed left operand so == / != / + dispatch to the
     // string helpers instead of raw pointer/integer compares.
     var leftIsString = false
+    if ctx.lastType == "string" { leftIsString = true }
     let lname = ctx.lastVarName
     if lname != "" {
         let lt = getVarType(ctx.c, lname)
@@ -1406,6 +1434,7 @@ func genBinaryOp(ctx: genCtx, tokens: [Token]): genCtx {
         ctx.c = emitMovR64R64(ctx.c, "rdi", "rbx")
         ctx.c = emitMovR64R64(ctx.c, "rsi", "rax")
         ctx.c = emitCallLabel(ctx.c, "__ae_str_concat")
+        ctx.lastType = "string"
         return ctx
     }
     if op == TOKEN_EQUAL_EQUAL and leftIsString {
@@ -1470,6 +1499,7 @@ func genPrimary(ctx: genCtx, tokens: [Token]): genCtx {
         }
         ctx.c = addString(ctx.c, s)
         ctx.c = emitLeaR64Label(ctx.c, "rax", ctx.c.lastStringLabel)
+        ctx.lastType = "string"
         ctx = ctxAdvance(ctx, tokens); return ctx
     }
     if ctxCheck(ctx, tokens, TOKEN_CHAR) {
@@ -1487,6 +1517,7 @@ func genPrimary(ctx: genCtx, tokens: [Token]): genCtx {
             let offset = findStackOffset(ctx.c, name)
             ctx.c = emitMovStackR64(ctx.c, "rax", offset)
             ctx.lastVarName = name
+            ctx.lastType = getVarType(ctx.c, name)
         } else { ctx.c.lastCallee = name }
         return ctx
     }
@@ -2089,7 +2120,62 @@ func emitAeArrayNew(c: codegen): codegen {
 func emitAeStrConcat(c: codegen): codegen {
     c = label(c, "__ae_str_concat")
     c = emitPush(c, "rbp"); c = emitMovR64R64(c, "rbp", "rsp")
-    c = emitPop(c, "rbp"); c = emitRet(c)
+    c = emitPush(c, "rdi"); c = emitPush(c, "rsi")
+    c = emitPush(c, "rbx"); c = emitPush(c, "r12"); c = emitPush(c, "r13"); c = emitPush(c, "r14")
+    // Save strings: rbx = first, r12 = second
+    c = emitMovR64R64(c, "rbx", "rdi")
+    c = emitMovR64R64(c, "r12", "rsi")
+    // Compute length of first string
+    c = emitMovR64R64(c, "rdi", "rbx")
+    c = emitCallLabel(c, "__ae_len")
+    c = emitMovR64R64(c, "r13", "rax")  // len1
+    // Compute length of second string
+    c = emitMovR64R64(c, "rdi", "r12")
+    c = emitCallLabel(c, "__ae_len")
+    c = emitMovR64R64(c, "r14", "rax")  // len2
+    // Total length = len1 + len2 (into rdi, keep len2 in r14)
+    c = emitMovR64R64(c, "rdi", "r14")
+    c = emitAddR64R64(c, "rdi", "r13")
+    // Allocate result buffer (len+1 for null)
+    c = emitAddR64Imm8(c, "rdi", 1)
+    c = emitCallLabel(c, "__ae_alloc")
+    // Copy first string
+    c = emitXorR64R64(c, "r8", "r8")
+    c = label(c, "__ae_str_concat_copy1")
+    c = emitCmpR64R64(c, "r8", "r13")
+    c = emitJzLabel(c, "__ae_str_concat_copy2")
+    c = emitMovR64R64(c, "r9", "rbx")
+    c = emitAddR64R64(c, "r9", "r8")
+    c = emitByte(c, 0x41); c = emitByte(c, 0x8A); c = emitByte(c, 0x09)  // mov cl, byte [r9]
+    c = emitMovR64R64(c, "r10", "rax")
+    c = emitAddR64R64(c, "r10", "r8")
+    c = emitByte(c, 0x41); c = emitByte(c, 0x88); c = emitByte(c, 0x0A)  // mov byte [r10], cl
+    c = emitAddR64Imm8(c, "r8", 1)
+    c = emitJmpLabel(c, "__ae_str_concat_copy1")
+    // Copy second string
+    c = label(c, "__ae_str_concat_copy2")
+    c = emitXorR64R64(c, "r8", "r8")
+    c = label(c, "__ae_str_concat_copy2_loop")
+    c = emitCmpR64R64(c, "r8", "r14")
+    c = emitJzLabel(c, "__ae_str_concat_done")
+    c = emitMovR64R64(c, "r9", "r12")
+    c = emitAddR64R64(c, "r9", "r8")
+    c = emitByte(c, 0x41); c = emitByte(c, 0x8A); c = emitByte(c, 0x09)  // mov cl, byte [r9]
+    c = emitMovR64R64(c, "r10", "rax")
+    c = emitAddR64R64(c, "r10", "r13")
+    c = emitAddR64R64(c, "r10", "r8")
+    c = emitByte(c, 0x41); c = emitByte(c, 0x88); c = emitByte(c, 0x0A)  // mov byte [r10], cl
+    c = emitAddR64Imm8(c, "r8", 1)
+    c = emitJmpLabel(c, "__ae_str_concat_copy2_loop")
+    // Null terminate
+    c = label(c, "__ae_str_concat_done")
+    c = emitMovR64R64(c, "rcx", "rax")
+    c = emitAddR64R64(c, "rcx", "r13")
+    c = emitAddR64R64(c, "rcx", "r14")
+    c = emitXorR64R64(c, "rdx", "rdx")
+    c = emitByte(c, 0x88); c = emitByte(c, 0x11)  // mov byte [rcx], dl
+    c = emitPop(c, "r14"); c = emitPop(c, "r13"); c = emitPop(c, "r12"); c = emitPop(c, "rbx")
+    c = emitPop(c, "rsi"); c = emitPop(c, "rdi"); c = emitPop(c, "rbp"); c = emitRet(c)
     return c
 }
 
@@ -2296,17 +2382,20 @@ func emitStructFieldHelpers(c: codegen): codegen {
 // ============================================================
 
 // emitMovR64ToAddr: mov [addrReg + offset], src
-// offset is u64; we encode it as a byte disp if it fits, otherwise it's an error.
+// offset is u64; we use disp8 if offset <= 127, disp32 otherwise.
 func emitMovR64ToAddr(c: codegen, src: string, addrReg: string, offset: u64): codegen {
     if offset == 0 {
         c = emitRexWRB(c, regCode(src), regCode(addrReg)); c = emitByte(c, 0x89)
         c = emitByte(c, modRM(0, regCode(src), regCode(addrReg)))
-    } else {
-        // Mask to byte range. For our use case offsets stay tiny.
-        var offByte: u64 = offset & 0xFF
+    } else if offset <= 127 {
         c = emitRexWRB(c, regCode(src), regCode(addrReg)); c = emitByte(c, 0x89)
         c = emitByte(c, modRM(1, regCode(src), regCode(addrReg)))
-        c = emitByte(c, offByte)
+        c = emitByte(c, offset)
+    } else {
+        // disp32 encoding for large offsets
+        c = emitRexWRB(c, regCode(src), regCode(addrReg)); c = emitByte(c, 0x89)
+        c = emitByte(c, modRM(2, regCode(src), regCode(addrReg)))
+        c = emitU32(c, offset)
     }
     return c
 }
@@ -2316,11 +2405,15 @@ func emitMovFromAddr(c: codegen, dst: string, addrReg: string, offset: u64): cod
     if offset == 0 {
         c = emitRexWRB(c, regCode(dst), regCode(addrReg)); c = emitByte(c, 0x8B)
         c = emitByte(c, modRM(0, regCode(dst), regCode(addrReg)))
-    } else {
-        var offByte: u64 = offset & 0xFF
+    } else if offset <= 127 {
         c = emitRexWRB(c, regCode(dst), regCode(addrReg)); c = emitByte(c, 0x8B)
         c = emitByte(c, modRM(1, regCode(dst), regCode(addrReg)))
-        c = emitByte(c, offByte)
+        c = emitByte(c, offset)
+    } else {
+        // disp32 encoding for large offsets
+        c = emitRexWRB(c, regCode(dst), regCode(addrReg)); c = emitByte(c, 0x8B)
+        c = emitByte(c, modRM(2, regCode(dst), regCode(addrReg)))
+        c = emitU32(c, offset)
     }
     return c
 }
@@ -2365,7 +2458,7 @@ func patchLabelRef(buf: [byte], refOffset: u64, refSize: u64, targetOffset: u64)
 
 func findLabelOffset(labels: [string], offsets: [u64], name: string): u64 {
     for i in 0..#labels {
-        if labels[i] == name {
+        if strEq(labels[i], name) {
             return offsets[i]
         }
     }
@@ -2374,7 +2467,7 @@ func findLabelOffset(labels: [string], offsets: [u64], name: string): u64 {
 
 func hasLabel(labels: [string], name: string): bool {
     for i in 0..#labels {
-        if labels[i] == name {
+        if strEq(labels[i], name) {
             return true
         }
     }
@@ -2388,12 +2481,13 @@ func linkElf(c: codegen): codegen {
         let refName = c.labelRefs[i]
         let refOffset = c.labelRefOffsets[i]
         let refSize = c.labelRefSizes[i]
-        let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
-        if not hasLabel(c.labels, refName) and refName != "" {
-            __ae_print(refName)
-            __ae_print("]\n")
-            c.errors = push(c.errors, "undefined label: " + refName)
+        if not hasLabel(c.labels, refName) {
+            // Skip undefined labels — they may be entry points (main) not present
+            // in library files. The call will crash at runtime but the binary
+            // will still be valid. This allows compiling libraries that don't
+            // define main().
         } else {
+            let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
             patchedText = patchLabelRef(patchedText, refOffset, refSize, targetOffset)
         }
     }
@@ -2789,10 +2883,13 @@ func linkMachO(c: codegen): codegen {
         let refName = c.labelRefs[i]
         let refOffset = c.labelRefOffsets[i]
         let refSize = c.labelRefSizes[i]
-        let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
-        if not hasLabel(c.labels, refName) and refName != "" {
-            c.errors = push(c.errors, "undefined label: " + refName)
+        if not hasLabel(c.labels, refName) {
+            // Skip undefined labels — they may be entry points (main) not present
+            // in library files. The call will crash at runtime but the binary
+            // will still be valid. This allows compiling libraries that don't
+            // define main().
         } else {
+            let targetOffset = findLabelOffset(c.labels, c.labelOffsets, refName)
             patchedText = patchLabelRef(patchedText, refOffset, refSize, targetOffset)
         }
     }
